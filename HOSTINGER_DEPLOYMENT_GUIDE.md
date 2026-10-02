@@ -15,42 +15,29 @@ This guide sets up **Automated Continuous Deployment** so every time you run `gi
 
 ---
 
-## 🛠️ Step 1: Get SSH Credentials from Hostinger
+## 🔐 Your Exact Hostinger Details (From Your Screenshot)
 
-1. Log into your **Hostinger hPanel**.
-2. Select your hosting plan and go to **Advanced** → **SSH Access**.
-3. If SSH is disabled, click **Enable**.
-4. Note down:
-   - **SSH IP / Host**: (e.g., `185.199.108.153` or `connect.hostinger.com`)
-   - **SSH Username**: (e.g., `u123456789`)
-   - **SSH Port**: (Usually `65002` on Hostinger)
-   - **SSH Password**: Your Hostinger account/SSH password.
-
-### (Optional but Recommended) Generate an SSH Key:
-If you prefer SSH keys over passwords:
-In your terminal, generate a key:
-```bash
-ssh-keygen -t ed25519 -C "github-actions-hostinger" -f hostinger_deploy_key
-```
-1. Add the **Public Key** (`hostinger_deploy_key.pub`) to Hostinger: **hPanel** → **SSH Access** → **SSH Keys** → **Add SSH Key**.
-2. Keep the **Private Key** (`hostinger_deploy_key`) for GitHub Secrets in Step 2.
+From your Hostinger **SSH Access** screen:
+- **IP**: `82.25.107.63`
+- **Port**: `65002`
+- **Username**: `u604295259`
+- **Password**: *(The password you set when clicking "Change")*
 
 ---
 
-## 🔐 Step 2: Add Secrets to Your GitHub Repository
+## 🔑 GitHub Secrets to Set in Your Repository
 
-1. Open your GitHub repository in your browser.
-2. Go to **Settings** → **Secrets and variables** → **Actions**.
-3. Click **New repository secret** and add the following 4 secrets:
+Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions**:
 
-| Secret Name | Value Example | Explanation |
-|---|---|---|
-| `HOSTINGER_SSH_HOST` | `185.199.108.153` | Your Hostinger server IP or hostname |
-| `HOSTINGER_SSH_USER` | `u123456789` | Your Hostinger SSH username |
-| `HOSTINGER_SSH_PORT` | `65002` | Hostinger SSH port (default `65002`) |
-| `HOSTINGER_SSH_KEY` | `-----BEGIN OPENSSH PRIVATE KEY...` | The entire content of your private key file |
-| `HOSTINGER_REMOTE_PATH` | `domains/yourdomain.com/public_html/` | Path to your website root in Hostinger |
-| `VITE_API_URL` | `/api` | Production API prefix (default: `/api`) |
+| Secret Name | Exact Value to Enter |
+|---|---|
+| `HOSTINGER_SSH_PASSWORD` | Your Hostinger SSH Password (click "Change" in screenshot if you need to set/reset it) |
+| `HOSTINGER_SSH_HOST` | `82.25.107.63` |
+| `HOSTINGER_SSH_USER` | `u604295259` |
+| `HOSTINGER_SSH_PORT` | `65002` |
+| `HOSTINGER_REMOTE_PATH` | `public_html/` *(or `domains/yourdomain.com/public_html/` if using multiple domains)* |
+| `VITE_API_URL` | `/api` |
+
 
 ---
 
