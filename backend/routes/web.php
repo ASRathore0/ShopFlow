@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 
 // Serve React SPA index for all frontend routes (excluding /api handled in routes/api.php)
-Route::get('/{any}', function () {
+Route::get('/{any?}', function () {
     $indexPath = public_path('index.html');
     if (file_exists($indexPath)) {
         return response()->file($indexPath);
@@ -15,4 +15,5 @@ Route::get('/{any}', function () {
         'note' => 'API is running. Build frontend into public/ to serve the SPA.'
     ]);
 })->where('any', '.*');
+
 

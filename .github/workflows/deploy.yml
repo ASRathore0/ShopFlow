@@ -78,6 +78,7 @@ jobs:
           sshpass -e rsync -rlgoDzvc -i --delete \
             -e "ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             --exclude='/.git/' \
+            --exclude='/.env' \
             --exclude='/node_modules/' \
             --exclude='/.github/' \
             --exclude='/frontend/' \
@@ -97,9 +98,14 @@ jobs:
           port: ${{ secrets.HOSTINGER_SSH_PORT || 65002 }}
           script: |
             cd ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
+            if [ ! -f .env ]; then
+              cp .env.production.example .env
+              php artisan key:generate --force
+            fi
             php artisan migrate --force --no-interaction
             php artisan storage:link || true
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+
 
