@@ -1,0 +1,97 @@
+name: Deploy ShopFlow to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual trigger from GitHub Actions UI
+
+# Ensure only one deployment runs at a time
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v4
+
+      # ----------------------------------------------------
+      # STEP 1: BUILD FRONTEND (Runs on GitHub, NOT Hostinger)
+      # ----------------------------------------------------
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📦 Install Frontend Dependencies & Build
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL || '/api' }}
+        run: |
+          npm ci
+          npm run build
+
+      # ----------------------------------------------------
+      # STEP 2: BUILD BACKEND (PHP & Composer dependencies)
+      # ----------------------------------------------------
+      - name: 🐘 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo, pdo_mysql, bcmath, curl
+          coverage: none
+
+      - name: 📦 Install Composer Dependencies (Production only)
+        working-directory: backend
+        run: |
+          composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --quiet
+
+      # ----------------------------------------------------
+      # STEP 3: UNIFY FRONTEND ASSETS INTO LARAVEL PUBLIC
+      # (This lets Hostinger serve both Frontend & API from 1 domain with 0 CORS issues)
+      # ----------------------------------------------------
+      - name: 🔗 Copy Frontend Build to Laravel Public Directory
+        run: |
+          mkdir -p backend/public/dist
+          cp -r frontend/dist/* backend/public/
+
+      # ----------------------------------------------------
+      # STEP 4: DEPLOY TO HOSTINGER VIA SSH & RSYNC
+      # Fast, atomic, and skips files that haven't changed!
+      # ----------------------------------------------------
+      - name: 🚀 Deploy to Hostinger via Rsync over SSH
+        uses: easingthemes/ssh-deploy@v5.0.3
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          REMOTE_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          REMOTE_PORT: ${{ secrets.HOSTINGER_SSH_PORT || '65002' }}
+          ARGS: "-rlgoDzvc -i --delete"
+          SOURCE: "backend/"
+          TARGET: ${{ secrets.HOSTINGER_REMOTE_PATH || 'domains/yourdomain.com/public_html/' }}
+          EXCLUDE: "/.git/, /node_modules/, /.github/, /frontend/, /storage/logs/*, /storage/framework/sessions/*"
+
+      # ----------------------------------------------------
+      # STEP 5: RUN POST-DEPLOY MIGRATIONS & CACHE ON HOSTINGER
+      # (Takes 2 seconds on Hostinger because zero building is needed)
+      # ----------------------------------------------------
+      - name: ⚡ Run Post-Deployment Artisan Commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT || 65002 }}
+          script: |
+            cd ${{ secrets.HOSTINGER_REMOTE_PATH || 'domains/yourdomain.com/public_html/' }}
+            php artisan migrate --force --no-interaction
+            php artisan storage:link || true
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
