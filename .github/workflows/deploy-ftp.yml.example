@@ -31,7 +31,7 @@ jobs:
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL || '/api' }}
         run: |
-          npm ci
+          npm install
           npm run build
 
       # 2. BUILD BACKEND (Runs on GitHub Cloud)
