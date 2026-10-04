@@ -62,11 +62,11 @@ export default function LocationBreadcrumb({ location, showTitle = true, variant
         {parts.map((p, idx) => (
           <React.Fragment key={idx}>
             <div className={`px-2 py-1 rounded-xl border text-[11px] font-semibold flex items-center gap-1 ${p.color}`}>
-              <span className="text-zinc-400 text-[10px] uppercase">{p.label}</span>
-              <span className="text-white">{p.value}</span>
+              <span className="text-slate-500 dark:text-zinc-400 text-[10px] uppercase">{p.label}</span>
+              <span className="text-slate-900 dark:text-white font-bold">{p.value}</span>
             </div>
             {idx < parts.length - 1 && (
-              <ChevronRight className="w-3.5 h-3.5 text-zinc-600 flex-shrink-0" />
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-600 flex-shrink-0" />
             )}
           </React.Fragment>
         ))}

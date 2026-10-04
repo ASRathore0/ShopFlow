@@ -18,7 +18,7 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <CustomerProvider>
-            <div className="min-h-screen bg-slate-50 dark:bg-[#09090B] text-slate-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+            <div className="min-h-screen w-full bg-slate-50 dark:bg-[#09090B] text-slate-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200 overflow-x-hidden">
             <Routes>
               {/* Marketing Website */}
               <Route path="/" element={<LandingPage />} />

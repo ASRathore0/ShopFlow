@@ -42,21 +42,21 @@ export default function QRCodeModal({ title, subtitle, value, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-[#18181B] border border-zinc-700/80 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-5 text-center">
-        <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
-          <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Store QR System</span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-700/80 w-full max-w-sm rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5 text-center">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+          <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Store QR System</span>
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800"
+            className="p-1.5 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div>
-          <h3 className="text-lg font-bold text-white">{title}</h3>
-          <p className="text-xs text-zinc-400 mt-1">{subtitle}</p>
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">{title}</h3>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">{subtitle}</p>
         </div>
 
         {/* QR Code Container */}
@@ -70,13 +70,13 @@ export default function QRCodeModal({ title, subtitle, value, onClose }) {
           />
         </div>
 
-        <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 flex items-center justify-between text-xs">
-          <span className="text-zinc-400 truncate max-w-[200px]">{value}</span>
+        <div className="p-3 bg-slate-50 dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 flex items-center justify-between text-xs">
+          <span className="text-slate-500 dark:text-zinc-400 truncate max-w-[200px]">{value}</span>
           <button
             onClick={handleCopy}
-            className="text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 flex-shrink-0"
+            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-bold flex items-center gap-1 flex-shrink-0"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
@@ -84,16 +84,16 @@ export default function QRCodeModal({ title, subtitle, value, onClose }) {
         <div className="grid grid-cols-2 gap-2 pt-1">
           <button
             onClick={handlePrint}
-            className="py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-slate-200 dark:border-zinc-700"
           >
-            <Printer className="w-3.5 h-3.5 text-blue-400" />
+            <Printer className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             Print Signage
           </button>
           <a
             href={value}
             target="_blank"
             rel="noreferrer"
-            className="py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            className="py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-blue-600/20"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             Open Portal
