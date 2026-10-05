@@ -1,17 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Store, QrCode, Search, Navigation, CheckCircle2, Clock, Users,
   Layers, ArrowRight, ShieldCheck, Zap, Sparkles, BarChart3, Smartphone,
-  Package, MapPin, Eye, Check, ChevronRight, Cpu, Play
+  Package, MapPin, Eye, Check, ChevronRight, Cpu, Play, PlusCircle
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import OnboardShopModal from '../components/OnboardShopModal';
 import { useAuth } from '../context/AuthContext';
 
 export default function LandingPage() {
   const { quickLoginAs } = useAuth();
   const navigate = useNavigate();
+  const [showOnboardModal, setShowOnboardModal] = useState(false);
+  const [onboardPlan, setOnboardPlan] = useState('growth');
 
   const handleLaunchRole = async (role, destination) => {
     await quickLoginAs(role);
@@ -114,20 +117,24 @@ export default function LandingPage() {
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2 w-full max-w-md sm:max-w-none mx-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setOnboardPlan('growth');
+                  setShowOnboardModal(true);
+                }}
+                className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2"
+              >
+                <PlusCircle className="w-4 h-4 shrink-0" />
+                Onboard New Shop (Free 14-Day Trial)
+              </button>
               <Link
                 to="/shop/abc-electronics"
-                className="w-full sm:w-auto px-6 sm:px-7 py-3.5 sm:py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-xl shadow-blue-600/25 flex items-center justify-center gap-2"
-              >
-                <QrCode className="w-4 h-4 shrink-0" />
-                Customer QR Demo (ABC Electronics)
-              </Link>
-              <button
-                onClick={() => handleLaunchRole('owner', '/admin')}
                 className="w-full sm:w-auto px-6 sm:px-7 py-3.5 sm:py-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700 font-semibold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
               >
-                <Store className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                Start Managing Your Shop
-              </button>
+                <QrCode className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                Customer QR Demo (ABC Electronics)
+              </Link>
             </div>
 
             {/* Trust badge */}
@@ -556,7 +563,12 @@ export default function LandingPage() {
 
                 <div className="pt-8">
                   <button
-                    onClick={() => handleLaunchRole('owner', '/admin')}
+                    type="button"
+                    onClick={() => {
+                      const planKey = plan.name.toLowerCase();
+                      setOnboardPlan(planKey === 'business' ? 'enterprise' : planKey);
+                      setShowOnboardModal(true);
+                    }}
                     className={`w-full py-3 rounded-2xl text-xs font-bold transition-all ${
                       plan.highlighted
                         ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'
@@ -579,26 +591,37 @@ export default function LandingPage() {
             Ready to upgrade your physical retail showroom?
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 max-w-xl mx-auto">
-            Test the live customer portal right now or inspect the staff floor queue.
+            Onboard your physical shop in 60 seconds with pre-loaded layout, categories and starter inventory.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setOnboardPlan('growth');
+                setShowOnboardModal(true);
+              }}
+              className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-xl shadow-blue-600/25 flex items-center justify-center gap-2"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Onboard Your Store Now
+            </button>
             <Link
               to="/shop/abc-electronics"
-              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg shadow-blue-600/25"
+              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 text-xs font-semibold transition-all dark:border-zinc-700 shadow-sm"
             >
               Launch ABC Electronics Customer View
             </Link>
-            <button
-              onClick={() => handleLaunchRole('staff', '/staff')}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 text-xs font-semibold transition-all dark:border-zinc-700 shadow-sm"
-            >
-              Open Staff Tablet Queue
-            </button>
           </div>
         </div>
       </section>
 
       <Footer />
+
+      <OnboardShopModal
+        isOpen={showOnboardModal}
+        onClose={() => setShowOnboardModal(false)}
+        initialPlan={onboardPlan}
+      />
     </div>
   );
 }

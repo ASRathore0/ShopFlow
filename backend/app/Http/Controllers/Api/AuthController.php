@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Shop;
 use App\Models\User;
+use App\Services\ShopOnboardingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -64,6 +65,43 @@ class AuthController extends Controller
     public function staffLogin(Request $request)
     {
         return $this->login($request);
+    }
+
+    public function registerShop(Request $request, ShopOnboardingService $onboardingService)
+    {
+        $request->validate([
+            'shop_name' => 'required|string|max:255',
+            'shop_type' => 'nullable|string|max:50',
+            'owner_name' => 'required|string|max:100',
+            'email' => 'required|email',
+            'password' => 'required|string|min:6',
+            'phone' => 'nullable|string|max:30',
+            'address' => 'nullable|string|max:255',
+            'plan_id' => 'nullable',
+        ]);
+
+        $result = $onboardingService->onboard($request->all());
+        $user = $result['user'];
+        $shop = $result['shop'];
+
+        $token = $user->createToken('shopflow-token')->plainTextToken;
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Shop '{$shop->name}' onboarded successfully!",
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'phone' => $user->phone,
+                'current_shop_id' => $user->current_shop_id,
+                'current_shop' => $shop,
+                'employee' => $user->employee,
+            ],
+            'shop' => $shop,
+        ], 201);
     }
 
     public function me(Request $request)

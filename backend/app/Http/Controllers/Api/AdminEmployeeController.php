@@ -67,7 +67,7 @@ class AdminEmployeeController extends Controller
             'is_active' => true,
         ]);
 
-        $code = 'EMP-' . str_pad((string) (Employee::where('shop_id', $shopId)->count() + 1), 2, '0', STR_PAD_LEFT);
+        $code = 'EMP-' . $shopId . '-' . str_pad((string) (Employee::where('shop_id', $shopId)->count() + 1), 2, '0', STR_PAD_LEFT);
 
         $employee = Employee::create([
             'shop_id' => $shopId,

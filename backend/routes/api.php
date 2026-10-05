@@ -22,8 +22,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-// Authentication
+// Authentication & Self-Serve Shop Onboarding
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/register-shop', [AuthController::class, 'registerShop']);
 Route::post('/staff/login', [AuthController::class, 'staffLogin']);
 
 // Public Customer Shop Routes

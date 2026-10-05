@@ -31,8 +31,8 @@ export default function CustomerRequestTracking() {
 
   useEffect(() => {
     fetchStatus();
-    // Auto-refresh every 8 seconds for live physical assistance tracking
-    const interval = setInterval(fetchStatus, 8000);
+    // Auto-refresh every 3 seconds for live physical assistance tracking
+    const interval = setInterval(fetchStatus, 3000);
     return () => clearInterval(interval);
   }, [requestNumber]);
 

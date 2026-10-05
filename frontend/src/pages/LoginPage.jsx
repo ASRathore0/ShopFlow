@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Store, User, Lock, ArrowRight, ShieldCheck, Check, Sparkles } from 'lucide-react';
+import { Store, User, Lock, ArrowRight, ShieldCheck, Check, Sparkles, PlusCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import OnboardShopModal from '../components/OnboardShopModal';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showOnboardModal, setShowOnboardModal] = useState(false);
   const { login, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -91,6 +93,27 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* Onboarding Callout */}
+        <div className="bg-gradient-to-r from-blue-900/40 via-indigo-900/30 to-purple-900/30 border border-blue-500/40 rounded-3xl p-4 shadow-xl flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-xs font-bold text-white">Opening a new retail store?</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+              Launch showroom catalog, QR codes & 2D layout in 60s
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowOnboardModal(true)}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold whitespace-nowrap shadow-md shadow-blue-600/30 transition-all flex items-center gap-1.5 shrink-0 active:scale-95"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>Onboard Free</span>
+          </button>
+        </div>
+
         {/* Credentials Form */}
         <div className="bg-[#18181B] border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5">
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -153,6 +176,11 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      <OnboardShopModal
+        isOpen={showOnboardModal}
+        onClose={() => setShowOnboardModal(false)}
+      />
     </div>
   );
 }

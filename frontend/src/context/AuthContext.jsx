@@ -47,6 +47,47 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const registerShop = async (shopData) => {
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/register-shop', shopData);
+      const { token: authToken, user: authUser, shop } = res.data;
+      
+      setToken(authToken);
+      setUser(authUser);
+      localStorage.setItem('shopflow_token', authToken);
+      localStorage.setItem('shopflow_user', JSON.stringify(authUser));
+      
+      return { success: true, user: authUser, shop };
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Onboarding failed. Please check inputs.';
+      return { success: false, message: msg };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchShop = async (shopId) => {
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/switch-shop', { shop_id: shopId });
+      const currentShop = res.data?.current_shop;
+      
+      setUser(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev, current_shop_id: shopId, current_shop: currentShop };
+        localStorage.setItem('shopflow_user', JSON.stringify(updated));
+        return updated;
+      });
+      
+      return { success: true, current_shop: currentShop };
+    } catch (error) {
+      return { success: false, message: error.response?.data?.message || 'Failed to switch shop.' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       if (token) {
@@ -81,6 +122,8 @@ export const AuthProvider = ({ children }) => {
       token,
       loading,
       login,
+      registerShop,
+      switchShop,
       logout,
       quickLoginAs,
       isAuthenticated: !!token,

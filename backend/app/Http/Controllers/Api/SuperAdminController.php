@@ -10,6 +10,7 @@ use App\Models\Plan;
 use App\Models\Shop;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\ShopOnboardingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -66,7 +67,7 @@ class SuperAdminController extends Controller
 
     public function listShops()
     {
-        $shops = Shop::with(['subscription.plan'])->withCount(['products', 'employees', 'customerRequests'])->get();
+        $shops = Shop::with(['subscription.plan'])->withCount(['products', 'employees', 'customerRequests'])->orderBy('created_at', 'desc')->get();
 
         return response()->json([
             'status' => 'success',
@@ -74,42 +75,39 @@ class SuperAdminController extends Controller
         ]);
     }
 
-    public function createShop(Request $request)
+    public function createShop(Request $request, ShopOnboardingService $onboardingService)
     {
         $request->validate([
             'name' => 'required|string|max:255',
             'shop_type' => 'required|string',
             'email' => 'required|email',
+            'owner_name' => 'nullable|string',
+            'password' => 'nullable|string|min:6',
             'phone' => 'nullable|string',
             'address' => 'nullable|string',
             'plan_id' => 'required|exists:plans,id',
         ]);
 
-        $sub = Subscription::create([
-            'plan_id' => $request->plan_id,
-            'status' => 'active',
-            'starts_at' => now(),
-            'ends_at' => now()->addYear(),
-        ]);
-
-        $slug = Str::slug($request->name) . '-' . Str::random(4);
-
-        $shop = Shop::create([
-            'name' => $request->name,
-            'slug' => $slug,
+        $data = [
+            'shop_name' => $request->name,
             'shop_type' => $request->shop_type,
             'email' => $request->email,
+            'owner_name' => $request->owner_name ?: ($request->name . ' Admin'),
+            'password' => $request->password ?: 'password123',
             'phone' => $request->phone,
             'address' => $request->address,
-            'subscription_id' => $sub->id,
-            'is_open' => true,
-            'is_active' => true,
-        ]);
+            'plan_id' => $request->plan_id,
+        ];
+
+        $result = $onboardingService->onboard($data);
+        $shop = $result['shop'];
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Shop onboarded successfully',
+            'message' => 'Shop onboarded successfully with starter catalog and locations!',
             'data' => $shop->load('subscription.plan'),
+            'owner' => $result['user'],
+            'initial_password' => $result['plain_password'],
         ], 201);
     }
 
