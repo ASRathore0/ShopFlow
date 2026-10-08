@@ -10,7 +10,7 @@ export default function ProductCard({ product, onSelect, onRequest }) {
   return (
     <div className="bg-white dark:bg-[#18181B] border border-slate-200/90 dark:border-zinc-800 rounded-3xl overflow-hidden hover:border-blue-400 dark:hover:border-zinc-700 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-200 flex flex-col group shadow-sm">
       {/* Product Image Box */}
-      <div 
+      <div
         onClick={() => onSelect(product)}
         className="relative aspect-square bg-slate-100 dark:bg-zinc-900/80 overflow-hidden cursor-pointer"
       >
@@ -72,7 +72,7 @@ export default function ProductCard({ product, onSelect, onRequest }) {
           </div>
 
           {/* Product Name */}
-          <h3 
+          <h3
             onClick={() => onSelect(product)}
             className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 cursor-pointer leading-snug min-h-[2rem]"
           >
@@ -88,7 +88,7 @@ export default function ProductCard({ product, onSelect, onRequest }) {
               In-Store
             </span>
             <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white tracking-tight">
-              ${parseFloat(product.price).toFixed(2)}
+              ₹{parseFloat(product.price).toFixed(2)}
             </span>
           </div>
 

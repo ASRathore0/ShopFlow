@@ -8,15 +8,15 @@ export default function LocationMapVisualizer({ location, productName }) {
   const zones = [
     { id: 'entrance', name: 'Main Entrance & QR Kiosk', x: 20, y: 15, w: 260, h: 40, type: 'portal', color: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' },
     { id: 'checkout', name: 'POS & Cashier Desks', x: 290, y: 15, w: 190, h: 40, type: 'pos', color: 'border-zinc-700 bg-zinc-800/80 text-zinc-300' },
-    
+
     // Floor 1 Sections
     { id: 'mobiles', name: 'Mobiles & 5G (A1 - A2)', x: 20, y: 75, w: 220, h: 90, type: 'section', code: 'MOB', color: 'border-purple-500/40 bg-purple-500/10 text-purple-300' },
     { id: 'laptops', name: 'Laptops & Workstations (A3)', x: 260, y: 75, w: 220, h: 90, type: 'section', code: 'LAP', color: 'border-blue-500/40 bg-blue-500/10 text-blue-300' },
-    
+
     // Ground Floor Sections
     { id: 'accessories', name: 'Audio & Accessories (A4)', x: 20, y: 185, w: 220, h: 90, type: 'section', code: 'ACC', color: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' },
     { id: 'televisions', name: 'Televisions & OLED (A5)', x: 260, y: 185, w: 220, h: 90, type: 'section', code: 'TV', color: 'border-amber-500/40 bg-amber-500/10 text-amber-300' },
-    
+
     { id: 'storage', name: 'Back Store Inventory Vault', x: 20, y: 295, w: 460, h: 45, type: 'vault', color: 'border-zinc-700/80 bg-zinc-900 text-zinc-400' },
   ];
 

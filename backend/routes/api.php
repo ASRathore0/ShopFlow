@@ -22,9 +22,8 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-// Authentication & Self-Serve Shop Onboarding
+// Authentication Terminals
 Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/auth/register-shop', [AuthController::class, 'registerShop']);
 Route::post('/staff/login', [AuthController::class, 'staffLogin']);
 
 // Public Customer Shop Routes
@@ -47,10 +46,11 @@ Route::get('/requests/{id}/status', function ($id) {
 
 // Authenticated Routes (Staff, Admin, Super Admin)
 Route::middleware('auth:sanctum')->group(function () {
-    // Current user profile & shop switching
+    // Current user profile, shop switching & authorized shop onboarding
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::post('/auth/switch-shop', [AuthController::class, 'switchShop']);
+    Route::post('/auth/register-shop', [AuthController::class, 'registerShop']);
 
     // Staff Portal APIs
     Route::prefix('staff')->group(function () {
@@ -71,6 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Products
         Route::get('/products', [AdminProductController::class, 'index']);
         Route::post('/products', [AdminProductController::class, 'store']);
+        Route::post('/products/upload-image', [AdminProductController::class, 'uploadImage']);
         Route::get('/products/{id}', [AdminProductController::class, 'show']);
         Route::put('/products/{id}', [AdminProductController::class, 'update']);
         Route::delete('/products/{id}', [AdminProductController::class, 'destroy']);

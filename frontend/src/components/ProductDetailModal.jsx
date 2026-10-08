@@ -92,7 +92,7 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
                 {/* Price Display */}
                 <div className="mt-3 flex items-baseline gap-2">
                   <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                    ${effectivePrice.toFixed(2)}
+                    ₹{effectivePrice.toFixed(2)}
                   </span>
                   <span className="text-xs text-slate-400 dark:text-zinc-400 font-medium">In-Store Retail</span>
                 </div>
@@ -160,7 +160,7 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
                         <div className="text-xs font-bold">{v.name}</div>
                         {v.sku && <div className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-0.5">{v.sku}</div>}
                       </div>
-                      <div className="text-xs font-black text-slate-900 dark:text-white">${vPrice.toFixed(2)}</div>
+                      <div className="text-xs font-black text-slate-900 dark:text-white">₹{vPrice.toFixed(2)}</div>
                     </button>
                   );
                 })}

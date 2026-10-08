@@ -110,7 +110,7 @@ export default function SearchBar({ shopSlug, onSelectProduct, placeholder = "Se
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">${parseFloat(p.price).toFixed(2)}</div>
+                    <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">₹{parseFloat(p.price).toFixed(2)}</div>
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Available</span>
                   </div>
                 </button>

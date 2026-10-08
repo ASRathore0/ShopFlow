@@ -11,6 +11,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import LoginPage from './pages/LoginPage';
 import DemoSwitcher from './components/DemoSwitcher';
+import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
   return (
@@ -28,13 +29,34 @@ export default function App() {
               <Route path="/shop/:shopSlug/request/:requestNumber" element={<CustomerRequestTracking />} />
 
               {/* Staff Portal Experience */}
-              <Route path="/staff" element={<StaffDashboard />} />
+              <Route
+                path="/staff"
+                element={
+                  <ProtectedRoute allowedRoles={['staff', 'manager', 'shop_owner', 'super_admin', 'cashier']}>
+                    <StaffDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Shop Owner / Manager Experience */}
-              <Route path="/admin" element={<AdminDashboard />} />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute allowedRoles={['shop_owner', 'manager', 'super_admin']}>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Super Admin Platform Experience */}
-              <Route path="/super-admin" element={<SuperAdminDashboard />} />
+              <Route
+                path="/super-admin"
+                element={
+                  <ProtectedRoute allowedRoles={['super_admin']}>
+                    <SuperAdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Authentication Terminal */}
               <Route path="/login" element={<LoginPage />} />

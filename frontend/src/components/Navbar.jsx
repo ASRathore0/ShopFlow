@@ -41,27 +41,36 @@ export default function Navbar() {
     };
   }, []);
 
+  const activeShopSlug = user?.current_shop?.slug || user?.shops?.[0]?.slug || 'abc-electronics';
+  const activeShopName = user?.current_shop?.name || user?.shops?.[0]?.name || 'Live Store';
+  const brandDestination = !user ? '/' : user.role === 'super_admin' ? '/super-admin' : ['shop_owner', 'manager'].includes(user.role) ? '/admin' : '/staff';
+
   const handleQuickDemo = async (role, destination) => {
-    if (role === 'customer') {
-      setShowRoleDropdown(false);
-      setMobileMenuOpen(false);
-      navigate(destination);
-      return;
+    setShowRoleDropdown(false);
+    setMobileMenuOpen(false);
+
+    // If user is already authenticated, navigate without overwriting their real session!
+    if (user) {
+      if (role === 'customer') {
+        navigate(`/shop/${activeShopSlug}`);
+        return;
+      }
+      if (['shop_owner', 'manager', 'super_admin'].includes(user.role)) {
+        if (role === 'staff' || role === 'owner' || role === 'super_admin') {
+          navigate(destination);
+          return;
+        }
+      }
+      if (['staff', 'cashier'].includes(user.role)) {
+        if (role === 'staff') {
+          navigate('/staff');
+          return;
+        }
+      }
     }
 
-    const roleMap = {
-      staff: 'staff',
-      owner: 'shop_owner',
-      manager: 'manager',
-      super_admin: 'super_admin',
-    };
-    const targetRole = roleMap[role] || role;
-
-    // If already logged in with this role, navigate directly
-    if (user && user.role === targetRole) {
-      setShowRoleDropdown(false);
-      setMobileMenuOpen(false);
-      navigate(destination);
+    if (role === 'customer') {
+      navigate(`/shop/${activeShopSlug}`);
       return;
     }
 
@@ -72,8 +81,6 @@ export default function Navbar() {
       console.error('Error switching role:', err);
     } finally {
       setSwitchingRole(null);
-      setShowRoleDropdown(false);
-      setMobileMenuOpen(false);
       navigate(destination);
     }
   };
@@ -82,11 +89,11 @@ export default function Navbar() {
     {
       id: 'customer',
       role: 'customer',
-      destination: '/shop/abc-electronics',
+      destination: `/shop/${activeShopSlug}`,
       title: 'Customer Mobile View',
-      badge: 'Live Store',
+      badge: activeShopName,
       badgeColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-      description: 'Scan QR, search catalog & tap "Show Me This Product"',
+      description: `Scan QR, search catalog for ${activeShopName}`,
       icon: Smartphone,
       iconColor: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
       hoverBorder: 'hover:border-blue-500/40 hover:bg-blue-50/50 dark:hover:bg-blue-500/10',
@@ -96,9 +103,9 @@ export default function Navbar() {
       role: 'staff',
       destination: '/staff',
       title: 'Store Staff Portal',
-      badge: 'Rahul Sharma',
+      badge: 'Floor Queue',
       badgeColor: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
-      description: 'Real-time queue, shelf micro-location breadcrumb & find',
+      description: `Real-time queue & retrieval for ${activeShopName}`,
       icon: User,
       iconColor: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
       hoverBorder: 'hover:border-emerald-500/40 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/10',
@@ -108,9 +115,9 @@ export default function Navbar() {
       role: 'owner',
       destination: '/admin',
       title: 'Shop Owner Admin',
-      badge: 'Full Control',
+      badge: 'Management',
       badgeColor: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
-      description: 'Live dispatch queue, 2D layout map, inventory & analytics',
+      description: `Catalog, layout, inventory & orders for ${activeShopName}`,
       icon: Store,
       iconColor: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
       hoverBorder: 'hover:border-purple-500/40 hover:bg-purple-50/50 dark:hover:bg-purple-500/10',
@@ -129,12 +136,23 @@ export default function Navbar() {
     },
   ];
 
+  const filteredExperiences = roleExperiences.filter((item) => {
+    if (item.id === 'super_admin') {
+      return user?.role === 'super_admin';
+    }
+    if (item.id === 'owner') {
+      if (user && ['staff', 'cashier'].includes(user.role)) return false;
+      return true;
+    }
+    return true;
+  });
+
   return (
     <nav ref={navRef} className="sticky top-0 z-50 bg-white/85 dark:bg-[#0B0B0C]/85 backdrop-blur-xl border-b border-slate-200 dark:border-[#27272A] transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16 gap-2">
           {/* Brand Logo */}
-          <Link to="/" className="flex items-center gap-2.5 group min-w-0 shrink-0">
+          <Link to={brandDestination} className="flex items-center gap-2.5 group min-w-0 shrink-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 group-hover:scale-105 transition-all shrink-0">
               <Store className="w-5 h-5" />
             </div>
@@ -150,14 +168,41 @@ export default function Navbar() {
 
           {/* Desktop Nav Links */}
           <div className="hidden lg:flex items-center space-x-7 text-sm font-medium text-slate-600 dark:text-zinc-400">
-            <a href="#how-it-works" className="hover:text-blue-600 dark:hover:text-white transition-colors">How It Works</a>
-            <a href="#for-customers" className="hover:text-blue-600 dark:hover:text-white transition-colors">For Customers</a>
-            <a href="#for-shopkeepers" className="hover:text-blue-600 dark:hover:text-white transition-colors">For Shopkeepers</a>
-            <a href="#pricing" className="hover:text-blue-600 dark:hover:text-white transition-colors">Pricing</a>
-            <Link to="/shop/abc-electronics" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold flex items-center gap-1.5 transition-colors">
-              <QrCode className="w-4 h-4" />
-              Live Store Demo
-            </Link>
+            {isAuthenticated ? (
+              <>
+                {user?.role === 'super_admin' && (
+                  <Link to="/super-admin" className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors font-semibold">
+                    Super Admin
+                  </Link>
+                )}
+                {['shop_owner', 'manager', 'super_admin'].includes(user?.role) && (
+                  <Link to="/admin" className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors font-semibold">
+                    Store Admin
+                  </Link>
+                )}
+                <Link to="/staff" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors font-semibold">
+                  Staff Queue
+                </Link>
+                <Link
+                  to={`/shop/${activeShopSlug}`}
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>{activeShopName} Showroom</span>
+                </Link>
+              </>
+            ) : (
+              <>
+                <a href="#how-it-works" className="hover:text-blue-600 dark:hover:text-white transition-colors">How It Works</a>
+                <a href="#for-customers" className="hover:text-blue-600 dark:hover:text-white transition-colors">For Customers</a>
+                <a href="#for-shopkeepers" className="hover:text-blue-600 dark:hover:text-white transition-colors">For Shopkeepers</a>
+                <a href="#pricing" className="hover:text-blue-600 dark:hover:text-white transition-colors">Pricing</a>
+                <Link to={`/shop/${activeShopSlug}`} className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold flex items-center gap-1.5 transition-colors">
+                  <QrCode className="w-4 h-4" />
+                  Live Store Demo
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Desktop Actions */}
@@ -206,7 +251,7 @@ export default function Navbar() {
                   </div>
 
                   <div className="p-2 space-y-1.5">
-                    {roleExperiences.map((item) => {
+                    {filteredExperiences.map((item) => {
                       const Icon = item.icon;
                       const isLoading = switchingRole === item.role;
                       return (
@@ -274,21 +319,23 @@ export default function Navbar() {
                   </Link>
                 )}
                 {user?.role === 'super_admin' && (
-                  <Link
-                    to="/super-admin"
-                    className="text-xs font-semibold px-3 py-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-all"
-                  >
-                    Platform Admin
-                  </Link>
+                  <>
+                    <Link
+                      to="/super-admin"
+                      className="text-xs font-semibold px-3 py-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-all"
+                    >
+                      Platform Admin
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setShowOnboardModal(true)}
+                      className="text-xs font-bold px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-sm transition-all flex items-center gap-1.5"
+                    >
+                      <Store className="w-3.5 h-3.5" />
+                      <span>+ Onboard Shop</span>
+                    </button>
+                  </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowOnboardModal(true)}
-                  className="text-xs font-bold px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-sm transition-all flex items-center gap-1.5"
-                >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>+ Onboard Shop</span>
-                </button>
                 <button
                   type="button"
                   onClick={logout}
@@ -300,19 +347,11 @@ export default function Navbar() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowOnboardModal(true)}
-                  className="text-xs font-bold px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md shadow-blue-600/20 transition-all flex items-center gap-1.5 active:scale-95"
-                >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>Onboard Shop</span>
-                </button>
                 <Link
                   to="/login"
-                  className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 transition-all flex items-center gap-1.5"
+                  className="text-xs font-bold px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/20 transition-all flex items-center gap-1.5 active:scale-95"
                 >
-                  Sign In
+                  <span>Sign In</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
@@ -387,7 +426,7 @@ export default function Navbar() {
           </div>
 
           <div className="space-y-1.5 pt-1">
-            {roleExperiences.map((item) => {
+            {filteredExperiences.map((item) => {
               const Icon = item.icon;
               const isLoading = switchingRole === item.role;
               return (
@@ -435,12 +474,12 @@ export default function Navbar() {
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-[#111113]/95 backdrop-blur-xl px-4 pt-3 pb-6 space-y-3 animate-fade-in shadow-xl">
           <Link
-            to="/shop/abc-electronics"
+            to={`/shop/${activeShopSlug}`}
             onClick={() => setMobileMenuOpen(false)}
             className="flex items-center gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20"
           >
             <QrCode className="w-4 h-4 shrink-0" />
-            <span>Customer Store Demo (ABC Electronics)</span>
+            <span>{activeShopName} (Customer View)</span>
           </Link>
 
           <div className="grid grid-cols-2 gap-2 pt-1">
@@ -450,61 +489,67 @@ export default function Navbar() {
               className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-200 text-left flex items-center gap-2"
             >
               <User className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span>Staff Demo</span>
+              <span>{user ? 'Staff Queue' : 'Staff Demo'}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('owner', '/admin')}
-              className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-200 text-left flex items-center gap-2"
-            >
-              <Store className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-              <span>Owner Admin</span>
-            </button>
+            {(!user || ['shop_owner', 'manager', 'super_admin'].includes(user?.role)) && (
+              <button
+                type="button"
+                onClick={() => handleQuickDemo('owner', '/admin')}
+                className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-200 text-left flex items-center gap-2"
+              >
+                <Store className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                <span>{user ? 'Store Admin' : 'Owner Admin'}</span>
+              </button>
+            )}
           </div>
 
-          <div className="space-y-1 pt-2 border-t border-slate-200 dark:border-zinc-800 text-sm font-medium text-slate-700 dark:text-zinc-300">
-            <a
-              href="#how-it-works"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-2 py-1.5 hover:text-blue-600 dark:hover:text-white rounded-lg transition-colors"
-            >
-              How It Works
-            </a>
-            <a
-              href="#for-customers"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-2 py-1.5 hover:text-blue-600 dark:hover:text-white rounded-lg transition-colors"
-            >
-              For Customers
-            </a>
-            <a
-              href="#for-shopkeepers"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-2 py-1.5 hover:text-blue-600 dark:hover:text-white rounded-lg transition-colors"
-            >
-              For Shopkeepers
-            </a>
-            <a
-              href="#pricing"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-2 py-1.5 hover:text-blue-600 dark:hover:text-white rounded-lg transition-colors"
-            >
-              Pricing
-            </a>
-          </div>
+          {!isAuthenticated && (
+            <div className="space-y-1 pt-2 border-t border-slate-200 dark:border-zinc-800 text-sm font-medium text-slate-700 dark:text-zinc-300">
+              <a
+                href="#how-it-works"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-2 py-1.5 hover:text-blue-600 dark:hover:text-white rounded-lg transition-colors"
+              >
+                How It Works
+              </a>
+              <a
+                href="#for-customers"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-2 py-1.5 hover:text-blue-600 dark:hover:text-white rounded-lg transition-colors"
+              >
+                For Customers
+              </a>
+              <a
+                href="#for-shopkeepers"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-2 py-1.5 hover:text-blue-600 dark:hover:text-white rounded-lg transition-colors"
+              >
+                For Shopkeepers
+              </a>
+              <a
+                href="#pricing"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-2 py-1.5 hover:text-blue-600 dark:hover:text-white rounded-lg transition-colors"
+              >
+                Pricing
+              </a>
+            </div>
+          )}
 
           <div className="pt-3 border-t border-slate-200 dark:border-zinc-800 flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowOnboardModal(true);
-                setMobileMenuOpen(false);
-              }}
-              className="w-full text-center py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 flex items-center justify-center gap-2"
-            >
-              <Store className="w-4 h-4" />
-              <span>+ Onboard New Shop (14-Day Free)</span>
-            </button>
+            {user?.role === 'super_admin' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOnboardModal(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-center py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 flex items-center justify-center gap-2"
+              >
+                <Store className="w-4 h-4" />
+                <span>+ Onboard New Shop</span>
+              </button>
+            )}
             {isAuthenticated ? (
               <button
                 type="button"

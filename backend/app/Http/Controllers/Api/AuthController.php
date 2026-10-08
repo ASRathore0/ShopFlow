@@ -34,9 +34,9 @@ class AuthController extends Controller
             if ($firstShop) {
                 $user->current_shop_id = $firstShop->id;
                 $user->save();
-                $user->load('currentShop');
             }
         }
+        $user->load(['currentShop', 'employee', 'shops']);
 
         // Make employee online if staff
         if ($user->employee) {
@@ -58,6 +58,7 @@ class AuthController extends Controller
                 'current_shop_id' => $user->current_shop_id,
                 'current_shop' => $user->currentShop,
                 'employee' => $user->employee,
+                'shops' => $user->shops,
             ],
         ]);
     }
@@ -69,6 +70,14 @@ class AuthController extends Controller
 
     public function registerShop(Request $request, ShopOnboardingService $onboardingService)
     {
+        $authUser = $request->user();
+        if (!$authUser || $authUser->role !== 'super_admin') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Access denied. Only Super Administrators can onboard a new shop.',
+            ], 403);
+        }
+
         $request->validate([
             'shop_name' => 'required|string|max:255',
             'shop_type' => 'nullable|string|max:50',
@@ -84,23 +93,20 @@ class AuthController extends Controller
         $user = $result['user'];
         $shop = $result['shop'];
 
-        $token = $user->createToken('shopflow-token')->plainTextToken;
-
         return response()->json([
             'status' => 'success',
             'message' => "Shop '{$shop->name}' onboarded successfully!",
-            'token' => $token,
-            'user' => [
+            'data' => $shop,
+            'shop' => $shop,
+            'owner' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
                 'phone' => $user->phone,
                 'current_shop_id' => $user->current_shop_id,
-                'current_shop' => $shop,
-                'employee' => $user->employee,
             ],
-            'shop' => $shop,
+            'initial_password' => $result['plain_password'],
         ], 201);
     }
 
@@ -145,8 +151,21 @@ class AuthController extends Controller
         ]);
 
         $user = $request->user();
+
+        // Enforce that non-super-admins can only switch to their authorized shops
+        if ($user->role !== 'super_admin') {
+            $hasAccess = $user->shops()->where('shops.id', $request->shop_id)->exists();
+            if (!$hasAccess && $user->current_shop_id != $request->shop_id) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Unauthorized. You do not have access to manage this store.',
+                ], 403);
+            }
+        }
+
         $user->current_shop_id = $request->shop_id;
         $user->save();
+        $user->load('currentShop');
 
         return response()->json([
             'status' => 'success',

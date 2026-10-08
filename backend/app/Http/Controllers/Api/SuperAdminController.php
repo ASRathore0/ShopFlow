@@ -16,8 +16,21 @@ use Illuminate\Support\Str;
 
 class SuperAdminController extends Controller
 {
-    public function dashboard()
+    protected function ensureSuperAdmin(Request $request)
     {
+        $user = $request->user();
+        if (!$user || $user->role !== 'super_admin') {
+            abort(response()->json([
+                'status' => 'error',
+                'message' => 'Access denied. Only Super Administrators can perform this action.',
+            ], 403));
+        }
+    }
+
+    public function dashboard(Request $request)
+    {
+        $this->ensureSuperAdmin($request);
+
         $totalShops = Shop::count();
         $activeShops = Shop::where('is_active', true)->count();
         $totalCustomers = CustomerSession::count();
@@ -65,8 +78,10 @@ class SuperAdminController extends Controller
         ]);
     }
 
-    public function listShops()
+    public function listShops(Request $request)
     {
+        $this->ensureSuperAdmin($request);
+
         $shops = Shop::with(['subscription.plan'])->withCount(['products', 'employees', 'customerRequests'])->orderBy('created_at', 'desc')->get();
 
         return response()->json([
@@ -77,26 +92,45 @@ class SuperAdminController extends Controller
 
     public function createShop(Request $request, ShopOnboardingService $onboardingService)
     {
+        $this->ensureSuperAdmin($request);
+
         $request->validate([
-            'name' => 'required|string|max:255',
-            'shop_type' => 'required|string',
+            'shop_name' => 'nullable|string|max:255',
+            'name' => 'nullable|string|max:255',
+            'shop_type' => 'nullable|string',
             'email' => 'required|email',
             'owner_name' => 'nullable|string',
             'password' => 'nullable|string|min:6',
             'phone' => 'nullable|string',
             'address' => 'nullable|string',
-            'plan_id' => 'required|exists:plans,id',
+            'plan_id' => 'nullable',
+            'plan_slug' => 'nullable|string',
         ]);
 
+        $shopName = $request->shop_name ?: ($request->name ?: 'New Retail Store');
+
+        $planId = $request->plan_id;
+        if (!$planId && $request->plan_slug) {
+            $plan = Plan::where('slug', $request->plan_slug)->first();
+            if ($plan) {
+                $planId = $plan->id;
+            }
+        }
+        if (!$planId) {
+            $defaultPlan = Plan::where('slug', 'growth')->first() ?? Plan::first();
+            $planId = $defaultPlan ? $defaultPlan->id : null;
+        }
+
         $data = [
-            'shop_name' => $request->name,
-            'shop_type' => $request->shop_type,
+            'shop_name' => $shopName,
+            'name' => $shopName,
+            'shop_type' => $request->shop_type ?: 'electronics',
             'email' => $request->email,
-            'owner_name' => $request->owner_name ?: ($request->name . ' Admin'),
+            'owner_name' => $request->owner_name ?: ($shopName . ' Admin'),
             'password' => $request->password ?: 'password123',
             'phone' => $request->phone,
             'address' => $request->address,
-            'plan_id' => $request->plan_id,
+            'plan_id' => $planId,
         ];
 
         $result = $onboardingService->onboard($data);
@@ -106,21 +140,26 @@ class SuperAdminController extends Controller
             'status' => 'success',
             'message' => 'Shop onboarded successfully with starter catalog and locations!',
             'data' => $shop->load('subscription.plan'),
+            'shop' => $shop,
             'owner' => $result['user'],
             'initial_password' => $result['plain_password'],
         ], 201);
     }
 
-    public function listPlans()
+    public function listPlans(Request $request)
     {
+        $this->ensureSuperAdmin($request);
+
         return response()->json([
             'status' => 'success',
             'data' => Plan::all(),
         ]);
     }
 
-    public function listUsers()
+    public function listUsers(Request $request)
     {
+        $this->ensureSuperAdmin($request);
+
         return response()->json([
             'status' => 'success',
             'data' => User::with('currentShop')->orderBy('created_at', 'desc')->get(),

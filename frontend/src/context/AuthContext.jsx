@@ -10,6 +10,7 @@ export const AuthProvider = ({ children }) => {
   });
   const [token, setToken] = useState(() => localStorage.getItem('shopflow_token'));
   const [loading, setLoading] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(() => !localStorage.getItem('shopflow_token'));
 
   useEffect(() => {
     if (token) {
@@ -21,9 +22,20 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('shopflow_user', JSON.stringify(res.data.user));
           }
         })
-        .catch(() => {
+        .catch((err) => {
           // Token expired or invalid
+          if (err.response?.status === 401 || err.response?.status === 403) {
+            setToken(null);
+            setUser(null);
+            localStorage.removeItem('shopflow_token');
+            localStorage.removeItem('shopflow_user');
+          }
+        })
+        .finally(() => {
+          setIsInitialized(true);
         });
+    } else {
+      setIsInitialized(true);
     }
   }, [token]);
 
@@ -47,20 +59,24 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Only Super Admin can onboard new shops
   const registerShop = async (shopData) => {
     setLoading(true);
     try {
-      const res = await api.post('/auth/register-shop', shopData);
-      const { token: authToken, user: authUser, shop } = res.data;
+      // Use the dedicated super-admin provisioning endpoint
+      const res = await api.post('/super-admin/shops', shopData);
+      const { shop, owner, initial_password } = res.data;
       
-      setToken(authToken);
-      setUser(authUser);
-      localStorage.setItem('shopflow_token', authToken);
-      localStorage.setItem('shopflow_user', JSON.stringify(authUser));
-      
-      return { success: true, user: authUser, shop };
+      // Keep super admin logged in! Do NOT overwrite super admin's active session!
+      return {
+        success: true,
+        shop,
+        owner,
+        initial_password,
+        user: owner,
+      };
     } catch (error) {
-      const msg = error.response?.data?.message || 'Onboarding failed. Please check inputs.';
+      const msg = error.response?.data?.message || 'Onboarding failed. Only Super Admin can onboard new shops.';
       return { success: false, message: msg };
     } finally {
       setLoading(false);
@@ -121,12 +137,13 @@ export const AuthProvider = ({ children }) => {
       user,
       token,
       loading,
+      isInitialized,
       login,
       registerShop,
       switchShop,
       logout,
       quickLoginAs,
-      isAuthenticated: !!token,
+      isAuthenticated: !!token && !!user,
       isStaff: user && ['staff', 'manager', 'shop_owner', 'super_admin'].includes(user.role),
       isAdmin: user && ['shop_owner', 'manager', 'super_admin'].includes(user.role),
       isSuperAdmin: user && user.role === 'super_admin',

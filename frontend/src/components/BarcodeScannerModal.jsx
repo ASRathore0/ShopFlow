@@ -117,7 +117,7 @@ export default function BarcodeScannerModal({ onClose, onSelectProduct }) {
                 <PackageCheck className="w-3.5 h-3.5" />
                 Product Located
               </span>
-              <span className="text-xs font-bold text-white">${parseFloat(result.product.price).toFixed(2)}</span>
+              <span className="text-xs font-bold text-white">₹{parseFloat(result.product.price).toFixed(2)}</span>
             </div>
 
             <div>

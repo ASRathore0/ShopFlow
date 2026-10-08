@@ -123,10 +123,10 @@ export default function CustomerRequestTracking() {
               {request.status === 'completed'
                 ? 'Assistance Completed'
                 : request.status === 'product_found'
-                ? 'Product Found! On the way'
-                : request.status === 'assigned'
-                ? 'Staff Member Dispatched'
-                : 'Ticket Sent to Floor Queue'}
+                  ? 'Product Found! On the way'
+                  : request.status === 'assigned'
+                    ? 'Staff Member Dispatched'
+                    : 'Ticket Sent to Floor Queue'}
             </h1>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 font-medium">
               {request.status === 'completed'

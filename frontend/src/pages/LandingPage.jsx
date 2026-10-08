@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Store, QrCode, Search, Navigation, CheckCircle2, Clock, Users,
@@ -11,14 +11,42 @@ import OnboardShopModal from '../components/OnboardShopModal';
 import { useAuth } from '../context/AuthContext';
 
 export default function LandingPage() {
-  const { quickLoginAs } = useAuth();
+  const { user, isAuthenticated, isInitialized, quickLoginAs } = useAuth();
   const navigate = useNavigate();
   const [showOnboardModal, setShowOnboardModal] = useState(false);
   const [onboardPlan, setOnboardPlan] = useState('growth');
 
+  // If already logged in (shop owner, staff, or super admin), do not show marketing site!
+  // Redirect immediately to their store portal
+  useEffect(() => {
+    if (isInitialized && isAuthenticated && user) {
+      if (user.role === 'super_admin') {
+        navigate('/super-admin', { replace: true });
+      } else if (['shop_owner', 'manager'].includes(user.role)) {
+        navigate('/admin', { replace: true });
+      } else if (['staff', 'cashier'].includes(user.role)) {
+        navigate('/staff', { replace: true });
+      }
+    }
+  }, [isInitialized, isAuthenticated, user, navigate]);
+
+  // Do not flash marketing content if authenticated
+  if (isInitialized && isAuthenticated && user) {
+    return null;
+  }
+
   const handleLaunchRole = async (role, destination) => {
     await quickLoginAs(role);
     navigate(destination);
+  };
+
+  const handleOnboardClick = (plan = 'growth') => {
+    if (user?.role === 'super_admin') {
+      setOnboardPlan(plan);
+      setShowOnboardModal(true);
+    } else {
+      navigate('/login');
+    }
   };
 
   const shopTypes = [
@@ -35,7 +63,7 @@ export default function LandingPage() {
   const pricingPlans = [
     {
       name: 'Starter',
-      price: '$49',
+      price: '₹49',
       period: '/month',
       desc: 'Ideal for single-location retail shops and local electronics boutiques.',
       features: [
@@ -51,7 +79,7 @@ export default function LandingPage() {
     },
     {
       name: 'Growth',
-      price: '$129',
+      price: '₹129',
       period: '/month',
       badge: 'MOST POPULAR',
       desc: 'For busy multistoried shops needing automatic staff dispatch and store maps.',
@@ -69,7 +97,7 @@ export default function LandingPage() {
     },
     {
       name: 'Business',
-      price: '$299',
+      price: '₹299',
       period: '/month',
       desc: 'For high-volume department stores with multiple departments and floors.',
       features: [
@@ -119,14 +147,11 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2 w-full max-w-md sm:max-w-none mx-auto">
               <button
                 type="button"
-                onClick={() => {
-                  setOnboardPlan('growth');
-                  setShowOnboardModal(true);
-                }}
+                onClick={() => handleOnboardClick('growth')}
                 className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2"
               >
                 <PlusCircle className="w-4 h-4 shrink-0" />
-                Onboard New Shop (Free 14-Day Trial)
+                Onboard New Shop (Super Admin)
               </button>
               <Link
                 to="/shop/abc-electronics"
@@ -186,7 +211,7 @@ export default function LandingPage() {
                       <h4 className="text-xs font-bold text-slate-900 dark:text-white">Apple MacBook Air M4</h4>
                       <p className="text-[11px] text-slate-500 dark:text-zinc-400">16GB / 512GB / Midnight</p>
                     </div>
-                    <span className="text-xs font-bold text-blue-600 dark:text-white shrink-0">$1,299</span>
+                    <span className="text-xs font-bold text-blue-600 dark:text-white shrink-0">₹1,299</span>
                   </div>
                 </div>
 
@@ -566,8 +591,7 @@ export default function LandingPage() {
                     type="button"
                     onClick={() => {
                       const planKey = plan.name.toLowerCase();
-                      setOnboardPlan(planKey === 'business' ? 'enterprise' : planKey);
-                      setShowOnboardModal(true);
+                      handleOnboardClick(planKey === 'business' ? 'enterprise' : planKey);
                     }}
                     className={`w-full py-3 rounded-2xl text-xs font-bold transition-all ${
                       plan.highlighted
@@ -596,14 +620,11 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               type="button"
-              onClick={() => {
-                setOnboardPlan('growth');
-                setShowOnboardModal(true);
-              }}
+              onClick={() => handleOnboardClick('growth')}
               className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-xl shadow-blue-600/25 flex items-center justify-center gap-2"
             >
               <PlusCircle className="w-4 h-4" />
-              Onboard Your Store Now
+              Onboard Your Store (Super Admin)
             </button>
             <Link
               to="/shop/abc-electronics"

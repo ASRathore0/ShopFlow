@@ -153,7 +153,7 @@ export default function RequestModal({ product, variant, shopSlug, onClose, onSu
               <div className="flex-1 min-w-0">
                 <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">{product.name}</h4>
                 <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold truncate">{selectedVariantName}</p>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-bold">${parseFloat(product.price).toFixed(2)}</p>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-bold">₹{parseFloat(product.price).toFixed(2)}</p>
               </div>
             </div>
 

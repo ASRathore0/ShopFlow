@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   Store, Sparkles, Check, ArrowRight, ArrowLeft, Shield, Users,
   MapPin, Phone, Mail, Lock, QrCode, ExternalLink, Loader2, X,
-  ShoppingBag, Laptop, Shirt, Compass, CheckCircle2, AlertCircle
+  ShoppingBag, Laptop, Shirt, Compass, CheckCircle2, AlertCircle, Copy
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growth' }) {
-  const { registerShop } = useAuth();
+  const { registerShop, login } = useAuth();
   const { isDark } = useTheme();
   const navigate = useNavigate();
 
@@ -17,6 +17,7 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [createdResult, setCreatedResult] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const [form, setForm] = useState({
     shop_name: '',
@@ -42,7 +43,7 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
     {
       id: 'starter',
       name: 'Starter',
-      price: '$49',
+      price: '₹49',
       period: '/mo',
       desc: 'Single showroom store',
       features: ['Up to 5 staff', 'Shelf location finder', 'Entrance QR signage'],
@@ -50,7 +51,7 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
     {
       id: 'growth',
       name: 'Growth',
-      price: '$129',
+      price: '₹129',
       period: '/mo',
       badge: 'RECOMMENDED',
       desc: 'High-traffic retail store',
@@ -59,7 +60,7 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
     {
       id: 'business',
       name: 'Business',
-      price: '$299',
+      price: '₹299',
       period: '/mo',
       desc: 'Multi-floor department store',
       features: ['Up to 50 staff', 'Multi-zone floor routing', 'Inventory replenishment audits'],
@@ -67,7 +68,7 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
   ];
 
   const previewSlug = form.shop_name
-    ? form.shop_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    ? form.shop_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-₹)/g, '')
     : 'your-store';
 
   const handleSubmit = async (e) => {
@@ -99,9 +100,27 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
     }
   };
 
-  const handleFinishAndEnterAdmin = () => {
-    onClose();
-    navigate('/admin');
+  const handleLoginAsNewOwner = async () => {
+    const ownerEmail = createdResult?.owner?.email || createdResult?.user?.email || form.email;
+    const ownerPass = createdResult?.initial_password || form.password;
+    setLoading(true);
+    const res = await login(ownerEmail, ownerPass);
+    setLoading(false);
+    if (res.success) {
+      onClose();
+      navigate('/admin');
+    } else {
+      setError(res.message || 'Failed to authenticate as new shop owner.');
+    }
+  };
+
+  const handleCopyCredentials = () => {
+    const ownerEmail = createdResult?.owner?.email || createdResult?.user?.email || form.email;
+    const ownerPass = createdResult?.initial_password || form.password;
+    const text = `ShopFlow Retail OS Login Credentials\nStore: ${createdResult?.shop?.name}\nEmail: ${ownerEmail}\nPassword: ${ownerPass}\nLogin Portal: ${window.location.origin}/login`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   return (
@@ -416,38 +435,80 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 dark:text-zinc-400">Admin Email:</span>
                   <strong className="font-mono text-slate-900 dark:text-white">
-                    {createdResult.user?.email}
+                    {createdResult.owner?.email || createdResult.user?.email || form.email}
                   </strong>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500 dark:text-zinc-400">Role:</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  <span className="text-slate-500 dark:text-zinc-400">Admin Password:</span>
+                  <strong className="font-mono text-emerald-600 dark:text-emerald-400">
+                    {createdResult.initial_password || form.password}
+                  </strong>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-zinc-800">
+                  <span className="text-slate-500 dark:text-zinc-400">Assigned Role:</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
                     Shop Owner Admin
                   </span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleCopyCredentials}
+                  className="w-full mt-2 py-2 px-3 rounded-xl bg-slate-200 dark:bg-zinc-800 hover:bg-slate-300 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-emerald-600 dark:text-emerald-400">Credentials Copied to Clipboard!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Copy Owner Credentials</span>
+                    </>
+                  )}
+                </button>
               </div>
 
               {/* Direct action buttons */}
               <div className="space-y-2 pt-2">
                 <button
                   type="button"
-                  onClick={handleFinishAndEnterAdmin}
+                  onClick={handleLoginAsNewOwner}
+                  disabled={loading}
                   className="w-full py-3.5 px-4 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm shadow-xl shadow-blue-600/25 flex items-center justify-center gap-2 transition-all"
                 >
-                  <Store className="w-4 h-4" />
-                  Open Shop Owner Admin Panel
-                  <ArrowRight className="w-4 h-4" />
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Store className="w-4 h-4" />
+                      <span>Log In As This Shop Owner</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
 
-                <a
-                  href={`/shop/${createdResult.shop?.slug}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full py-3 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold text-xs flex items-center justify-center gap-2 transition-colors block text-center"
-                >
-                  <QrCode className="w-4 h-4 text-blue-500" />
-                  Test Customer Entrance QR Experience
-                </a>
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={`/shop/${createdResult.shop?.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <QrCode className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Customer QR</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Done (Super Admin)</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Clock, CheckCircle2, UserCheck, AlertCircle, ScanLine, Search,
   Power, RefreshCw, HandHeart, ChevronRight, Filter, Layers, Navigation, Check,
-  Sun, Moon, Store, ArrowLeft
+  Sun, Moon, Store, ArrowLeft, LogOut
 } from 'lucide-react';
 import { staffService } from '../services/staffService';
 import { useAuth } from '../context/AuthContext';
@@ -12,7 +12,7 @@ import StaffRequestCard from '../components/StaffRequestCard';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 
 export default function StaffDashboard() {
-  const { user, quickLoginAs } = useAuth();
+  const { user, quickLoginAs, logout } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
   const [dashboardData, setDashboardData] = useState(null);
   const [requests, setRequests] = useState([]);
@@ -21,16 +21,6 @@ export default function StaffDashboard() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [staffStatus, setStaffStatus] = useState('online');
   const [refreshing, setRefreshing] = useState(false);
-
-  // Auto-login as staff if not authenticated yet for seamless demo
-  useEffect(() => {
-    async function initAuth() {
-      if (!user) {
-        await quickLoginAs('staff');
-      }
-    }
-    initAuth();
-  }, [user]);
 
   const loadData = async () => {
     setRefreshing(true);
@@ -148,29 +138,32 @@ export default function StaffDashboard() {
           </div>
 
           {/* Action buttons & Online status selector */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Theme Toggle */}
             <button
               type="button"
               onClick={toggleTheme}
-              className="p-2 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 transition-colors"
+              className="p-2 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 transition-colors shrink-0"
               title={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}
+              aria-label="Toggle theme"
             >
               {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
             </button>
 
             <button
               onClick={() => setScannerOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
+              title="Barcode Scanner"
             >
-              <ScanLine className="w-4 h-4 text-blue-500" />
-              <span>Barcode Scanner</span>
+              <ScanLine className="w-4 h-4 text-blue-500 shrink-0" />
+              <span className="hidden sm:inline">Barcode Scanner</span>
+              <span className="sm:hidden">Scan</span>
             </button>
 
             <select
               value={staffStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
-              className={`text-xs font-bold px-3 py-1.5 rounded-xl border outline-none cursor-pointer transition-colors ${
+              className={`text-xs font-bold px-2 sm:px-3 py-1.5 rounded-xl border outline-none cursor-pointer transition-colors ${
                 staffStatus === 'online'
                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                   : staffStatus === 'busy'
@@ -187,10 +180,20 @@ export default function StaffDashboard() {
             <button
               onClick={loadData}
               disabled={refreshing}
-              className="p-2 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 transition-colors"
+              className="p-2 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 transition-colors shrink-0"
               title="Refresh queue"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
+
+            {/* Logout button */}
+            <button
+              type="button"
+              onClick={logout}
+              className="p-2 text-slate-400 hover:text-rose-500 dark:text-zinc-400 dark:hover:text-rose-400 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-slate-200 dark:border-zinc-800 transition-colors shrink-0"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -227,7 +230,7 @@ export default function StaffDashboard() {
 
         {/* Live Queue Filter Tabs */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-2">
-          <div className="flex gap-2 overflow-x-auto">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
             {[
               { id: 'active', label: 'Active Queue', count: metrics.active_requests + metrics.waiting_requests },
               { id: 'waiting', label: 'Waiting', count: metrics.waiting_requests },

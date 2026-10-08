@@ -24,16 +24,6 @@ export default function SuperAdminDashboard() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showCreateShop, setShowCreateShop] = useState(false);
 
-  // Auto-login as super_admin if needed
-  useEffect(() => {
-    async function init() {
-      if (!user || user.role !== 'super_admin') {
-        await quickLoginAs('super_admin');
-      }
-    }
-    init();
-  }, [user]);
-
   const loadData = async () => {
     setLoading(true);
     try {
@@ -195,7 +185,7 @@ export default function SuperAdminDashboard() {
               Est. Monthly MRR
             </span>
             <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
-              ${(metrics.total_shops * 129).toLocaleString()}
+              ₹{(metrics.total_shops * 129).toLocaleString()}
             </div>
             <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 block truncate">
               SaaS Subscriptions
@@ -290,7 +280,7 @@ export default function SuperAdminDashboard() {
                       {s.shop_type}
                     </span>
                     <span className="px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[11px] font-bold border border-blue-500/20">
-                      {s.subscription?.plan?.name || 'Growth ($129)'}
+                      {s.subscription?.plan?.name || 'Growth (₹129)'}
                     </span>
                   </div>
 
@@ -357,7 +347,7 @@ export default function SuperAdminDashboard() {
                         <td className="p-3.5 capitalize text-slate-700 dark:text-zinc-300">{s.shop_type}</td>
                         <td className="p-3.5">
                           <span className="px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20 whitespace-nowrap">
-                            {s.subscription?.plan?.name || 'Growth ($129)'}
+                            {s.subscription?.plan?.name || 'Growth (₹129)'}
                           </span>
                         </td>
                         <td className="p-3.5 text-slate-500 dark:text-zinc-400 whitespace-nowrap">

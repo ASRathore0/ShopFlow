@@ -71,7 +71,7 @@ class AdminProductController extends Controller
             'description' => 'nullable|string',
             'specifications' => 'nullable|array',
             'tags' => 'nullable|array',
-            'image_url' => 'nullable|url',
+            'image_url' => 'nullable|string',
             'initial_stock' => 'nullable|integer|min:0',
             'variants' => 'nullable|array',
         ]);
@@ -181,7 +181,7 @@ class AdminProductController extends Controller
             'brand' => 'nullable|string',
             'model' => 'nullable|string',
             'status' => 'nullable|in:active,draft,archived',
-            'image_url' => 'nullable|url',
+            'image_url' => 'nullable|string',
         ]);
 
         $product->update($request->only([
@@ -207,6 +207,33 @@ class AdminProductController extends Controller
             'status' => 'success',
             'message' => 'Product updated successfully',
             'data' => $product->fresh(['category', 'primaryImage', 'location', 'variants.inventory']),
+        ]);
+    }
+
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
+        ]);
+
+        $file = $request->file('image');
+        $filename = 'prod_' . time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+
+        $destinationPath = public_path('uploads/products');
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
+        }
+
+        $file->move($destinationPath, $filename);
+        $url = url('uploads/products/' . $filename);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Image uploaded successfully',
+            'data' => [
+                'url' => $url,
+                'filename' => $filename,
+            ],
         ]);
     }
 

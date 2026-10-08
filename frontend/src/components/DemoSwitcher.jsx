@@ -150,17 +150,45 @@ export default function DemoSwitcher() {
     setIsOpen((prev) => !prev);
   };
 
-  const handleRoleSelect = async (role, path) => {
+  // Get active shop context: from current route /shop/:slug or from logged-in user's shop
+  const urlShopSlug = location.pathname.startsWith('/shop/') ? location.pathname.split('/')[2] : null;
+  const userShop = user?.current_shop || user?.shops?.[0] || null;
+  const activeShopSlug = userShop?.slug || urlShopSlug || 'abc-electronics';
+  const activeShopName = userShop?.name || (activeShopSlug === 'abc-electronics' ? 'ABC Electronics' : 'This Store');
+
+  const handleRoleSelect = async (roleKey, path) => {
     setIsOpen(false);
-    if (role === 'customer') {
-      navigate('/shop/abc-electronics');
+
+    // If user is already authenticated, navigate without overwriting their real session!
+    if (user) {
+      if (roleKey === 'customer') {
+        navigate(`/shop/${activeShopSlug}`);
+        return;
+      }
+      if (roleKey === 'staff') {
+        navigate('/staff');
+        return;
+      }
+      if (roleKey === 'owner') {
+        navigate('/admin');
+        return;
+      }
+      if (roleKey === 'super_admin') {
+        navigate('/super-admin');
+        return;
+      }
+    }
+
+    // Guest / prospective customer demo switching
+    if (roleKey === 'customer') {
+      navigate(`/shop/${activeShopSlug}`);
       return;
     }
-    if (role === 'public') {
+    if (roleKey === 'public') {
       navigate('/');
       return;
     }
-    await quickLoginAs(role);
+    await quickLoginAs(roleKey);
     navigate(path);
   };
 
@@ -225,29 +253,31 @@ export default function DemoSwitcher() {
             } ${isRightHalf ? 'right-0' : 'left-0'}`}
           >
             <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-zinc-800">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white truncate pr-2">
                 <Compass className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                <span>ShopFlow Interactive Demo</span>
+                <span className="truncate">{user ? `${activeShopName} • Views` : 'ShopFlow Interactive Demo'}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                className="p-1 text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
                 title="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-              Instant 1-click switch between all platform experiences:
+            <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-snug">
+              {user
+                ? `Active store workspace for ${activeShopName}. Switch role view:`
+                : 'Instant 1-click switch between demo experiences:'}
             </p>
 
             <div className="space-y-1.5">
-              {/* Customer */}
+              {/* 1. Customer Mobile View - Always scoped to active shop */}
               <button
                 type="button"
-                onClick={() => handleRoleSelect('customer', '/shop/abc-electronics')}
+                onClick={() => handleRoleSelect('customer', `/shop/${activeShopSlug}`)}
                 className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
                   location.pathname.startsWith('/shop')
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/15 text-blue-900 dark:text-white font-semibold'
@@ -257,87 +287,123 @@ export default function DemoSwitcher() {
                 <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
                   <Smartphone className="w-4 h-4" />
                 </div>
-                <div className="text-xs min-w-0">
-                  <div className="font-bold truncate text-slate-900 dark:text-white">1. Customer Mobile View</div>
-                  <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">Scan QR & request item</div>
+                <div className="text-xs min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold truncate text-slate-900 dark:text-white">Customer Mobile View</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold shrink-0">
+                      Showroom
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">
+                    {user ? `Showroom catalog for ${activeShopName}` : 'Scan QR & request item'}
+                  </div>
                 </div>
               </button>
 
-              {/* Staff */}
-              <button
-                type="button"
-                onClick={() => handleRoleSelect('staff', '/staff')}
-                className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
-                  location.pathname.startsWith('/staff')
-                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-900 dark:text-white font-semibold'
-                    : 'border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800'
-                }`}
-              >
-                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-                  <UserCheck className="w-4 h-4" />
-                </div>
-                <div className="text-xs min-w-0">
-                  <div className="font-bold truncate text-slate-900 dark:text-white">2. Staff Queue (Rahul)</div>
-                  <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">Micro-location & Mark Found</div>
-                </div>
-              </button>
+              {/* 2. Staff Queue Terminal - Visible to Staff, Owner, Super Admin, and guest */}
+              {(!user || ['staff', 'cashier', 'shop_owner', 'manager', 'super_admin'].includes(user.role)) && (
+                <button
+                  type="button"
+                  onClick={() => handleRoleSelect('staff', '/staff')}
+                  className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                    location.pathname.startsWith('/staff')
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-900 dark:text-white font-semibold'
+                      : 'border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold truncate text-slate-900 dark:text-white">Floor Staff Queue</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
+                        Staff
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">
+                      {user ? `Fulfillment queue for ${activeShopName}` : 'Micro-location & Mark Found'}
+                    </div>
+                  </div>
+                </button>
+              )}
 
-              {/* Shop Owner */}
-              <button
-                type="button"
-                onClick={() => handleRoleSelect('owner', '/admin')}
-                className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
-                  location.pathname.startsWith('/admin')
-                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/15 text-purple-900 dark:text-white font-semibold'
-                    : 'border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800'
-                }`}
-              >
-                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
-                  <Store className="w-4 h-4" />
-                </div>
-                <div className="text-xs min-w-0">
-                  <div className="font-bold truncate text-slate-900 dark:text-white">3. Shop Owner Admin</div>
-                  <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">Inventory, layouts, analytics</div>
-                </div>
-              </button>
+              {/* 3. Shop Owner Admin - Visible to Owner, Super Admin, and guest; STRICTLY HIDDEN from floor staff */}
+              {(!user || ['shop_owner', 'manager', 'super_admin'].includes(user.role)) && (
+                <button
+                  type="button"
+                  onClick={() => handleRoleSelect('owner', '/admin')}
+                  className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                    location.pathname.startsWith('/admin')
+                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/15 text-purple-900 dark:text-white font-semibold'
+                      : 'border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
+                    <Store className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold truncate text-slate-900 dark:text-white">Shop Owner Admin</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold shrink-0">
+                        Admin
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">
+                      {user ? `Manage ${activeShopName} inventory & catalog` : 'Inventory, layouts, analytics'}
+                    </div>
+                  </div>
+                </button>
+              )}
 
-              {/* Super Admin */}
-              <button
-                type="button"
-                onClick={() => handleRoleSelect('super_admin', '/super-admin')}
-                className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
-                  location.pathname.startsWith('/super-admin')
-                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-white font-semibold'
-                    : 'border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800'
-                }`}
-              >
-                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
-                  <ShieldCheck className="w-4 h-4" />
-                </div>
-                <div className="text-xs min-w-0">
-                  <div className="font-bold truncate text-slate-900 dark:text-white">4. Super Admin (Multi-tenant)</div>
-                  <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">Global SaaS management</div>
-                </div>
-              </button>
+              {/* 4. Super Admin - ONLY visible if user is an authenticated super_admin */}
+              {user?.role === 'super_admin' && (
+                <button
+                  type="button"
+                  onClick={() => handleRoleSelect('super_admin', '/super-admin')}
+                  className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                    location.pathname.startsWith('/super-admin')
+                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-white font-semibold'
+                      : 'border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold truncate text-slate-900 dark:text-white">Platform Super-Admin</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold shrink-0">
+                        SaaS
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">
+                      Global multi-tenant platform metrics
+                    </div>
+                  </div>
+                </button>
+              )}
 
-              {/* Public Landing */}
-              <button
-                type="button"
-                onClick={() => handleRoleSelect('public', '/')}
-                className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
-                  location.pathname === '/'
-                    ? 'border-blue-500 bg-blue-50 dark:bg-zinc-800 text-blue-900 dark:text-white font-semibold'
-                    : 'border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800'
-                }`}
-              >
-                <div className="p-2 rounded-xl bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 shrink-0">
-                  <Globe className="w-4 h-4" />
-                </div>
-                <div className="text-xs min-w-0">
-                  <div className="font-bold truncate text-slate-900 dark:text-white">Public Marketing Site</div>
-                  <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">Landing & overview</div>
-                </div>
-              </button>
+              {/* 5. Public Marketing Site - ONLY shown if user is NOT logged in */}
+              {!user && (
+                <button
+                  type="button"
+                  onClick={() => handleRoleSelect('public', '/')}
+                  className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                    location.pathname === '/'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-zinc-800 text-blue-900 dark:text-white font-semibold'
+                      : 'border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <div className="p-2 rounded-xl bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 shrink-0">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs min-w-0">
+                    <div className="font-bold truncate text-slate-900 dark:text-white">Public Marketing Site</div>
+                    <div className="text-[10px] text-slate-500 dark:text-zinc-400 truncate">Landing & overview</div>
+                  </div>
+                </button>
+              )}
             </div>
 
             {user && (

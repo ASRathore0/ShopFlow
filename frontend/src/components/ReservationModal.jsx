@@ -52,8 +52,8 @@ export default function ReservationModal({ product, variant, shopSlug, onClose }
             <Bookmark className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Reserve for In-Store Pickup</h3>
           </div>
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800"
           >
             <X className="w-5 h-5" />
@@ -82,7 +82,7 @@ export default function ReservationModal({ product, variant, shopSlug, onClose }
               </div>
               <div className="flex items-center justify-between">
                 <span>Total Due at Counter:</span>
-                <span className="font-extrabold text-emerald-600 dark:text-emerald-400">${parseFloat(successData.order.total_amount).toFixed(2)}</span>
+                <span className="font-extrabold text-emerald-600 dark:text-emerald-400">₹{parseFloat(successData.order.total_amount).toFixed(2)}</span>
               </div>
             </div>
 
