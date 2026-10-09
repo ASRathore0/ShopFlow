@@ -24,11 +24,11 @@ jobs:
       - name: ⚡ Execute Artisan Command on Hostinger
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ₹{{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
-          username: ₹{{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
-          password: ₹{{ secrets.HOSTINGER_SSH_PASSWORD }}
-          port: ₹{{ secrets.HOSTINGER_SSH_PORT || 65002 }}
+          host: ${{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
+          username: ${{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT || 65002 }}
           script: |
-            cd ₹{{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
-            echo "Running: php artisan ₹{{ github.event.inputs.command }}"
-            php artisan ₹{{ github.event.inputs.command }}
+            cd ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
+            echo "Running: php artisan ${{ github.event.inputs.command }}"
+            php artisan ${{ github.event.inputs.command }}

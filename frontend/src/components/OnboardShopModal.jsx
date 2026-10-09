@@ -68,7 +68,7 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
   ];
 
   const previewSlug = form.shop_name
-    ? form.shop_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-₹)/g, '')
+    ? form.shop_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     : 'your-store';
 
   const handleSubmit = async (e) => {
