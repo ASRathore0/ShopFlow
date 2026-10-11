@@ -16,6 +16,7 @@ class Employee extends Model
         'name',
         'email',
         'phone',
+        'avatar_url',
         'role',
         'status',
         'active_requests_count',

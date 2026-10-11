@@ -92,9 +92,19 @@ export default function AdminDashboard() {
   const [newCategoryIcon, setNewCategoryIcon] = useState('Tag');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
 
+  // Dedicated Category Manager Modal states
+  const [showCategoryManagerModal, setShowCategoryManagerModal] = useState(false);
+  const [deletingCategory, setDeletingCategory] = useState(null);
+  const [catMgrForm, setCatMgrForm] = useState({ name: '', icon: 'Tag' });
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+
   // Product Image manual upload state
   const [imageUploadMode, setImageUploadMode] = useState('upload'); // 'upload' or 'url'
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [showLiveCameraModal, setShowLiveCameraModal] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('environment'); // 'environment' or 'user'
+  const liveVideoRef = React.useRef(null);
+  const cameraStreamRef = React.useRef(null);
 
   // Inventory Modals
   const [showAdjustStockModal, setShowAdjustStockModal] = useState(false);
@@ -285,12 +295,66 @@ export default function AdminDashboard() {
     loadSectionData();
   }, [activeSection, user?.current_shop_id]);
 
+  const prevAdminReqIdsRef = React.useRef(null);
+  const playAdminChime = (isReservation = false) => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      if (isReservation) {
+        [587.33, 739.99, 880.00].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+          gain.gain.setValueAtTime(0.2, now + idx * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.12);
+          osc.stop(now + idx * 0.12 + 0.35);
+        });
+      } else {
+        [523.25, 659.25].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+          gain.gain.setValueAtTime(0.18, now + idx * 0.14);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.28);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.14);
+          osc.stop(now + idx * 0.14 + 0.28);
+        });
+      }
+    } catch (e) {
+      console.log('Audio chime not permitted', e);
+    }
+  };
+
   // Real-time automatic background polling every 6 seconds for live requests queue & stats
   useEffect(() => {
     const interval = setInterval(() => {
       if (activeSection === 'queue') {
         adminService.getRequests().then((res) => {
-          setRequestsList(res.data?.data || []);
+          const newReqs = res.data?.data || [];
+          if (prevAdminReqIdsRef.current) {
+            const fresh = newReqs.filter((r) => !prevAdminReqIdsRef.current.has(r.id));
+            if (fresh.length > 0) {
+              const isRes = fresh.some((r) => r.request_type === 'reservation');
+              playAdminChime(isRes);
+              if (isRes) {
+                showToast('🔖 New customer product reservation received!', 'success');
+              } else {
+                showToast('⚡ New customer showroom request received!', 'success');
+              }
+            }
+          }
+          prevAdminReqIdsRef.current = new Set(newReqs.map((r) => r.id));
+          setRequestsList(newReqs);
         }).catch(() => { });
       }
       if (activeSection === 'overview' || activeSection === 'queue') {
@@ -408,6 +472,50 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleCreateCategoryFromManager = async (e) => {
+    e?.preventDefault();
+    if (!catMgrForm.name.trim()) {
+      showToast('Please enter a category name.', 'error');
+      return;
+    }
+    setIsSavingCategory(true);
+    try {
+      const res = await adminService.createCategory({
+        name: catMgrForm.name.trim(),
+        icon: catMgrForm.icon || 'Tag',
+      });
+      const newCat = res.data;
+      setCategories((prev) => [...prev, newCat]);
+      setCatMgrForm({ name: '', icon: 'Tag' });
+      showToast(`Category "${newCat.name}" created for this shop!`);
+    } catch (err) {
+      console.error('Failed to create category:', err);
+      showToast(err.response?.data?.message || 'Failed to create category.', 'error');
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const confirmDeleteCategory = async () => {
+    if (!deletingCategory) return;
+    setActionLoading(true);
+    try {
+      await adminService.deleteCategory(deletingCategory.id);
+      showToast(`Category "${deletingCategory.name}" removed from your shop.`);
+      setCategories((prev) => prev.filter((c) => c.id !== deletingCategory.id));
+      setProdForm((prev) => (String(prev.category_id) === String(deletingCategory.id) ? { ...prev, category_id: '' } : prev));
+      setDeletingCategory(null);
+      // Refresh products list in case any were in this category
+      const res = await adminService.getProducts();
+      setProducts(res.data?.data || []);
+    } catch (err) {
+      console.error('Failed to delete category:', err);
+      showToast(err.response?.data?.message || 'Failed to remove category.', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleFileUpload = async (e) => {
     const fileList = Array.from(e.target.files || []);
     if (fileList.length === 0) return;
@@ -522,6 +630,81 @@ export default function AdminDashboard() {
     });
     showToast('Cover photo updated.');
   };
+
+  // ==========================================
+  // LIVE CAMERA PRODUCT PHOTO HANDLERS
+  // ==========================================
+  const startLiveCamera = async (facing = 'environment') => {
+    try {
+      setShowLiveCameraModal(true);
+      setCameraFacing(facing);
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+        cameraStreamRef.current = null;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('Camera stream is not supported in this browser. Please use the Click Pic button.', 'error');
+        setShowLiveCameraModal(false);
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      }).catch(async () => {
+        return await navigator.mediaDevices.getUserMedia({ video: true });
+      });
+      cameraStreamRef.current = stream;
+      if (liveVideoRef.current) {
+        liveVideoRef.current.srcObject = stream;
+        liveVideoRef.current.play().catch(() => {});
+      }
+    } catch (err) {
+      console.error('Failed to open camera viewfinder:', err);
+      showToast('Could not access camera. Please allow permissions or use Click Pic directly.', 'error');
+      setShowLiveCameraModal(false);
+    }
+  };
+
+  const stopLiveCamera = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+      cameraStreamRef.current = null;
+    }
+    setShowLiveCameraModal(false);
+  };
+
+  const switchLiveCamera = () => {
+    const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    startLiveCamera(nextFacing);
+  };
+
+  const captureFromLiveCamera = () => {
+    if (!liveVideoRef.current) return;
+    const video = liveVideoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `product-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      stopLiveCamera();
+      await handleFileUpload({ target: { files: [file] } });
+    }, 'image/jpeg', 0.92);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
@@ -958,6 +1141,7 @@ export default function AdminDashboard() {
   const filteredRequests = requestsList.filter((r) => {
     if (queueStatusFilter === 'all') return true;
     if (queueStatusFilter === 'waiting') return r.status === 'waiting';
+    if (queueStatusFilter === 'reservations') return r.request_type === 'reservation';
     if (queueStatusFilter === 'in_progress')
       return ['assigned', 'in_progress', 'product_found', 'coming_to_you'].includes(r.status);
     if (queueStatusFilter === 'completed') return r.status === 'completed';
@@ -1177,6 +1361,18 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-1">
+            {/* Showroom / Customer View Link Icon */}
+            {currentShop?.slug && (
+              <Link
+                to={`/shop/${currentShop.slug}`}
+                className="p-2 rounded-xl text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                title="View Customer Showroom"
+                aria-label="View Customer Showroom"
+              >
+                <Store className="w-4 h-4" />
+              </Link>
+            )}
+
             <button
               type="button"
               onClick={toggleTheme}
@@ -1267,6 +1463,21 @@ export default function AdminDashboard() {
                 );
               })}
             </div>
+            {currentShop?.slug && (
+              <div className="pt-2">
+                <Link
+                  to={`/shop/${currentShop.slug}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 text-xs font-bold border border-blue-200 dark:border-blue-900/40 hover:bg-blue-100 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Store className="w-4 h-4" />
+                    <span>View Customer Showroom</span>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            )}
             {user && (
               <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs text-slate-600 dark:text-zinc-400">
                 <span className="truncate max-w-[180px]">User: {user.name}</span>
@@ -1536,14 +1747,26 @@ export default function AdminDashboard() {
                   Manage showroom products, prices, barcodes, physical shelf locations, edit, and delete
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={openCreateProductModal}
-                className="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20 transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                Add New Product
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryManagerModal(true)}
+                  className="flex-1 sm:flex-none px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  title="Manage and remove categories"
+                >
+                  <Tag className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Categories ({categories.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={openCreateProductModal}
+                  className="flex-1 sm:flex-none px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Product</span>
+                </button>
+              </div>
             </div>
 
             {/* Search & Category Filter Bar */}
@@ -2124,6 +2347,18 @@ export default function AdminDashboard() {
               </button>
               <button
                 type="button"
+                onClick={() => setQueueStatusFilter('reservations')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                  queueStatusFilter === 'reservations'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800'
+                }`}
+              >
+                <Bookmark className="w-3.5 h-3.5" />
+                Reservations ({requestsList.filter(r => r.request_type === 'reservation').length})
+              </button>
+              <button
+                type="button"
                 onClick={() => setQueueStatusFilter('in_progress')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
                   queueStatusFilter === 'in_progress'
@@ -2156,13 +2391,23 @@ export default function AdminDashboard() {
                 filteredRequests.map((req) => (
                   <div
                     key={req.id}
-                    className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    className={`p-4 rounded-2xl bg-white dark:bg-[#18181B] border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
+                      req.request_type === 'reservation'
+                        ? 'border-purple-500/40 hover:border-purple-500/70'
+                        : 'border-slate-200 dark:border-zinc-800'
+                    }`}
                   >
                     <div className="space-y-1.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono font-bold text-xs text-slate-900 dark:text-white">
                           {req.request_number}
                         </span>
+                        {req.request_type === 'reservation' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
+                            <Bookmark className="w-3 h-3" />
+                            IN-STORE RESERVATION
+                          </span>
+                        )}
                         <RequestStatusBadge status={req.status} size="sm" />
                         <span
                           className={`text-[10px] uppercase font-extrabold px-2 py-0.5 rounded ${
@@ -2180,7 +2425,8 @@ export default function AdminDashboard() {
                         {req.items?.[0]?.product?.name || 'Store Assistance'}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-zinc-400">
-                        Customer: <strong className="text-slate-700 dark:text-zinc-300">{req.customer_session?.customer_code || 'Guest'}</strong>
+                        Customer: <strong className="text-slate-700 dark:text-zinc-300">{req.customer_session?.customer_name || req.customer_session?.customer_code || 'Guest'}</strong>
+                        {req.customer_session?.phone_number && ` (📞 ${req.customer_session.phone_number})`}
                         {req.items?.[0]?.variant_description && ` • ${req.items[0].variant_description}`}
                         {req.items?.[0]?.location?.label && ` • Location: ${req.items[0].location.label}`}
                       </div>
@@ -3027,17 +3273,20 @@ export default function AdminDashboard() {
       {/* PRODUCT CREATE & EDIT MODAL */}
       {/* ======================================================== */}
       {showProductModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-700 w-full max-w-lg rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Package className="w-4 h-4 text-blue-500" />
-                {editingProduct ? 'Edit Catalog Product' : 'Create New In-Store Product'}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-700 w-full max-w-lg rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-zinc-800">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Package className="w-4 h-4 text-blue-500 shrink-0" />
+                <span className="truncate">{editingProduct ? 'Edit Catalog Product' : 'Create New In-Store Product'}</span>
               </h3>
               <button
                 type="button"
-                onClick={() => setShowProductModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white"
+                onClick={() => {
+                  stopLiveCamera();
+                  setShowProductModal(false);
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3078,14 +3327,26 @@ export default function AdminDashboard() {
                     <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
                       Category *
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowNewCategoryInput(!showNewCategoryInput)}
-                      className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>{showNewCategoryInput ? 'Cancel' : 'Create Category'}</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryManagerModal(true)}
+                        className="text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Manage or remove categories"
+                      >
+                        <Settings className="w-3 h-3 text-slate-400" />
+                        <span>Manage / Remove</span>
+                      </button>
+                      <span className="text-slate-300 dark:text-zinc-700">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewCategoryInput(!showNewCategoryInput)}
+                        className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>{showNewCategoryInput ? 'Cancel' : 'Create New'}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Inline Category Creator Box */}
@@ -3155,6 +3416,8 @@ export default function AdminDashboard() {
                       onChange={(e) => {
                         if (e.target.value === '__new__') {
                           setShowNewCategoryInput(true);
+                        } else if (e.target.value === '__manage__') {
+                          setShowCategoryManagerModal(true);
                         } else {
                           setProdForm({ ...prodForm, category_id: e.target.value });
                         }
@@ -3169,6 +3432,9 @@ export default function AdminDashboard() {
                       ))}
                       <option value="__new__" className="text-blue-600 font-bold">
                         + Create New Category...
+                      </option>
+                      <option value="__manage__" className="text-slate-500 font-bold">
+                        ⚙ Manage & Remove Categories...
                       </option>
                     </select>
                   )}
@@ -3257,74 +3523,134 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Product Images: Multiple File Upload OR Web Links */}
+              {/* Product Images: Direct Camera Click, Gallery Files OR Web Links */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                    <Images className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Product Images</span>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <Images className="w-4 h-4 text-blue-500" />
+                      <span>Product Images</span>
+                    </label>
                     {prodForm.images?.length > 0 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
                         {prodForm.images.length} {prodForm.images.length === 1 ? 'image' : 'images'}
                       </span>
                     )}
-                  </label>
-                  <div className="flex items-center bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-xl text-[10px] font-bold">
+                  </div>
+                  <div className="inline-flex items-center bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-xl text-[11px] font-bold self-start sm:self-auto border border-slate-200/60 dark:border-zinc-700/60">
                     <button
                       type="button"
                       onClick={() => setImageUploadMode('upload')}
-                      className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
+                      className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
                         imageUploadMode === 'upload'
                           ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-sm'
                           : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
-                      <UploadCloud className="w-3 h-3" />
-                      <span>Upload Photos</span>
+                      <ImagePlus className="w-3.5 h-3.5" />
+                      <span>Upload & Camera</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setImageUploadMode('url')}
-                      className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
+                      className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
                         imageUploadMode === 'url'
                           ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-sm'
                           : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
+                      <Globe className="w-3.5 h-3.5" />
                       <span>Add by URL</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Upload Zone Mode */}
+                {/* Upload & Camera Mode */}
                 {imageUploadMode === 'upload' ? (
-                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-500 bg-slate-50/70 dark:bg-zinc-900/60 hover:bg-blue-50/20 dark:hover:bg-blue-950/20 rounded-2xl p-4 cursor-pointer transition-all group">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleFileUpload}
-                      disabled={isUploadingImage}
-                      className="hidden"
-                    />
-                    <div className="flex flex-col items-center text-center space-y-1.5">
-                      <div className="w-10 h-10 rounded-2xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center group-hover:scale-105 transition-transform">
-                        {isUploadingImage ? (
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : (
-                          <UploadCloud className="w-5 h-5" />
-                        )}
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {/* Option 1: Direct Click Pic (Camera) */}
+                      <div className="relative rounded-2xl border-2 border-dashed border-blue-400/80 dark:border-blue-500/50 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-all p-3 sm:p-4 flex flex-col justify-between group">
+                        <label className="flex items-center sm:flex-col justify-start sm:justify-center gap-3 cursor-pointer text-left sm:text-center w-full active:scale-[0.98] transition-transform">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleFileUpload}
+                            disabled={isUploadingImage}
+                            className="hidden"
+                          />
+                          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-blue-500/30 group-hover:scale-105 transition-transform">
+                            {isUploadingImage ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 sm:justify-center">
+                              <span>Click Pic</span>
+                              <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
+                                Camera
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                              Snap live product photo
+                            </div>
+                          </div>
+                        </label>
+
+                        {/* Optional In-Browser Live Viewfinder button */}
+                        <button
+                          type="button"
+                          onClick={() => startLiveCamera('environment')}
+                          className="mt-2.5 pt-2 border-t border-blue-200/60 dark:border-blue-900/60 w-full text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>Open Live Viewfinder</span>
+                        </button>
                       </div>
-                      <div>
-                        <div className="text-xs font-bold text-slate-800 dark:text-zinc-200">
-                          {isUploadingImage ? 'Uploading Photos...' : 'Click to select multiple photos or drag & drop'}
-                        </div>
-                        <div className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">
-                          Select one or multiple images (PNG, JPG, WEBP, GIF up to 5MB each)
+
+                      {/* Option 2: Select Pics (Gallery / Files) */}
+                      <div className="relative rounded-2xl border-2 border-dashed border-slate-300 dark:border-zinc-700 bg-slate-50/70 dark:bg-zinc-900/60 hover:bg-slate-100 dark:hover:bg-zinc-800/80 transition-all p-3 sm:p-4 flex flex-col justify-between group">
+                        <label className="flex items-center sm:flex-col justify-start sm:justify-center gap-3 cursor-pointer text-left sm:text-center w-full active:scale-[0.98] transition-transform">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleFileUpload}
+                            disabled={isUploadingImage}
+                            className="hidden"
+                          />
+                          <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                            {isUploadingImage ? <Loader2 className="w-5 h-5 animate-spin" /> : <UploadCloud className="w-5 h-5" />}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 sm:justify-center">
+                              <span>Select Pics</span>
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300">
+                                Gallery
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                              Browse device files
+                            </div>
+                          </div>
+                        </label>
+
+                        <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-zinc-800 w-full text-[10px] text-slate-400 dark:text-zinc-500 text-center">
+                          Select multiple photos (PNG, JPG, WEBP)
                         </div>
                       </div>
                     </div>
-                  </label>
+
+                    {/* Helper status row */}
+                    <div className="flex items-center justify-between px-1 text-[10px] text-slate-400 dark:text-zinc-500">
+                      <span>Max 5MB per image</span>
+                      {isUploadingImage && (
+                        <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1 animate-pulse">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Uploading photo...
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   /* URL Mode */
                   <div className="flex gap-2">
@@ -3344,7 +3670,7 @@ export default function AdminDashboard() {
                     <button
                       type="button"
                       onClick={handleAddImageUrl}
-                      className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                      className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shrink-0 shadow-sm"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Add</span>
@@ -3355,7 +3681,7 @@ export default function AdminDashboard() {
                 {/* Multiple Images Gallery Grid & Cover Photo Selector */}
                 {prodForm.images && prodForm.images.length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] text-slate-500 dark:text-zinc-400">
                       <span className="font-semibold">Product Gallery ({prodForm.images.length})</span>
                       <span className="text-[10px] text-slate-400 dark:text-zinc-500">First image is the showroom Cover Photo</span>
                     </div>
@@ -3391,7 +3717,7 @@ export default function AdminDashboard() {
                               <button
                                 type="button"
                                 onClick={() => handleSetPrimaryImage(idx)}
-                                className="absolute top-1 left-1 bg-black/70 hover:bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm"
+                                className="absolute top-1 left-1 bg-black/75 hover:bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm"
                                 title="Set as showroom Cover Photo"
                               >
                                 Set Cover
@@ -3402,7 +3728,7 @@ export default function AdminDashboard() {
                             <button
                               type="button"
                               onClick={() => handleRemoveImage(idx)}
-                              className="absolute top-1 right-1 w-6 h-6 rounded-md bg-black/70 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm"
+                              className="absolute top-1 right-1 w-6 h-6 rounded-md bg-black/75 hover:bg-rose-600 text-white flex items-center justify-center opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm"
                               title="Remove image"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -3439,7 +3765,10 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   disabled={actionLoading}
-                  onClick={() => setShowProductModal(false)}
+                  onClick={() => {
+                    stopLiveCamera();
+                    setShowProductModal(false);
+                  }}
                   className="w-1/2 py-2.5 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
                 >
                   Cancel
@@ -3453,6 +3782,285 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* LIVE CAMERA CAPTURE MODAL */}
+      {/* ======================================================== */}
+      {showLiveCameraModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border border-zinc-700 w-full max-w-md rounded-3xl p-4 sm:p-5 shadow-2xl flex flex-col items-center gap-3">
+            {/* Header */}
+            <div className="flex items-center justify-between w-full pb-2 border-b border-zinc-800">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Camera className="w-4 h-4 text-blue-400" />
+                <span>Product Live Viewfinder</span>
+              </div>
+              <button
+                type="button"
+                onClick={stopLiveCamera}
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Live Video Viewport */}
+            <div className="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center shadow-inner">
+              <video
+                ref={(el) => {
+                  liveVideoRef.current = el;
+                  if (el && cameraStreamRef.current && el.srcObject !== cameraStreamRef.current) {
+                    el.srcObject = cameraStreamRef.current;
+                    el.play().catch(() => {});
+                  }
+                }}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+
+              {/* Framing Guides */}
+              <div className="absolute inset-4 border border-dashed border-white/25 rounded-xl pointer-events-none" />
+              <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span>LIVE</span>
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center justify-between w-full px-4 pt-1">
+              {/* Switch Front/Rear Camera */}
+              <button
+                type="button"
+                onClick={switchLiveCamera}
+                className="p-2.5 sm:p-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer flex flex-col items-center gap-1 text-[10px] font-bold"
+                title="Switch camera"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Flip</span>
+              </button>
+
+              {/* Shutter Capture Button */}
+              <button
+                type="button"
+                onClick={captureFromLiveCamera}
+                className="relative w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl cursor-pointer"
+                title="Click Picture"
+              >
+                <div className="w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white">
+                  <Camera className="w-6 h-6" />
+                </div>
+              </button>
+
+              {/* Cancel */}
+              <button
+                type="button"
+                onClick={stopLiveCamera}
+                className="p-2.5 sm:p-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer flex flex-col items-center gap-1 text-[10px] font-bold"
+              >
+                <X className="w-4 h-4" />
+                <span>Cancel</span>
+              </button>
+            </div>
+
+            <p className="text-[10px] text-zinc-400 text-center">
+              Point camera at product and click the shutter button to save photo.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* CATEGORY MANAGEMENT & REMOVAL MODAL */}
+      {/* ======================================================== */}
+      {showCategoryManagerModal && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-700 w-full max-w-lg rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-blue-500 shrink-0" />
+                  <span>Store Categories Management</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Create new categories or remove unnecessary categories for your shop
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCategoryManagerModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Add Category Card */}
+            <form onSubmit={handleCreateCategoryFromManager} className="p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create New In-Store Category</span>
+                </span>
+                <span className="text-[10px] text-slate-500 dark:text-zinc-400">Available instantly</span>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. Smart Wearables, Footwear, Books..."
+                  value={catMgrForm.name}
+                  onChange={(e) => setCatMgrForm({ ...catMgrForm, name: e.target.value })}
+                  className="flex-1 bg-white dark:bg-zinc-900 text-slate-900 dark:text-white px-3 py-2 rounded-xl border border-blue-300 dark:border-blue-700/80 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingCategory || !catMgrForm.name.trim()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 shadow-sm transition-all cursor-pointer"
+                >
+                  {isSavingCategory ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Create</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Icon picker chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-semibold shrink-0">Icon:</span>
+                {['Tag', 'Smartphone', 'Laptop', 'Tv', 'Headphones', 'Watch', 'Sparkles', 'Package', 'Shirt', 'ShoppingBag'].map((ic) => (
+                  <button
+                    key={ic}
+                    type="button"
+                    onClick={() => setCatMgrForm({ ...catMgrForm, icon: ic })}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-colors shrink-0 cursor-pointer ${
+                      catMgrForm.icon === ic
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-700 hover:border-slate-300'
+                    }`}
+                  >
+                    {ic}
+                  </button>
+                ))}
+              </div>
+            </form>
+
+            {/* Categories List & Delete option */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-zinc-300">
+                <span>Your Store's Categories ({categories.length})</span>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-normal">
+                  Click trash to remove unnecessary category
+                </span>
+              </div>
+
+              {categories.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400 dark:text-zinc-500 bg-slate-50 dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800">
+                  No categories defined yet. Use the form above to create your first category.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {categories.map((cat) => (
+                    <div
+                      key={cat.id}
+                      className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 border border-slate-200/80 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 transition-all group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-900/40">
+                          <Tag className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {cat.name}
+                          </h4>
+                          <span className="text-[10px] text-slate-400 dark:text-zinc-500 flex items-center gap-1.5">
+                            <span>slug: {cat.slug}</span>
+                            {cat.products_count !== undefined && (
+                              <>
+                                <span>•</span>
+                                <span className="font-semibold text-slate-600 dark:text-zinc-300">
+                                  {cat.products_count} {cat.products_count === 1 ? 'product' : 'products'}
+                                </span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setDeletingCategory(cat)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer shrink-0"
+                        title={`Delete category "${cat.name}"`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCategoryManagerModal(false)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* DELETE CATEGORY CONFIRMATION MODAL */}
+      {/* ======================================================== */}
+      {deletingCategory && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#18181B] border border-rose-200 dark:border-rose-900/50 w-full max-w-sm rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Remove Category?
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
+                Are you sure you want to remove <strong className="text-slate-800 dark:text-zinc-200">"{deletingCategory.name}"</strong> from your shop?
+              </p>
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-xl mt-2">
+                Any products currently in this category will become unassigned, but will not be deleted.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => setDeletingCategory(null)}
+                className="w-1/2 py-2.5 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={confirmDeleteCategory}
+                className="w-1/2 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition-all flex items-center justify-center gap-1.5"
+              >
+                {actionLoading ? 'Removing...' : 'Remove Category'}
+              </button>
+            </div>
           </div>
         </div>
       )}

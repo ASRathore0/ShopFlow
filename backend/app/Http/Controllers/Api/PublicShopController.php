@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\CustomerRequest;
 use App\Models\CustomerSession;
 use App\Models\Employee;
+use App\Models\Inventory;
 use App\Models\Notification;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -17,6 +18,7 @@ use App\Models\RequestItem;
 use App\Models\RequestStatusHistory;
 use App\Models\Reservation;
 use App\Models\Shop;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -389,13 +391,14 @@ class PublicShopController extends Controller
             'quantity' => 'nullable|integer|min:1|max:5',
         ]);
 
-        $product = Product::findOrFail($request->product_id);
-        $variant = $request->variant_id ? ProductVariant::find($request->variant_id) : null;
+        $product = Product::with(['variants', 'location'])->where('shop_id', $shop->id)->findOrFail($request->product_id);
+        $variant = $request->variant_id ? ProductVariant::with('location')->find($request->variant_id) : $product->variants->first();
         $unitPrice = $variant ? $variant->effective_price : $product->price;
         $qty = $request->input('quantity', 1);
 
         $orderNumber = 'ORD-' . date('Y') . '-' . rand(1000, 9999);
 
+        // 1. Create Order
         $order = Order::create([
             'shop_id' => $shop->id,
             'order_number' => $orderNumber,
@@ -407,6 +410,7 @@ class PublicShopController extends Controller
             'pickup_deadline' => now()->addHours(24),
         ]);
 
+        // 2. Create Order Item
         OrderItem::create([
             'order_id' => $order->id,
             'product_id' => $product->id,
@@ -416,6 +420,7 @@ class PublicShopController extends Controller
             'total_price' => $unitPrice * $qty,
         ]);
 
+        // 3. Create Reservation
         $res = Reservation::create([
             'shop_id' => $shop->id,
             'order_id' => $order->id,
@@ -428,12 +433,138 @@ class PublicShopController extends Controller
             'expires_at' => now()->addHours(24),
         ]);
 
+        // 4. Update Inventory Reserved Quantity
+        $inventory = Inventory::where('shop_id', $shop->id)->where('product_id', $product->id)->first();
+        if ($inventory) {
+            $inventory->increment('reserved_quantity', $qty);
+        }
+
+        // 5. Customer Session Handling
+        $sessionToken = $request->input('session_token');
+        $session = null;
+        if ($sessionToken) {
+            $session = CustomerSession::where('shop_id', $shop->id)->where('session_token', $sessionToken)->first();
+        }
+        if (!$session) {
+            $sessionToken = 'cs_' . Str::random(32);
+            $session = CustomerSession::create([
+                'shop_id' => $shop->id,
+                'session_token' => $sessionToken,
+                'customer_code' => 'RES-' . strtoupper(Str::random(4)),
+                'name' => $request->customer_name,
+                'phone' => $request->customer_phone,
+                'device_info' => $request->header('User-Agent'),
+                'last_active_at' => now(),
+                'is_active' => true,
+            ]);
+        } else {
+            $session->update([
+                'name' => $request->customer_name ?: $session->name,
+                'phone' => $request->customer_phone ?: $session->phone,
+                'last_active_at' => now(),
+            ]);
+        }
+
+        // 6. Find Online Staff to Auto-Assign or Leave in Waiting Queue
+        $assignedStaff = Employee::where('shop_id', $shop->id)
+            ->where('status', 'online')
+            ->orderBy('active_requests_count', 'asc')
+            ->first();
+
+        $initialStatus = $assignedStaff ? 'assigned' : 'waiting';
+        $locationId = ($variant && $variant->location_id) ? $variant->location_id : $product->primary_location_id;
+        $reqNumber = 'RES-' . date('Y') . '-' . str_pad((string) (CustomerRequest::count() + 1028), 6, '0', STR_PAD_LEFT);
+        $queuePosition = CustomerRequest::where('shop_id', $shop->id)->whereIn('status', ['waiting', 'assigned'])->count() + 1;
+
+        // 7. Create CustomerRequest with request_type = 'reservation' so it appears in Live Queue
+        $customerRequest = CustomerRequest::create([
+            'shop_id' => $shop->id,
+            'customer_session_id' => $session->id,
+            'request_number' => $reqNumber,
+            'request_type' => 'reservation',
+            'status' => $initialStatus,
+            'priority' => 'high',
+            'assigned_employee_id' => $assignedStaff ? $assignedStaff->id : null,
+            'queue_position' => $queuePosition,
+            'customer_notes' => "In-Store Pickup Reservation #{$orderNumber} by {$request->customer_name} ({$request->customer_phone}). Item: {$product->name} x{$qty}. Hold guaranteed for 24h.",
+            'accepted_at' => $assignedStaff ? now() : null,
+        ]);
+
+        $variantDesc = $variant ? $variant->name : 'Standard';
+        RequestItem::create([
+            'customer_request_id' => $customerRequest->id,
+            'product_id' => $product->id,
+            'product_variant_id' => $variant ? $variant->id : null,
+            'location_id' => $locationId,
+            'quantity' => $qty,
+            'variant_description' => $variantDesc,
+            'notes' => "Hold for 24h pickup: Order #{$orderNumber}",
+        ]);
+
+        RequestStatusHistory::create([
+            'customer_request_id' => $customerRequest->id,
+            'status' => 'waiting',
+            'notes' => "Customer placed 24h in-store pickup reservation #{$orderNumber}.",
+        ]);
+
+        if ($assignedStaff) {
+            $assignedStaff->increment('active_requests_count');
+            RequestAssignment::create([
+                'customer_request_id' => $customerRequest->id,
+                'employee_id' => $assignedStaff->id,
+                'assigned_by_type' => 'auto',
+                'status' => 'assigned',
+            ]);
+            RequestStatusHistory::create([
+                'customer_request_id' => $customerRequest->id,
+                'status' => 'assigned',
+                'employee_id' => $assignedStaff->id,
+                'notes' => "Reservation assigned to staff member {$assignedStaff->name}",
+            ]);
+        }
+
+        // 8. Create In-App Notifications for ALL staff and shop admin/owner
+        $staffUserIds = Employee::where('shop_id', $shop->id)
+            ->whereNotNull('user_id')
+            ->pluck('user_id')
+            ->toArray();
+
+        $adminUserIds = User::where(function ($q) use ($shop) {
+            $q->where('current_shop_id', $shop->id)
+              ->whereIn('role', ['shop_owner', 'manager', 'admin']);
+        })->orWhere('id', $shop->owner_id)->pluck('id')->toArray();
+
+        $allTargetUserIds = array_unique(array_merge($staffUserIds, $adminUserIds));
+
+        foreach ($allTargetUserIds as $targetUserId) {
+            Notification::create([
+                'shop_id' => $shop->id,
+                'user_id' => $targetUserId,
+                'type' => 'new_reservation',
+                'title' => "New Product Reservation ({$orderNumber})",
+                'message' => "Customer {$request->customer_name} ({$request->customer_phone}) reserved {$qty}x {$product->name} for 24h pickup.",
+                'data' => [
+                    'order_id' => $order->id,
+                    'order_number' => $orderNumber,
+                    'request_id' => $customerRequest->id,
+                    'request_number' => $reqNumber,
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'customer_name' => $request->customer_name,
+                    'customer_phone' => $request->customer_phone,
+                    'total_amount' => $order->total_amount,
+                ],
+            ]);
+        }
+
         return response()->json([
             'status' => 'success',
             'message' => 'Reservation confirmed! Your item will be held for 24 hours.',
             'data' => [
                 'order' => $order->load('items.product'),
                 'reservation' => $res,
+                'request' => $customerRequest->load(['items.product.primaryImage', 'items.variant', 'assignedEmployee']),
+                'session_token' => $sessionToken,
             ],
         ]);
     }

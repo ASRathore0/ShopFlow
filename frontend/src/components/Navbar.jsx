@@ -257,14 +257,14 @@ export default function Navbar() {
                 Sign Out ({user?.name})
               </button>
             ) : (
-              <Link
-                to="/login"
-                onClick={() => setMobileMenuOpen(false)}
-                className="w-full text-center py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 flex items-center justify-center gap-1.5"
-              >
-                <span>Sign In to Staff / Admin</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full text-center py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-zinc-700 flex items-center justify-center gap-1.5"
+                >
+                  <span>Sign In to Staff / Admin</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
             )}
           </div>
         </div>

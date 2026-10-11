@@ -26,6 +26,10 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/staff/login', [AuthController::class, 'staffLogin']);
 
+// Open Shop Onboarding (Allows any shop owner to onboard without super admin requirement)
+Route::post('/onboard', [AuthController::class, 'publicOnboard']);
+Route::post('/auth/register-shop', [AuthController::class, 'publicOnboard']);
+
 // Public Customer Shop Routes
 Route::get('/shops', [PublicShopController::class, 'listShops']);
 Route::get('/shops/{slug}', [PublicShopController::class, 'showShop']);
@@ -62,6 +66,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/products/{id}/location', [StaffController::class, 'getProductLocation']);
         Route::get('/scan', [StaffController::class, 'scanBarcode']);
         Route::post('/status', [StaffController::class, 'updateStatus']);
+        Route::put('/profile', [StaffController::class, 'updateProfile']);
+        Route::post('/profile/avatar', [StaffController::class, 'uploadAvatar']);
     });
 
     // Shop Admin APIs

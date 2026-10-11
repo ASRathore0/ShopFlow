@@ -3,7 +3,7 @@ import {
   Store, MapPin, Phone, Mail, Clock, Sparkles, ShieldCheck,
   Wifi, ExternalLink, Share2, Check, ArrowUp, MessageCircle,
   Globe, HelpCircle, Layers, Tag, ChevronRight, Award, Truck,
-  CheckCircle2, Copy
+  CheckCircle2, Copy, Navigation, Smartphone, ArrowRight, Shield
 } from 'lucide-react';
 
 export default function CustomerFooter({ shop, categories = [], onSelectCategory, customerCode, onTrackClick }) {
@@ -55,18 +55,17 @@ export default function CustomerFooter({ shop, categories = [], onSelectCategory
   const logoSrc = getCleanLogoUrl(shop?.logo_url);
 
   return (
-    <footer className="mt-16 border-t border-slate-200/90 dark:border-zinc-800/80 bg-white dark:bg-[#0D0D10] text-slate-700 dark:text-zinc-300 transition-colors">
-       
+    <footer className="mt-20 border-t border-slate-200/80 dark:border-white/[0.08] bg-slate-50/70 dark:bg-[#0A0A0D] text-slate-700 dark:text-zinc-300 transition-colors">
 
-      {/* 2. MAIN STORE FOOTER CONTENT */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-10">
+      {/* 2. MAIN EDITORIAL STORE DIRECTORY */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-8">
           
-          {/* Brand & Store Bio (4 Columns) */}
-          <div className="lg:col-span-4 space-y-4">
-            <div className="flex items-center gap-3.5">
+          {/* Brand Prestige & Digital Amenity Pass (4 Columns) */}
+          <div className="lg:col-span-4 space-y-5">
+            <div className="flex items-center gap-3">
               {logoSrc && !logoFailed ? (
-                <div className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-800 p-1 border border-slate-200 dark:border-zinc-700 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
+                <div className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-800 p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
                   <img
                     src={logoSrc}
                     alt={shop?.name || 'Store Logo'}
@@ -75,65 +74,151 @@ export default function CustomerFooter({ shop, categories = [], onSelectCategory
                   />
                 </div>
               ) : (
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-700 to-indigo-600 flex items-center justify-center font-black text-white text-lg shadow-md shadow-blue-500/20 shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-700 flex items-center justify-center font-black text-white text-lg shadow-md shadow-blue-500/20 shrink-0">
                   {shop?.name ? shop.name.charAt(0).toUpperCase() : 'S'}
                 </div>
               )}
               <div className="min-w-0">
-                <h3 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white leading-tight truncate">
+                <h3 className="font-black text-base sm:text-lg text-slate-900 dark:text-white leading-tight truncate tracking-tight">
                   {shop?.name || 'Store Showroom'}
                 </h3>
-                <span className="text-xs text-blue-600 dark:text-blue-400 font-bold block truncate">
+                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider block truncate">
                   {tagline}
                 </span>
               </div>
             </div>
 
-            <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed pr-2">
               {shop?.description ||
-                `Welcome to ${shop?.name || 'our store'}. Scan in-store QR codes on any display table to check real-time stock, compare specifications, and request immediate hands-on staff assistance.`}
+                `Welcome to ${shop?.name || 'our flagship showroom'}. Scan table QR codes throughout the store to explore inventory, view aisle micro-locations, and request instant physical assistance.`}
             </p>
 
-            {/* Live Store Status & Wi-Fi Details */}
-            <div className="space-y-2.5 pt-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Open for In-Store Visits • {openingHours}</span>
+            {/* Luxury Amenity Pass: Wi-Fi & Live Showroom Status */}
+            <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/[0.08] shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+                  Store Amenities
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold">
+                  <span className={`w-2 h-2 rounded-full ${shop?.is_open !== false ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] animate-pulse' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
+                  <span className={shop?.is_open !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+                    {shop?.is_open !== false ? 'Open Today' : 'Closed'}
+                  </span>
+                </span>
               </div>
 
               {portalSettings.wifi_ssid && (
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 text-xs space-y-1.5 shadow-sm">
-                  <div className="flex items-center justify-between font-bold text-slate-800 dark:text-zinc-200">
-                    <div className="flex items-center gap-1.5">
-                      <Wifi className="w-3.5 h-3.5 text-blue-500" />
-                      <span>Free Store Wi-Fi for Shoppers</span>
+                <div className="pt-2 border-t border-slate-100 dark:border-white/[0.05] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                      <Wifi className="w-3.5 h-3.5" />
                     </div>
-                    {portalSettings.wifi_password && (
-                      <button
-                        onClick={handleCopyWifi}
-                        className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-bold"
-                      >
-                        {copiedWifi ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        <span>{copiedWifi ? 'Password Copied' : 'Copy Key'}</span>
-                      </button>
-                    )}
+                    <div className="min-w-0 text-[11px]">
+                      <div className="font-bold text-slate-800 dark:text-zinc-200 truncate">
+                        Wi-Fi: {portalSettings.wifi_ssid}
+                      </div>
+                      {portalSettings.wifi_password && (
+                        <div className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono truncate">
+                          Pass: {portalSettings.wifi_password}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-500 dark:text-zinc-400 flex flex-wrap items-center justify-between gap-1">
-                    <span>Network: <strong className="text-slate-800 dark:text-zinc-200 font-mono">{portalSettings.wifi_ssid}</strong></span>
-                    {portalSettings.wifi_password && (
-                      <span>Password: <strong className="text-slate-800 dark:text-zinc-200 font-mono">{portalSettings.wifi_password}</strong></span>
-                    )}
-                  </div>
+
+                  {portalSettings.wifi_password && (
+                    <button
+                      type="button"
+                      onClick={handleCopyWifi}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[10px] font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                      title="Copy Wi-Fi password"
+                    >
+                      {copiedWifi ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 text-slate-400" />}
+                      <span>{copiedWifi ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Location & Directions (3 Columns) */}
-          <div className="lg:col-span-3 space-y-3.5">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-blue-500" />
-              <span>Showroom Location</span>
+          {/* Products & Convenience (Parallel 2 Columns on Mobile & Tablet, 4 Columns on Desktop) */}
+          <div className="col-span-1 md:col-span-1 lg:col-span-4 grid grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
+            {/* Showroom Collections / Categories */}
+            <div className="space-y-4 min-w-0">
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                <span>Products</span>
+              </h4>
+
+              <ul className="space-y-2 text-xs">
+                {categories && categories.length > 0 ? (
+                  categories.slice(0, 6).map((cat) => (
+                    <li key={cat.id} className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => onSelectCategory && onSelectCategory(cat.slug || cat.id)}
+                        className="text-left text-slate-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1.5 group cursor-pointer w-full"
+                      >
+                        <ChevronRight className="w-3 h-3 text-slate-400 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+                        <span className="truncate">{cat.name}</span>
+                      </button>
+                    </li>
+                  ))
+                ) : (
+                  <>
+                    <li className="text-slate-500 dark:text-zinc-400 truncate">Main Floor Display</li>
+                    <li className="text-slate-500 dark:text-zinc-400 truncate">Featured Showcase</li>
+                    <li className="text-slate-500 dark:text-zinc-400 truncate">New Arrivals</li>
+                  </>
+                )}
+              </ul>
+            </div>
+
+            {/* In-Store Convenience */}
+            <div className="space-y-4 min-w-0">
+              <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
+                <HelpCircle className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <span>Convenience</span>
+              </h4>
+
+              <ul className="space-y-2.5 text-xs text-slate-600 dark:text-zinc-400">
+                <li className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={onTrackClick}
+                    className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1.5 text-left cursor-pointer w-full"
+                  >
+                    <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                    <span className="truncate">Track Staff Dispatch</span>
+                  </button>
+                </li>
+                <li className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-slate-500 dark:text-zinc-400 w-full">
+                    <Award className="w-3 h-3 text-slate-400 shrink-0" />
+                    <span className="truncate">{exchangePolicy}</span>
+                  </div>
+                </li>
+                <li className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-slate-500 dark:text-zinc-400 w-full">
+                    <ShieldCheck className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <span className="truncate">Physical Warranty Support</span>
+                  </div>
+                </li>
+                <li className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-slate-500 dark:text-zinc-400 w-full">
+                    <Smartphone className="w-3 h-3 text-blue-500 shrink-0" />
+                    <span className="truncate">Zero-App Floor Assistance</span>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Showroom Location & Hours (2 Columns) */}
+          <div className="lg:col-span-2 space-y-4">
+            <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-rose-500" />
+              <span>Location</span>
             </h4>
 
             <div className="space-y-2 text-xs text-slate-600 dark:text-zinc-400">
@@ -141,9 +226,8 @@ export default function CustomerFooter({ shop, categories = [], onSelectCategory
                 {fullAddress}
               </p>
               {landmark && (
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400 flex items-center gap-1">
-                  <span>📍 Floor / Landmark:</span>
-                  <strong className="text-slate-700 dark:text-zinc-300">{landmark}</strong>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                  Floor / Landmark: <strong className="text-slate-700 dark:text-zinc-300 font-semibold">{landmark}</strong>
                 </p>
               )}
               {cityState && (
@@ -151,208 +235,179 @@ export default function CustomerFooter({ shop, categories = [], onSelectCategory
                   {cityState}
                 </p>
               )}
-            </div>
 
-            <div className="pt-1">
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${shop?.name || ''} ${fullAddress} ${cityState}`)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                <span>Open in Google Maps</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
+              <div className="pt-1.5">
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${shop?.name || ''} ${fullAddress} ${cityState}`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  <Navigation className="w-3 h-3" />
+                  <span>Get Directions</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </div>
 
-            <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 space-y-1 text-xs">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-zinc-400">
-                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>Operating Hours: <strong className="text-slate-700 dark:text-zinc-300">{openingHours}</strong></span>
+              <div className="pt-2 border-t border-slate-200/60 dark:border-white/[0.05] text-[11px]">
+                <span className="text-slate-400 dark:text-zinc-500 block">Showroom Hours:</span>
+                <span className="font-bold text-slate-800 dark:text-zinc-200">{openingHours}</span>
               </div>
             </div>
           </div>
 
-          {/* Store Contacts & Quick Support (3 Columns) */}
-          <div className="lg:col-span-3 space-y-3.5">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
+          {/* VIP Desk & Direct Contacts (2 Columns) */}
+          <div className="lg:col-span-2 space-y-4">
+            <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
               <Phone className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Contact & Assistance</span>
+              <span>Direct Desk</span>
             </h4>
 
-            <div className="space-y-2.5 text-xs">
+            <div className="space-y-3 text-xs">
+              {cleanPhoneForWhatsApp && (
+                <a
+                  href={`https://wa.me/${cleanPhoneForWhatsApp}?text=${encodeURIComponent(`Hi ${shop?.name || 'Store'}, I am currently viewing your in-store showroom.`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>WhatsApp Chat</span>
+                </a>
+              )}
+
               {shop?.phone && (
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 block">Phone Desk</span>
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Phone</span>
                   <a
                     href={`tel:${shop.phone}`}
-                    className="font-bold text-slate-800 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1.5 mt-0.5"
+                    className="font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1.5 text-xs truncate"
                   >
-                    <Phone className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>{shop.phone}</span>
+                    <Phone className="w-3 h-3 text-emerald-500 shrink-0" />
+                    <span className="truncate">{shop.phone}</span>
                   </a>
                 </div>
               )}
 
               {shop?.email && (
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 block">Store Email</span>
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Email</span>
                   <a
                     href={`mailto:${shop.email}`}
-                    className="font-medium text-slate-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1.5 mt-0.5 truncate"
+                    className="font-semibold text-slate-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1.5 text-[11px] truncate"
                   >
-                    <Mail className="w-3.5 h-3.5 text-blue-500" />
+                    <Mail className="w-3 h-3 text-blue-500 shrink-0" />
                     <span className="truncate">{shop.email}</span>
                   </a>
                 </div>
               )}
 
-              {cleanPhoneForWhatsApp && (
-                <div className="pt-1">
-                  <a
-                    href={`https://wa.me/${cleanPhoneForWhatsApp}?text=${encodeURIComponent(`Hi ${shop?.name || 'Store'}, I am viewing your showroom catalog.`)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all active:scale-95"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>Chat on WhatsApp</span>
-                  </a>
+              {/* Social Channels */}
+              <div className="pt-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 block mb-1.5">
+                  Follow Showroom
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {socialLinks.instagram && (
+                    <a
+                      href={socialLinks.instagram.startsWith('http') ? socialLinks.instagram : `https://instagram.com/${socialLinks.instagram.replace('@', '')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Instagram"
+                      className="p-2 rounded-xl bg-white dark:bg-white/[0.04] text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950/40 border border-slate-200/80 dark:border-white/[0.08] transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                      </svg>
+                    </a>
+                  )}
+
+                  {socialLinks.facebook && (
+                    <a
+                      href={socialLinks.facebook.startsWith('http') ? socialLinks.facebook : `https://facebook.com/${socialLinks.facebook}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Facebook"
+                      className="p-2 rounded-xl bg-white dark:bg-white/[0.04] text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-slate-200/80 dark:border-white/[0.08] transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/>
+                      </svg>
+                    </a>
+                  )}
+
+                  {socialLinks.twitter && (
+                    <a
+                      href={socialLinks.twitter.startsWith('http') ? socialLinks.twitter : `https://x.com/${socialLinks.twitter.replace('@', '')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="X (Twitter)"
+                      className="p-2 rounded-xl bg-white dark:bg-white/[0.04] text-slate-800 dark:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200/80 dark:border-white/[0.08] transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                      </svg>
+                    </a>
+                  )}
+
+                  {socialLinks.youtube && (
+                    <a
+                      href={socialLinks.youtube.startsWith('http') ? socialLinks.youtube : `https://youtube.com/${socialLinks.youtube}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="YouTube"
+                      className="p-2 rounded-xl bg-white dark:bg-white/[0.04] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-slate-200/80 dark:border-white/[0.08] transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+                      </svg>
+                    </a>
+                  )}
+
+                  {socialLinks.website && (
+                    <a
+                      href={socialLinks.website.startsWith('http') ? socialLinks.website : `https://${socialLinks.website}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Official Website"
+                      className="p-2 rounded-xl bg-white dark:bg-white/[0.04] text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-slate-200/80 dark:border-white/[0.08] transition-colors"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                    </a>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* Social Links & Share Showroom (2 Columns) */}
-          <div className="lg:col-span-2 space-y-3.5">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-purple-500" />
-              <span>Connect</span>
-            </h4>
-
-            {/* Social Media Link Buttons */}
-            <div className="flex flex-wrap gap-2">
-              {socialLinks.instagram && (
-                <a
-                  href={socialLinks.instagram.startsWith('http') ? socialLinks.instagram : `https://instagram.com/${socialLinks.instagram.replace('@', '')}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Instagram"
-                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950/40 border border-slate-200 dark:border-zinc-700 transition-colors"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                  </svg>
-                </a>
-              )}
-
-              {socialLinks.facebook && (
-                <a
-                  href={socialLinks.facebook.startsWith('http') ? socialLinks.facebook : `https://facebook.com/${socialLinks.facebook}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Facebook"
-                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-slate-200 dark:border-zinc-700 transition-colors"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/>
-                  </svg>
-                </a>
-              )}
-
-              {socialLinks.twitter && (
-                <a
-                  href={socialLinks.twitter.startsWith('http') ? socialLinks.twitter : `https://x.com/${socialLinks.twitter.replace('@', '')}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="X (Twitter)"
-                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 transition-colors"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                  </svg>
-                </a>
-              )}
-
-              {socialLinks.youtube && (
-                <a
-                  href={socialLinks.youtube.startsWith('http') ? socialLinks.youtube : `https://youtube.com/${socialLinks.youtube}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="YouTube"
-                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-slate-200 dark:border-zinc-700 transition-colors"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
-                  </svg>
-                </a>
-              )}
-
-              {socialLinks.website && (
-                <a
-                  href={socialLinks.website.startsWith('http') ? socialLinks.website : `https://${socialLinks.website}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Official Website"
-                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-slate-200 dark:border-zinc-700 transition-colors"
-                >
-                  <Globe className="w-4 h-4" />
-                </a>
-              )}
-
-              {socialLinks.linkedin && (
-                <a
-                  href={socialLinks.linkedin.startsWith('http') ? socialLinks.linkedin : `https://${socialLinks.linkedin}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="LinkedIn"
-                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-slate-200 dark:border-zinc-700 transition-colors"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
-                  </svg>
-                </a>
-              )}
-            </div>
-
-            {/* Share Showroom Button */}
-            <div className="pt-2">
+              {/* Share Button */}
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-200 dark:border-zinc-700 transition-colors"
+                className="w-full py-2 px-2.5 rounded-xl bg-white dark:bg-white/[0.04] hover:bg-slate-100 dark:hover:bg-white/[0.08] border border-slate-200/80 dark:border-white/[0.08] text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
-                {copiedLink ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    <span className="text-emerald-600 dark:text-emerald-400">Showroom Link Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Share2 className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Share Showroom Link</span>
-                  </>
-                )}
+                {copiedLink ? <Check className="w-3 h-3 text-emerald-500" /> : <Share2 className="w-3 h-3 text-slate-400" />}
+                <span>{copiedLink ? 'Link Copied!' : 'Share Showroom'}</span>
               </button>
             </div>
           </div>
+
         </div>
 
-        
-
-        {/* 4. BOTTOM COPYRIGHT & ATTRIBUTION BAR */}
-        <div className="mt-10 pt-6 border-t border-slate-200/80 dark:border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-zinc-500 gap-4 text-center sm:text-left">
+        {/* 3. BOTTOM PRECISION BAR (Heritage, Legal & Back-To-Top) */}
+        <div className="mt-12 pt-8 border-t border-slate-200/80 dark:border-white/[0.06] flex flex-col md:flex-row items-center justify-between text-xs text-slate-500 dark:text-zinc-500 gap-4 text-center md:text-left">
+          
           <div className="space-y-1">
-            <p>© {new Date().getFullYear()} <strong>{shop?.name || 'Store'}</strong>. All rights reserved.</p>
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-[11px] text-slate-400 dark:text-zinc-500">
-              <span className="flex items-center gap-1 font-mono font-bold text-slate-600 dark:text-zinc-400">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
-                Session Token: {customerCode || 'ANON'}
+            <p className="font-medium text-slate-700 dark:text-zinc-400">
+              © {new Date().getFullYear()} <strong className="text-slate-900 dark:text-white font-bold">{shop?.name || 'Retail Showroom'}</strong>. All rights reserved.
+            </p>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-[11px] text-slate-400 dark:text-zinc-500">
+              <span className="flex items-center gap-1 font-mono font-bold text-slate-600 dark:text-zinc-400 bg-slate-100 dark:bg-white/[0.05] px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-white/[0.05]">
+                <ShieldCheck className="w-3 h-3 text-blue-500" />
+                Shopper ID: {customerCode || 'ANON'}
               </span>
               <span>•</span>
-              <span>Zero-App In-Store Scanning</span>
+              <span>In-Store QR Connected</span>
               <span>•</span>
-              <span>Real-Time Floor Staff Dispatch</span>
+              <span>Instant Floor Associate Dispatch</span>
             </div>
           </div>
 
@@ -360,14 +415,16 @@ export default function CustomerFooter({ shop, categories = [], onSelectCategory
             <button
               type="button"
               onClick={scrollToTop}
-              className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 transition-colors flex items-center gap-1.5 text-xs font-bold"
-              title="Back to Top"
+              className="px-3.5 py-2 rounded-xl bg-white dark:bg-white/[0.04] hover:bg-slate-100 dark:hover:bg-white/[0.08] text-slate-700 dark:text-zinc-300 border border-slate-200/80 dark:border-white/[0.08] transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm active:scale-95 cursor-pointer"
+              title="Return to top of showroom"
             >
-              <ArrowUp className="w-3.5 h-3.5" />
+              <ArrowUp className="w-3.5 h-3.5 text-blue-500" />
               <span>Back to Top</span>
             </button>
           </div>
+
         </div>
+
       </div>
     </footer>
   );

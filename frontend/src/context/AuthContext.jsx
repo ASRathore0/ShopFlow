@@ -59,24 +59,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Only Super Admin can onboard new shops
+  // Open shop onboarding for any retailer or super admin
   const registerShop = async (shopData) => {
     setLoading(true);
     try {
-      // Use the dedicated super-admin provisioning endpoint
-      const res = await api.post('/super-admin/shops', shopData);
-      const { shop, owner, initial_password } = res.data;
+      const res = await api.post('/onboard', shopData);
+      const { shop, owner, initial_password, token: newToken, user: newUser } = res.data;
       
-      // Keep super admin logged in! Do NOT overwrite super admin's active session!
+      // If NOT logged in as super admin, authenticate as the new shop owner immediately
+      if (user?.role !== 'super_admin' && newToken && newUser) {
+        setToken(newToken);
+        setUser(newUser);
+        localStorage.setItem('shopflow_token', newToken);
+        localStorage.setItem('shopflow_user', JSON.stringify(newUser));
+      }
+
       return {
         success: true,
         shop,
         owner,
         initial_password,
-        user: owner,
+        user: newUser || owner,
+        token: newToken,
       };
     } catch (error) {
-      const msg = error.response?.data?.message || 'Onboarding failed. Only Super Admin can onboard new shops.';
+      const msg = error.response?.data?.message || 'Onboarding failed. Please review your store details.';
       return { success: false, message: msg };
     } finally {
       setLoading(false);

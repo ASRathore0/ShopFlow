@@ -4,7 +4,7 @@ import {
   Search, Store, Smartphone, Laptop, Headphones, Tv, Watch, Tag,
   Clock, CheckCircle2, Bookmark, HandHeart, ShieldCheck, ChevronRight,
   Filter, X, Layers, AlertCircle, ShoppingBag, ArrowLeft, RefreshCw,
-  Sun, Moon, MapPin, Phone, Mail, Sparkles, HelpCircle
+  Sun, Moon, MapPin, Phone, Mail, Sparkles, HelpCircle, MessageCircle, Wifi
 } from 'lucide-react';
 import { shopService } from '../services/shopService';
 import { useCustomer } from '../context/CustomerContext';
@@ -141,40 +141,31 @@ export default function CustomerPortal() {
                 {shop?.name ? shop.name.charAt(0).toUpperCase() : 'S'}
               </div>
             )}
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">
-                  {shop?.name || 'Store Showroom'}
-                </span>
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold ${
-                  shop?.is_open !== false
-                    ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
-                    : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20'
-                } whitespace-nowrap`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${shop?.is_open !== false ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'} mr-1`}></span>
-                  {shop?.is_open !== false ? 'Open' : 'Closed'}
-                </span>
-              </div>
-              <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 block truncate -mt-0.5">
-                {portalSettings.tagline || shop?.address || 'Physical Showroom Floor'}
+            <div className="min-w-0 flex items-center gap-2">
+              <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">
+                {shop?.name || 'Store Showroom'}
+              </span>
+              <span
+                className="relative flex items-center justify-center shrink-0"
+                title={shop?.is_open !== false ? 'Store is Open' : 'Store is Closed'}
+                aria-label={shop?.is_open !== false ? 'Store is Open' : 'Store is Closed'}
+              >
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    shop?.is_open !== false
+                      ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]'
+                      : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]'
+                  }`}
+                />
+                {shop?.is_open !== false && (
+                  <span className="absolute w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping opacity-75" />
+                )}
               </span>
             </div>
           </div>
 
-          {/* Action Chips: Theme Toggle, Anonymous Customer Token & Staff/Admin Return Button */}
+          {/* Action Chips: Theme Toggle & Anonymous Customer Token */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            {/* Staff / Shop Owner Switch Back Button (Strictly only visible to logged-in staff/admin) */}
-            {isStaffOrAdmin && (
-              <Link
-                to={returnDestination}
-                className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all active:scale-95"
-                title={`Return to ${returnLabel}`}
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Back to {returnLabel}</span>
-                <span className="sm:hidden">Back</span>
-              </Link>
-            )}
 
             {/* Theme Toggle Button */}
             <button

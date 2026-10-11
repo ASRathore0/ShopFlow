@@ -41,12 +41,8 @@ export default function LandingPage() {
   };
 
   const handleOnboardClick = (plan = 'growth') => {
-    if (user?.role === 'super_admin') {
-      setOnboardPlan(plan);
-      setShowOnboardModal(true);
-    } else {
-      navigate('/login');
-    }
+    setOnboardPlan(plan);
+    setShowOnboardModal(true);
   };
 
   const shopTypes = [

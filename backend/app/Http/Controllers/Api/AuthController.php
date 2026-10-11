@@ -68,16 +68,8 @@ class AuthController extends Controller
         return $this->login($request);
     }
 
-    public function registerShop(Request $request, ShopOnboardingService $onboardingService)
+    public function publicOnboard(Request $request, ShopOnboardingService $onboardingService)
     {
-        $authUser = $request->user();
-        if (!$authUser || $authUser->role !== 'super_admin') {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Access denied. Only Super Administrators can onboard a new shop.',
-            ], 403);
-        }
-
         $request->validate([
             'shop_name' => 'required|string|max:255',
             'shop_type' => 'nullable|string|max:50',
@@ -87,11 +79,15 @@ class AuthController extends Controller
             'phone' => 'nullable|string|max:30',
             'address' => 'nullable|string|max:255',
             'plan_id' => 'nullable',
+            'plan_slug' => 'nullable|string',
         ]);
 
         $result = $onboardingService->onboard($request->all());
         $user = $result['user'];
         $shop = $result['shop'];
+
+        // Generate Sanctum access token for the newly registered shop owner
+        $token = $user->createToken('shopflow_auth_token')->plainTextToken;
 
         return response()->json([
             'status' => 'success',
@@ -106,8 +102,23 @@ class AuthController extends Controller
                 'phone' => $user->phone,
                 'current_shop_id' => $user->current_shop_id,
             ],
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'phone' => $user->phone,
+                'current_shop_id' => $user->current_shop_id,
+                'current_shop' => $shop,
+            ],
+            'token' => $token,
             'initial_password' => $result['plain_password'],
         ], 201);
+    }
+
+    public function registerShop(Request $request, ShopOnboardingService $onboardingService)
+    {
+        return $this->publicOnboard($request, $onboardingService);
     }
 
     public function me(Request $request)
@@ -122,6 +133,7 @@ class AuthController extends Controller
                 'email' => $user->email,
                 'role' => $user->role,
                 'phone' => $user->phone,
+                'avatar_url' => $user->avatar_url,
                 'current_shop_id' => $user->current_shop_id,
                 'current_shop' => $user->currentShop,
                 'employee' => $user->employee,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, MapPin, CheckCircle, Navigation, CheckCircle2, ChevronDown, ChevronUp, User, ShieldAlert } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, Navigation, CheckCircle2, ChevronDown, ChevronUp, User, ShieldAlert, Bookmark } from 'lucide-react';
 import RequestStatusBadge from './RequestStatusBadge';
 import LocationBreadcrumb from './LocationBreadcrumb';
 import LocationMapVisualizer from './LocationMapVisualizer';
@@ -24,9 +24,13 @@ export default function StaffRequestCard({
     urgent: 'border-red-500/50 bg-red-500/20 text-red-600 dark:text-red-400 font-extrabold animate-pulse',
   };
 
+  const isReservation = request.request_type === 'reservation';
+
   return (
     <div className={`bg-white dark:bg-[#18181B] border rounded-2xl p-4 sm:p-5 shadow-md transition-all space-y-4 ${
-      request.status === 'waiting'
+      isReservation
+        ? 'border-purple-500/50 bg-gradient-to-r from-purple-500/5 to-transparent'
+        : request.status === 'waiting'
         ? 'border-amber-500/40 bg-gradient-to-r from-amber-500/5 to-transparent'
         : request.status === 'product_found'
         ? 'border-emerald-500/40 bg-gradient-to-r from-emerald-500/5 to-transparent'
@@ -34,10 +38,16 @@ export default function StaffRequestCard({
     }`}>
       {/* Top Header: ID, Priority, Time, Status */}
       <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 text-slate-800 dark:text-white">
             {request.request_number}
           </span>
+          {isReservation && (
+            <span className="text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 flex items-center gap-1 shadow-xs">
+              <Bookmark className="w-3 h-3 fill-current" />
+              <span>In-Store Reservation</span>
+            </span>
+          )}
           <span className={`text-[10px] uppercase px-2 py-0.5 rounded-full border ${priorityConfigs[request.priority] || priorityConfigs.normal}`}>
             {request.priority} priority
           </span>
@@ -79,10 +89,10 @@ export default function StaffRequestCard({
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
-              Customer Token:
+              {isReservation ? 'Pickup Customer:' : 'Customer Token:'}
             </span>
             <span className="font-mono font-bold text-slate-800 dark:text-zinc-200">
-              {customer?.customer_code || 'Customer #A42'}
+              {customer?.name ? `${customer.name} (${customer.phone || customer.customer_code})` : customer?.customer_code || 'Customer #A42'}
             </span>
           </div>
           {request.customer_notes ? (
@@ -107,7 +117,7 @@ export default function StaffRequestCard({
           <LocationBreadcrumb location={location} showTitle={true} variant="horizontal" />
           <button
             onClick={() => setShowLocationMap(!showLocationMap)}
-            className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 flex items-center gap-1 ml-2 flex-shrink-0"
+            className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 flex items-center gap-1 ml-2 flex-shrink-0 cursor-pointer"
           >
             {showLocationMap ? 'Hide Blueprint' : 'View Blueprint'}
             {showLocationMap ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -123,50 +133,50 @@ export default function StaffRequestCard({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
         {request.status === 'waiting' && (
           <button
             onClick={() => onAccept(request.id)}
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs tracking-wide transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs tracking-wide transition-all shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <CheckCircle className="w-4 h-4" />
-            ACCEPT REQUEST
+            <CheckCircle className="w-4 h-4 shrink-0" />
+            <span>{isReservation ? 'ACCEPT & HOLD ITEM' : 'ACCEPT REQUEST'}</span>
           </button>
         )}
 
         {(request.status === 'assigned' || request.status === 'in_progress') && (
-          <>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setShowLocationMap(!showLocationMap)}
-              className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-colors flex items-center gap-1.5"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <Navigation className="w-3.5 h-3.5 text-blue-400" />
-              NAVIGATE TO PRODUCT
+              <Navigation className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
+              <span>NAVIGATE TO PRODUCT</span>
             </button>
             <button
               onClick={() => onMarkFound(request.id)}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs tracking-wide transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs tracking-wide transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <CheckCircle className="w-4 h-4" />
-              MARK PRODUCT FOUND
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <span>{isReservation ? 'HOLD & SET ASIDE' : 'MARK PRODUCT FOUND'}</span>
             </button>
-          </>
+          </div>
         )}
 
         {(request.status === 'product_found' || request.status === 'coming_to_you') && (
           <button
             onClick={() => onComplete(request.id)}
-            className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs tracking-wide transition-all shadow-lg shadow-emerald-600/30 flex items-center gap-1.5"
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs tracking-wide transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <CheckCircle2 className="w-4 h-4" />
-            BRING & COMPLETE ASSISTANCE
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{isReservation ? 'CUSTOMER PICKED UP (COMPLETE)' : 'BRING & COMPLETE ASSISTANCE'}</span>
           </button>
         )}
 
         {request.status === 'completed' && (
-          <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1 py-1">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            Assistance Finished
+          <span className="text-xs font-semibold text-zinc-400 flex items-center justify-center sm:justify-start gap-1 py-1">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Assistance Finished</span>
           </span>
         )}
       </div>

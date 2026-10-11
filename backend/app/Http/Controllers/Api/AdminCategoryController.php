@@ -39,6 +39,13 @@ class AdminCategoryController extends Controller
         ]);
 
         $slug = Str::slug($request->name);
+        $baseSlug = $slug ?: 'cat';
+        $slug = $baseSlug;
+        $counter = 1;
+        while (Category::where('shop_id', $shopId)->where('slug', $slug)->exists()) {
+            $slug = $baseSlug . '-' . $counter;
+            $counter++;
+        }
 
         $category = Category::create([
             'shop_id' => $shopId,
@@ -75,6 +82,12 @@ class AdminCategoryController extends Controller
     {
         $shopId = $this->getAdminShopId($request);
         $category = Category::where('shop_id', $shopId)->findOrFail($id);
+
+        // Safe disassociate products from this category before deleting
+        \App\Models\Product::where('shop_id', $shopId)
+            ->where('category_id', $category->id)
+            ->update(['category_id' => null]);
+
         $category->delete();
 
         return response()->json([

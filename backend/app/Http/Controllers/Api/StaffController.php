@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\CustomerRequest;
 use App\Models\Employee;
 use App\Models\Location;
+use App\Models\Notification;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\RequestAssignment;
@@ -51,6 +53,7 @@ class StaffController extends Controller
         $waitingCount = CustomerRequest::where('shop_id', $shopId)->where('status', 'waiting')->count();
         $activeCount = CustomerRequest::where('shop_id', $shopId)->whereIn('status', ['assigned', 'in_progress', 'product_found', 'coming_to_you'])->count();
         $completedTodayCount = CustomerRequest::where('shop_id', $shopId)->where('status', 'completed')->whereDate('created_at', today())->count();
+        $reservationsCount = CustomerRequest::where('shop_id', $shopId)->where('request_type', 'reservation')->whereNotIn('status', ['completed', 'cancelled'])->count();
 
         // Calculate average service duration in minutes and seconds
         $avgDuration = CustomerRequest::where('shop_id', $shopId)
@@ -69,6 +72,15 @@ class StaffController extends Controller
             ->with(['items.product.primaryImage', 'items.variant', 'items.location.floor', 'items.location.section', 'items.location.aisle', 'items.location.rack', 'items.location.shelf', 'customerSession'])
             ->get();
 
+        // Live recent notifications
+        $notifications = Notification::where('shop_id', $shopId)
+            ->where(function ($q) use ($request) {
+                $q->where('user_id', $request->user()->id)->orWhereNull('user_id');
+            })
+            ->orderBy('created_at', 'desc')
+            ->take(15)
+            ->get();
+
         return response()->json([
             'status' => 'success',
             'data' => [
@@ -78,10 +90,12 @@ class StaffController extends Controller
                     'waiting_requests' => $waitingCount,
                     'active_requests' => $activeCount,
                     'completed_today' => $completedTodayCount,
+                    'reservations_count' => $reservationsCount,
                     'average_service_time' => $avgFormatted,
                     'my_completed_today' => $employee->total_requests_completed,
                 ],
                 'my_active_requests' => $myActiveRequests,
+                'notifications' => $notifications,
             ],
         ]);
     }
@@ -108,7 +122,9 @@ class StaffController extends Controller
         if ($tab === 'waiting') {
             $query->where('status', 'waiting');
         } elseif ($tab === 'active') {
-            $query->whereIn('status', ['assigned', 'in_progress', 'product_found', 'coming_to_you']);
+            $query->whereIn('status', ['waiting', 'assigned', 'in_progress', 'product_found', 'coming_to_you']);
+        } elseif ($tab === 'reservations') {
+            $query->where('request_type', 'reservation');
         } elseif ($tab === 'my_assigned') {
             $employee = $this->getEmployee($request);
             $query->where('assigned_employee_id', $employee->id)->whereIn('status', ['assigned', 'in_progress', 'product_found', 'coming_to_you']);
@@ -320,6 +336,96 @@ class StaffController extends Controller
             'status' => 'success',
             'message' => "Status updated to {$request->status}",
             'employee' => $employee,
+        ]);
+    }
+
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+        $employee = $this->getEmployee($request);
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'nullable|string|max:30',
+            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
+            'password' => 'nullable|string|min:6',
+            'assigned_zone' => 'nullable|string|max:100',
+            'avatar_url' => 'nullable|string',
+        ]);
+
+        $user->name = $validated['name'];
+        $user->email = $validated['email'];
+        if (array_key_exists('phone', $validated)) {
+            $user->phone = $validated['phone'];
+        }
+        if (!empty($validated['password'])) {
+            $user->password = bcrypt($validated['password']);
+        }
+        if ($request->hasFile('avatar')) {
+            $file = $request->file('avatar');
+            $destinationPath = public_path('uploads/avatars');
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+            $filename = 'avatar_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $file->move($destinationPath, $filename);
+            $user->avatar_url = url('uploads/avatars/' . $filename);
+        } elseif (array_key_exists('avatar_url', $validated)) {
+            $user->avatar_url = $validated['avatar_url'];
+        }
+        $user->save();
+
+        if ($employee) {
+            $employee->name = $user->name;
+            $employee->email = $user->email;
+            $employee->phone = $user->phone;
+            $employee->avatar_url = $user->avatar_url;
+            if (array_key_exists('assigned_zone', $validated)) {
+                $employee->assigned_zone = $validated['assigned_zone'];
+            }
+            $employee->save();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Profile updated successfully',
+            'user' => $user->fresh(['employee', 'currentShop', 'shops']),
+            'employee' => $employee ? $employee->fresh() : null,
+        ]);
+    }
+
+    public function uploadAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
+        ]);
+
+        $user = $request->user();
+        $employee = $this->getEmployee($request);
+
+        $file = $request->file('avatar');
+        $destinationPath = public_path('uploads/avatars');
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
+        }
+        $filename = 'avatar_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $file->move($destinationPath, $filename);
+        $url = url('uploads/avatars/' . $filename);
+
+        $user->avatar_url = $url;
+        $user->save();
+
+        if ($employee) {
+            $employee->avatar_url = $url;
+            $employee->save();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Avatar uploaded successfully',
+            'avatar_url' => $url,
+            'user' => $user->fresh(['employee', 'currentShop']),
+            'employee' => $employee ? $employee->fresh() : null,
         ]);
     }
 }

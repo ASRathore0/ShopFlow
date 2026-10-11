@@ -48,4 +48,20 @@ export const staffService = {
     const res = await api.post('/staff/status', { status });
     return res.data;
   },
+
+  // Update staff profile details
+  updateProfile: async (data) => {
+    const res = await api.put('/staff/profile', data);
+    return res.data;
+  },
+
+  // Upload staff avatar image
+  uploadAvatar: async (file) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const res = await api.post('/staff/profile/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
 };

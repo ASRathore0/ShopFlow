@@ -101,6 +101,11 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
   };
 
   const handleLoginAsNewOwner = async () => {
+    if (user?.role === 'shop_owner') {
+      onClose();
+      navigate('/admin');
+      return;
+    }
     const ownerEmail = createdResult?.owner?.email || createdResult?.user?.email || form.email;
     const ownerPass = createdResult?.initial_password || form.password;
     setLoading(true);
@@ -506,7 +511,7 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
                     className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Done (Super Admin)</span>
+                    <span>Done</span>
                   </button>
                 </div>
               </div>

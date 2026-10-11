@@ -7,6 +7,7 @@ use App\Models\CustomerRequest;
 use App\Models\CustomerSession;
 use App\Models\Employee;
 use App\Models\Inventory;
+use App\Models\Notification;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Shop;
@@ -153,6 +154,12 @@ class AdminDashboardController extends Controller
             ->take(6)
             ->get();
 
+        // Recent Notifications
+        $notifications = Notification::where('shop_id', $shopId)
+            ->orderBy('created_at', 'desc')
+            ->take(15)
+            ->get();
+
         return response()->json([
             'status' => 'success',
             'data' => [
@@ -175,6 +182,7 @@ class AdminDashboardController extends Controller
                 'smart_insights' => $insights,
                 'employee_workload' => $employeeWorkload,
                 'recent_requests' => $recentRequests,
+                'notifications' => $notifications,
             ],
         ]);
     }
