@@ -9,7 +9,7 @@ import {
   Settings, RefreshCw, BarChart2, CheckCircle2, Bookmark, UserPlus, Filter,
   Sun, Moon, Menu, X, ArrowLeft, LogOut, ExternalLink, ChevronRight, Edit3,
   Trash2, Check, UserCheck, AlertCircle, Eye, CornerDownRight, Tag, ChevronDown, Sparkles,
-  UploadCloud, ImagePlus, Loader2
+  UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../context/AuthContext';
@@ -127,6 +127,76 @@ export default function AdminDashboard() {
     status: 'online',
   });
 
+  // Store Settings Form state
+  const [settingsForm, setSettingsForm] = useState({
+    name: '',
+    tagline: '',
+    description: '',
+    logo_url: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    landmark: '',
+    opening_hours: '9:00 AM - 9:00 PM',
+    brand_color: '#2563EB',
+    is_open: true,
+    whatsapp_number: '',
+    wifi_ssid: '',
+    wifi_password: '',
+    announcement: '',
+    exchange_policy: '7 Days Instant Showroom Exchange',
+    social_links: {
+      instagram: '',
+      facebook: '',
+      twitter: '',
+      youtube: '',
+      website: '',
+      linkedin: '',
+    },
+  });
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [logoInputMode, setLogoInputMode] = useState('upload'); // 'upload' or 'url'
+
+  const populateSettingsForm = (s) => {
+    if (!s) return;
+    const cps = s.customer_portal_settings || {};
+    const sl = cps.social_links || {};
+    const ad = cps.address_details || {};
+    setSettingsForm({
+      name: s.name || '',
+      tagline: cps.tagline || '',
+      description: s.description || '',
+      logo_url: s.logo_url || '',
+      phone: s.phone || '',
+      email: s.email || '',
+      address: s.address || '',
+      city: cps.city || ad.city || '',
+      state: cps.state || ad.state || '',
+      postal_code: cps.postal_code || ad.postal_code || '',
+      landmark: cps.landmark || ad.landmark || '',
+      opening_hours: s.opening_hours || '9:00 AM - 9:00 PM',
+      brand_color: s.brand_color || '#2563EB',
+      is_open: s.is_open !== false,
+      whatsapp_number: cps.whatsapp_number || '',
+      wifi_ssid: cps.wifi_ssid || '',
+      wifi_password: cps.wifi_password || '',
+      announcement: cps.announcement || '',
+      exchange_policy: cps.exchange_policy || '7 Days Instant Showroom Exchange',
+      social_links: {
+        instagram: sl.instagram || '',
+        facebook: sl.facebook || '',
+        twitter: sl.twitter || '',
+        youtube: sl.youtube || '',
+        website: sl.website || '',
+        linkedin: sl.linkedin || '',
+      },
+    });
+  };
+
   // Current Active Shop details (Dynamic for newly onboarded or switched shops)
   const currentShop = user?.current_shop || dashboardData?.shop || {
     name: 'ABC Electronics',
@@ -140,6 +210,9 @@ export default function AdminDashboard() {
       const res = await adminService.getDashboard();
       if (res && res.data) {
         setDashboardData(res.data);
+        if (res.data.shop) {
+          populateSettingsForm(res.data.shop);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch dashboard overview:', err);
@@ -193,9 +266,12 @@ export default function AdminDashboard() {
       } else if (activeSection === 'reports') {
         const res = await adminService.getReports();
         setReportsData(res.data || null);
-      } else if (activeSection === 'qr') {
+      } else if (activeSection === 'qr' || activeSection === 'settings') {
         const res = await adminService.getShopSettings();
         setShopSettings(res.data || null);
+        if (res.data?.shop) {
+          populateSettingsForm(res.data.shop);
+        }
       }
     } catch (err) {
       console.error('Error loading section data:', err);
@@ -634,6 +710,103 @@ export default function AdminDashboard() {
     }
   };
 
+  // ==========================================
+  // STORE SETTINGS HANDLERS
+  // ==========================================
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file (PNG, JPG, WebP, SVG).', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Logo file size must be less than 5MB.', 'error');
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    try {
+      const res = await adminService.uploadShopLogo(file);
+      if (res.status === 'success' && res.data?.url) {
+        setSettingsForm((prev) => ({ ...prev, logo_url: res.data.url }));
+        showToast('Store logo uploaded successfully!');
+        if (dashboardData?.shop) {
+          setDashboardData((prev) => ({
+            ...prev,
+            shop: { ...prev.shop, logo_url: res.data.url },
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to upload logo:', err);
+      // Client-side fallback preview
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setSettingsForm((prev) => ({ ...prev, logo_url: ev.target.result }));
+        showToast('Logo preview updated. Save settings to apply.');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleSaveStoreSettings = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!settingsForm.name.trim()) {
+      showToast('Store name is required.', 'error');
+      return;
+    }
+
+    setIsSavingSettings(true);
+    try {
+      const payload = {
+        name: settingsForm.name.trim(),
+        description: settingsForm.description,
+        logo_url: settingsForm.logo_url,
+        phone: settingsForm.phone,
+        email: settingsForm.email,
+        address: settingsForm.address,
+        opening_hours: settingsForm.opening_hours,
+        brand_color: settingsForm.brand_color,
+        is_open: settingsForm.is_open,
+        customer_portal_settings: {
+          tagline: settingsForm.tagline,
+          city: settingsForm.city,
+          state: settingsForm.state,
+          postal_code: settingsForm.postal_code,
+          landmark: settingsForm.landmark,
+          whatsapp_number: settingsForm.whatsapp_number,
+          wifi_ssid: settingsForm.wifi_ssid,
+          wifi_password: settingsForm.wifi_password,
+          announcement: settingsForm.announcement,
+          exchange_policy: settingsForm.exchange_policy,
+          social_links: settingsForm.social_links,
+        },
+      };
+
+      const res = await adminService.updateShopSettings(payload);
+      if (res && (res.status === 'success' || res.data)) {
+        showToast('Store settings & online presence saved successfully!');
+        const updatedShop = res.data?.shop || res.data || payload;
+        setShopSettings((prev) => ({ ...prev, shop: updatedShop }));
+        if (dashboardData?.shop) {
+          setDashboardData((prev) => ({
+            ...prev,
+            shop: { ...prev.shop, ...updatedShop },
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+      showToast(err.response?.data?.message || 'Failed to update store settings.', 'error');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   // Metrics
   const metrics = dashboardData?.metrics || {
     today_customers: 24,
@@ -657,6 +830,7 @@ export default function AdminDashboard() {
     { id: 'employees', label: 'Staff Roster', icon: Users, count: employees.length },
     { id: 'reports', label: 'Analytics & Loss', icon: TrendingUp },
     { id: 'qr', label: 'Entrance Signage', icon: QrCode },
+    { id: 'settings', label: 'Store Settings', icon: Settings },
   ];
 
   // Filtered lists
@@ -731,9 +905,15 @@ export default function AdminDashboard() {
               className="w-full flex items-center justify-between p-2 rounded-2xl hover:bg-slate-100 dark:hover:bg-zinc-800/80 transition-colors text-left group"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/25 shrink-0">
-                  <Store className="w-5 h-5" />
-                </div>
+                {currentShop?.logo_url ? (
+                  <div className="w-10 h-10 rounded-2xl bg-white dark:bg-zinc-800 p-0.5 border border-slate-200 dark:border-zinc-700 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
+                    <img src={currentShop.logo_url} alt={currentShop.name} className="w-full h-full object-contain rounded-xl" />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/25 shrink-0">
+                    <Store className="w-5 h-5" />
+                  </div>
+                )}
                 <div className="min-w-0">
                   <div className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight truncate">
                     {currentShop.name}
@@ -878,9 +1058,15 @@ export default function AdminDashboard() {
       <div className="md:hidden sticky top-0 z-40 bg-white/95 dark:bg-[#111113]/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center font-bold text-white shrink-0 shadow-sm">
-              <Store className="w-4 h-4" />
-            </div>
+            {currentShop?.logo_url ? (
+              <div className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-800 p-0.5 border border-slate-200 dark:border-zinc-700 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
+                <img src={currentShop.logo_url} alt={currentShop.name} className="w-full h-full object-contain rounded-lg" />
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center font-bold text-white shrink-0 shadow-sm">
+                <Store className="w-4 h-4" />
+              </div>
+            )}
             <div className="min-w-0">
               <h1 className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
                 {currentShop.name}
@@ -2160,6 +2346,580 @@ export default function AdminDashboard() {
                 Points to: <strong>{window.location.origin}/shop/{currentShop.slug}</strong>
               </p>
             </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* SECTION 9: STORE SETTINGS & CUSTOMIZATION */}
+        {/* ======================================================== */}
+        {activeSection === 'settings' && (
+          <div className="space-y-6 animate-fade-in max-w-5xl">
+            {/* Page Header with Save CTA */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-zinc-800">
+              <div>
+                <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+                  <Settings className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  <span>Store Profile & Experience Settings</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Customize your showroom logo, name, location details, customer contacts, social links, and Wi-Fi perks.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/shop/${currentShop.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 font-bold text-xs flex items-center gap-1.5 transition-colors border border-slate-200 dark:border-zinc-700"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Preview Customer View</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={handleSaveStoreSettings}
+                  disabled={isSavingSettings}
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs shadow-lg shadow-blue-600/25 flex items-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {isSavingSettings ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSavingSettings ? 'Saving...' : 'Save Settings'}</span>
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveStoreSettings} className="space-y-6">
+              {/* PANEL 1: BRAND IDENTITY & LOGO */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-5">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <div className="flex items-center gap-2">
+                    <Store className="w-4 h-4 text-blue-500" />
+                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Store Identity & Visual Branding</h3>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Customer Facing</span>
+                </div>
+
+                {/* Logo Section */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+                  {/* Live Preview Card */}
+                  <div className="md:col-span-4 flex flex-col items-center justify-center p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-center space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Live Logo Preview</span>
+                    <div className="w-20 h-20 rounded-2xl bg-white dark:bg-zinc-800 border-2 border-dashed border-slate-300 dark:border-zinc-700 flex items-center justify-center overflow-hidden shadow-inner p-1">
+                      {settingsForm.logo_url ? (
+                        <img
+                          src={settingsForm.logo_url}
+                          alt="Store Logo Preview"
+                          className="w-full h-full object-contain rounded-xl"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-tr from-blue-700 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-2xl">
+                          {settingsForm.name ? settingsForm.name.charAt(0).toUpperCase() : 'S'}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 truncate max-w-full">
+                      {settingsForm.name || 'Store Name'}
+                    </span>
+                    {settingsForm.logo_url && (
+                      <button
+                        type="button"
+                        onClick={() => setSettingsForm({ ...settingsForm, logo_url: '' })}
+                        className="text-[11px] font-bold text-rose-500 hover:underline flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove Logo</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Upload / URL Controls */}
+                  <div className="md:col-span-8 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLogoInputMode('upload')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                          logoInputMode === 'upload'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400'
+                        }`}
+                      >
+                        Upload Image File
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogoInputMode('url')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                          logoInputMode === 'url'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400'
+                        }`}
+                      >
+                        Paste Image URL
+                      </button>
+                    </div>
+
+                    {logoInputMode === 'upload' ? (
+                      <div className="relative border-2 border-dashed border-slate-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-500 rounded-2xl p-4 text-center bg-slate-50/50 dark:bg-zinc-900/50 transition-colors">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          disabled={isUploadingLogo}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <div className="flex flex-col items-center justify-center space-y-1.5 pointer-events-none">
+                          {isUploadingLogo ? (
+                            <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                          ) : (
+                            <UploadCloud className="w-6 h-6 text-blue-500" />
+                          )}
+                          <span className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                            {isUploadingLogo ? 'Uploading logo to server...' : 'Drag & drop or click to upload store logo'}
+                          </span>
+                          <span className="text-[10px] text-slate-400">PNG, JPG, WebP, SVG up to 5MB</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="url"
+                          placeholder="https://example.com/images/store-logo.png"
+                          value={settingsForm.logo_url}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, logo_url: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                        <span className="text-[10px] text-slate-400 mt-1 block">Paste direct link to your store logo</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Name, Tagline & Description */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Store Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. ABC Electronics"
+                      value={settingsForm.name}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Tagline / Motto
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Premium Electronics & Fast In-Store Assistance"
+                      value={settingsForm.tagline}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, tagline: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                    Store Bio / About Description
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Short description shown to shoppers in store header and footer..."
+                    value={settingsForm.description}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, description: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Operating Status Toggle */}
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                      Physical Store Operating Status
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                      When open, customers can scan items and dispatch staff. When closed, requests are paused.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsForm({ ...settingsForm, is_open: !settingsForm.is_open })}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      settingsForm.is_open
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                        : 'bg-amber-600 text-white shadow-md shadow-amber-600/25'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                    <span>{settingsForm.is_open ? 'Open Now' : 'Closed'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* PANEL 2: ADDRESS & SHOWROOM LOCATION */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-emerald-500" />
+                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Physical Address & Floor Location</h3>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Navigation & Maps</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Showroom Street Address *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Shop #104, Silicon Galleria, 100 Feet Road"
+                      value={settingsForm.address}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, address: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Floor / Unit / Landmark
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Ground Floor, Near East Atrium"
+                      value={settingsForm.landmark}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, landmark: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Bengaluru"
+                      value={settingsForm.city}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, city: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      State / Province
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Karnataka"
+                      value={settingsForm.state}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, state: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Postal / PIN Code
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 560038"
+                      value={settingsForm.postal_code}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, postal_code: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* PANEL 3: CONTACT & CUSTOMER DESK */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-purple-500" />
+                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Contact & Support Channels</h3>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Customer Reach</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Showroom Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="+91 98765 43210"
+                      value={settingsForm.phone}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      WhatsApp Customer Chat Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="+91 98765 43210"
+                      value={settingsForm.whatsapp_number}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp_number: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">Renders 1-click WhatsApp button in customer footer</span>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Store Support Email
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="store@abcelectronics.com"
+                      value={settingsForm.email}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Operating Hours
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Mon - Sat: 10:00 AM - 9:30 PM | Sun: 11:00 AM - 8:00 PM"
+                      value={settingsForm.opening_hours}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, opening_hours: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* PANEL 4: SOCIAL MEDIA & ONLINE PROFILES */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-pink-500" />
+                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Social Media & Web Links</h3>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Customer Footer Icons</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <span className="text-pink-500">📸</span>
+                      <span>Instagram</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="@abcelectronics or URL"
+                      value={settingsForm.social_links.instagram}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          social_links: { ...settingsForm.social_links, instagram: e.target.value },
+                        })
+                      }
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <span className="text-blue-600">📘</span>
+                      <span>Facebook</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="facebook.com/yourstore"
+                      value={settingsForm.social_links.facebook}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          social_links: { ...settingsForm.social_links, facebook: e.target.value },
+                        })
+                      }
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <span className="text-slate-800 dark:text-white">✖️</span>
+                      <span>X (Twitter)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="@abcelectronics"
+                      value={settingsForm.social_links.twitter}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          social_links: { ...settingsForm.social_links, twitter: e.target.value },
+                        })
+                      }
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <span className="text-red-600">▶️</span>
+                      <span>YouTube</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="youtube.com/@yourstore"
+                      value={settingsForm.social_links.youtube}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          social_links: { ...settingsForm.social_links, youtube: e.target.value },
+                        })
+                      }
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Official Website</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="www.abcelectronics.com"
+                      value={settingsForm.social_links.website}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          social_links: { ...settingsForm.social_links, website: e.target.value },
+                        })
+                      }
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <span className="text-blue-500">💼</span>
+                      <span>LinkedIn</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="linkedin.com/company/yourstore"
+                      value={settingsForm.social_links.linkedin}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          social_links: { ...settingsForm.social_links, linkedin: e.target.value },
+                        })
+                      }
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* PANEL 5: IN-STORE SHOPPER EXPERIENCE PERKS */}
+              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+                  <div className="flex items-center gap-2">
+                    <Wifi className="w-4 h-4 text-blue-500" />
+                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">In-Store Shopper Experience & Wi-Fi</h3>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Customer Amenities</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Showroom Wi-Fi Network Name (SSID)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ABC_Guest_WiFi"
+                      value={settingsForm.wifi_ssid}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, wifi_ssid: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Wi-Fi Password (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Welcome2026 or leave blank for open network"
+                      value={settingsForm.wifi_password}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, wifi_password: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Customer Announcement Ribbon (Appears at top of store)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 🎉 Grand Festival: 10% instant bundle discount when you ask floor staff!"
+                      value={settingsForm.announcement}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, announcement: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Store Exchange / Warranty Policy
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 7 Days Hassle-Free In-Store Replacement on all electronics"
+                      value={settingsForm.exchange_policy}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, exchange_policy: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* BOTTOM FLOATING/STICKY SAVE ACTION */}
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {isSavingSettings ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSavingSettings ? 'Saving All Changes...' : 'Save All Store Settings'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </main>

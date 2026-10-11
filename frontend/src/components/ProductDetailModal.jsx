@@ -63,11 +63,10 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
                     <button
                       key={img.id}
                       onClick={() => setSelectedImage(img.image_url)}
-                      className={`w-14 h-14 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${
-                        selectedImage === img.image_url 
-                          ? 'border-blue-600 scale-95 shadow-md shadow-blue-500/20' 
+                      className={`w-14 h-14 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${selectedImage === img.image_url
+                          ? 'border-blue-600 scale-95 shadow-md shadow-blue-500/20'
                           : 'border-slate-200 dark:border-zinc-800 opacity-60 hover:opacity-100'
-                      }`}
+                        }`}
                     >
                       <img src={img.image_url} alt="" className="w-full h-full object-cover" />
                     </button>
@@ -150,11 +149,10 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
                     <button
                       key={v.id}
                       onClick={() => setSelectedVariant(v)}
-                      className={`p-3 rounded-2xl border text-left transition-all flex items-center justify-between ${
-                        isSelected
+                      className={`p-3 rounded-2xl border text-left transition-all flex items-center justify-between ${isSelected
                           ? 'border-blue-500 bg-blue-50 dark:bg-blue-600/10 text-slate-900 dark:text-white shadow-sm ring-1 ring-blue-500'
                           : 'border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:border-slate-300 dark:hover:border-zinc-700'
-                      }`}
+                        }`}
                     >
                       <div>
                         <div className="text-xs font-bold">{v.name}</div>
@@ -211,7 +209,7 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
             className="flex-1 py-3.5 px-6 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-bold text-sm tracking-wide transition-all shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 group"
           >
             <HandHeart className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
-            <span>SHOW ME THIS PRODUCT</span>
+            <span>SHOW ME</span>
           </button>
         </div>
       </div>

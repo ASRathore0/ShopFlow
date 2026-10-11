@@ -151,14 +151,14 @@ export default function LandingPage() {
                 className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2"
               >
                 <PlusCircle className="w-4 h-4 shrink-0" />
-                Onboard New Shop (Super Admin)
+                Onboard New Shop
               </button>
               <Link
                 to="/shop/abc-electronics"
                 className="w-full sm:w-auto px-6 sm:px-7 py-3.5 sm:py-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700 font-semibold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
               >
                 <QrCode className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                Customer QR Demo (ABC Electronics)
+                Customer QR Demo
               </Link>
             </div>
 

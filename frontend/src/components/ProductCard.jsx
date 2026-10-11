@@ -93,13 +93,13 @@ export default function ProductCard({ product, onSelect, onRequest }) {
           </div>
 
           {/* Full-width "Show Me" Touch Target */}
-          <button
+          {/* <button
             onClick={() => onRequest ? onRequest(product) : onSelect(product)}
             className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 active:scale-[0.97] text-white rounded-xl text-xs font-extrabold transition-all shadow-md shadow-blue-600/25 flex items-center justify-center gap-1.5"
           >
             <HandHeart className="w-3.5 h-3.5 flex-shrink-0" />
             <span>Show Me</span>
-          </button>
+          </button> */}
         </div>
       </div>
     </div>

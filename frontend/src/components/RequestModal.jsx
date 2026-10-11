@@ -175,11 +175,10 @@ export default function RequestModal({ product, variant, shopSlug, onClose, onSu
                       key={opt.id}
                       type="button"
                       onClick={() => setRequestType(opt.id)}
-                      className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 ${
-                        isSelected
+                      className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 ${isSelected
                           ? 'border-blue-500 bg-blue-50 dark:bg-blue-600/10 text-slate-900 dark:text-white ring-1 ring-blue-500 shadow-sm'
                           : 'border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 text-slate-600 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-700'
-                      }`}
+                        }`}
                     >
                       <Icon className={`w-4 h-4 ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-zinc-400'}`} />
                       <span className="text-[11px] font-bold leading-tight">{opt.label}</span>

@@ -43,27 +43,27 @@ export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growt
     {
       id: 'starter',
       name: 'Starter',
-      price: '₹49',
+      price: '₹399',
       period: '/mo',
       desc: 'Single showroom store',
-      features: ['Up to 5 staff', 'Shelf location finder', 'Entrance QR signage'],
+      features: ['Up to 2 staff', 'Shelf location finder', 'Entrance QR signage'],
     },
     {
       id: 'growth',
       name: 'Growth',
-      price: '₹129',
+      price: '₹799',
       period: '/mo',
       badge: 'RECOMMENDED',
       desc: 'High-traffic retail store',
-      features: ['Up to 15 staff', 'Auto request dispatching', '2D store layout', 'Smart demand analytics'],
+      features: ['Up to 5 staff', 'Auto request dispatching', '2D store layout', 'Smart demand analytics'],
     },
     {
       id: 'business',
       name: 'Business',
-      price: '₹299',
+      price: '₹1599',
       period: '/mo',
       desc: 'Multi-floor department store',
-      features: ['Up to 50 staff', 'Multi-zone floor routing', 'Inventory replenishment audits'],
+      features: ['Up to 15 staff', 'AI Integrated Shopping Assistant', 'Personalized Chatbot for Shop & Products'],
     },
   ];
 

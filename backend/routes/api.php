@@ -115,6 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Shop Profile & QR
         Route::get('/shop', [AdminShopController::class, 'show']);
         Route::put('/shop', [AdminShopController::class, 'update']);
+        Route::post('/shop/upload-logo', [AdminShopController::class, 'uploadLogo']);
     });
 
     // Super Admin APIs

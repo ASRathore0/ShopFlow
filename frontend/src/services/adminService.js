@@ -150,4 +150,14 @@ export const adminService = {
     const res = await api.put('/admin/shop', data);
     return res.data;
   },
+  uploadShopLogo: async (file) => {
+    const formData = new FormData();
+    formData.append('logo', file);
+    const res = await api.post('/admin/shop/upload-logo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data;
+  },
 };

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Shop;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class AdminShopController extends Controller
 {
@@ -39,6 +40,7 @@ class AdminShopController extends Controller
         $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
+            'logo_url' => 'nullable|string',
             'phone' => 'nullable|string|max:50',
             'email' => 'nullable|email|max:100',
             'address' => 'nullable|string',
@@ -49,7 +51,7 @@ class AdminShopController extends Controller
         ]);
 
         $shop->update($request->only([
-            'name', 'description', 'phone', 'email', 'address', 'opening_hours', 'brand_color', 'is_open', 'customer_portal_settings',
+            'name', 'description', 'logo_url', 'phone', 'email', 'address', 'opening_hours', 'brand_color', 'is_open', 'customer_portal_settings',
         ]));
 
         return response()->json([
@@ -58,4 +60,38 @@ class AdminShopController extends Controller
             'data' => $shop,
         ]);
     }
+
+    public function uploadLogo(Request $request)
+    {
+        $shopId = $this->getAdminShopId($request);
+        $shop = Shop::findOrFail($shopId);
+
+        $request->validate([
+            'logo' => 'required|image|mimes:jpeg,png,jpg,webp,gif,svg|max:5120',
+        ]);
+
+        $file = $request->file('logo');
+        $filename = 'shop_' . $shop->id . '_' . time() . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension();
+
+        $destinationPath = public_path('uploads/logos');
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
+        }
+
+        $file->move($destinationPath, $filename);
+        $url = url('uploads/logos/' . $filename);
+
+        $shop->update(['logo_url' => $url]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Shop logo uploaded successfully',
+            'data' => [
+                'url' => $url,
+                'filename' => $filename,
+                'shop' => $shop,
+            ],
+        ]);
+    }
 }
+
