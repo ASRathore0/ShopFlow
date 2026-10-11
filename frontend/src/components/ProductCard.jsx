@@ -1,11 +1,34 @@
-import React from 'react';
-import { Eye, HandHeart, CheckCircle2, AlertCircle, Layers } from 'lucide-react';
+import React, { useState } from 'react';
+import { Eye, HandHeart, CheckCircle2, AlertCircle, Layers, ChevronLeft, ChevronRight, Images } from 'lucide-react';
 
 export default function ProductCard({ product, onSelect, onRequest }) {
   const isOutOfStock = product.stock_status === 'out_of_stock' || product.total_available_stock === 0;
   const isLowStock = product.stock_status === 'low_stock';
   const variantCount = product.variants ? product.variants.length : 0;
-  const imageUrl = product.primary_image?.image_url || product.images?.[0]?.image_url || 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=400&q=80';
+
+  // Extract all available images
+  const imagesList = (product.images && product.images.length > 0)
+    ? product.images.map((img) => (typeof img === 'string' ? img : (img.image_url || img.url))).filter(Boolean)
+    : (product.primary_image?.image_url ? [product.primary_image.image_url] : ['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=400&q=80']);
+
+  const [currentImgIndex, setCurrentImgIndex] = useState(0);
+  const hasMultipleImages = imagesList.length > 1;
+  const activeImageUrl = imagesList[currentImgIndex] || imagesList[0];
+
+  const handlePrevImage = (e) => {
+    e.stopPropagation();
+    setCurrentImgIndex((prev) => (prev === 0 ? imagesList.length - 1 : prev - 1));
+  };
+
+  const handleNextImage = (e) => {
+    e.stopPropagation();
+    setCurrentImgIndex((prev) => (prev === imagesList.length - 1 ? 0 : prev + 1));
+  };
+
+  const handleDotClick = (e, idx) => {
+    e.stopPropagation();
+    setCurrentImgIndex(idx);
+  };
 
   return (
     <div className="bg-white dark:bg-[#18181B] border border-slate-200/90 dark:border-zinc-800 rounded-3xl overflow-hidden hover:border-blue-400 dark:hover:border-zinc-700 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-200 flex flex-col group shadow-sm">
@@ -15,11 +38,58 @@ export default function ProductCard({ product, onSelect, onRequest }) {
         className="relative aspect-square bg-slate-100 dark:bg-zinc-900/80 overflow-hidden cursor-pointer"
       >
         <img
-          src={imageUrl}
+          src={activeImageUrl}
           alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
+          onError={(e) => {
+            e.target.src = 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=400&q=80';
+          }}
         />
+
+        {/* Multi-Image Carousel Controls */}
+        {hasMultipleImages && (
+          <>
+            {/* Prev Image Arrow */}
+            <button
+              onClick={handlePrevImage}
+              // className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-black/55 hover:bg-black/85 text-white backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-75 transition-all border border-white/20 active:scale-90 shadow-md cursor-pointer"
+              title="Previous Photo"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {/* Next Image Arrow */}
+            <button
+              onClick={handleNextImage}
+              // className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-black/55 hover:bg-black/85 text-white backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-75 transition-all border border-white/20 active:scale-90 shadow-md cursor-pointer"
+              title="Next Photo"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* Multi-Image Counter Pill */}
+            <div className="absolute bottom-2.5 left-2.5 z-10 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-black/60 text-white border border-white/10 backdrop-blur-md flex items-center gap-1 shadow-sm">
+              <Images className="w-2.5 h-2.5 text-blue-300" />
+              <span>{currentImgIndex + 1}/{imagesList.length}</span>
+            </div>
+
+            {/* Image Slider Indicator Dots */}
+            <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-black/40 backdrop-blur-md px-1.5 py-0.5 rounded-full border border-white/10">
+              {imagesList.map((_, idx) => (
+                <span
+                  key={idx}
+                  onClick={(e) => handleDotClick(e, idx)}
+                  className={`rounded-full transition-all cursor-pointer ${
+                    currentImgIndex === idx
+                      ? 'w-3 h-1.5 bg-white shadow-sm'
+                      : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/70'
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Stock Status Badge (Top Left) */}
         <div className="absolute top-2.5 left-2.5 z-10">

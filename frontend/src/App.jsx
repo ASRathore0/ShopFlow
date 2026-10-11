@@ -10,7 +10,6 @@ import StaffDashboard from './pages/StaffDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import LoginPage from './pages/LoginPage';
-import DemoSwitcher from './components/DemoSwitcher';
 import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
@@ -64,9 +63,6 @@ export default function App() {
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-
-            {/* Global Interactive Role & Persona Switcher */}
-            <DemoSwitcher />
           </div>
         </CustomerProvider>
       </AuthProvider>

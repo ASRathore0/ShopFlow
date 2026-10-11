@@ -30,6 +30,18 @@ export const adminService = {
     });
     return res.data;
   },
+  uploadProductImages: async (files) => {
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+      formData.append('images[]', files[i]);
+    }
+    const res = await api.post('/admin/products/upload-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data;
+  },
   updateProduct: async (id, data) => {
     const res = await api.put(`/admin/products/${id}`, data);
     return res.data;

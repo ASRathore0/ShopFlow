@@ -26,7 +26,7 @@ class AdminProductController extends Controller
         $shopId = $this->getAdminShopId($request);
 
         $query = Product::where('shop_id', $shopId)
-            ->with(['category', 'primaryImage', 'location.floor', 'location.section', 'variants.inventory', 'inventory']);
+            ->with(['category', 'primaryImage', 'images', 'location.floor', 'location.section', 'variants.inventory', 'inventory']);
 
         if ($request->filled('q')) {
             $term = $request->q;
@@ -72,6 +72,7 @@ class AdminProductController extends Controller
             'specifications' => 'nullable|array',
             'tags' => 'nullable|array',
             'image_url' => 'nullable|string',
+            'images' => 'nullable|array',
             'initial_stock' => 'nullable|integer|min:0',
             'variants' => 'nullable|array',
         ]);
@@ -96,13 +97,44 @@ class AdminProductController extends Controller
             'status' => 'active',
         ]);
 
-        if ($request->filled('image_url')) {
-            ProductImage::create([
-                'product_id' => $product->id,
-                'image_url' => $request->image_url,
+        // Process images (either array of URLs/objects or single image_url)
+        $imagesList = [];
+        if ($request->has('images') && is_array($request->images) && !empty($request->images)) {
+            foreach ($request->images as $idx => $img) {
+                $imgUrl = is_array($img) ? ($img['image_url'] ?? $img['url'] ?? null) : $img;
+                if (!empty($imgUrl)) {
+                    $imagesList[] = [
+                        'url' => $imgUrl,
+                        'is_primary' => (isset($img['is_primary']) && $img['is_primary']) || $idx === 0,
+                        'display_order' => $idx + 1,
+                    ];
+                }
+            }
+        } elseif ($request->filled('image_url')) {
+            $imagesList[] = [
+                'url' => $request->image_url,
                 'is_primary' => true,
                 'display_order' => 1,
-            ]);
+            ];
+        }
+
+        if (!empty($imagesList)) {
+            $hasPrimary = false;
+            foreach ($imagesList as $im) {
+                if ($im['is_primary']) { $hasPrimary = true; break; }
+            }
+            if (!$hasPrimary) {
+                $imagesList[0]['is_primary'] = true;
+            }
+
+            foreach ($imagesList as $im) {
+                ProductImage::create([
+                    'product_id' => $product->id,
+                    'image_url' => $im['url'],
+                    'is_primary' => $im['is_primary'],
+                    'display_order' => $im['display_order'],
+                ]);
+            }
         }
 
         // Add variants if provided
@@ -145,7 +177,7 @@ class AdminProductController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Product created successfully',
-            'data' => $product->load(['category', 'primaryImage', 'variants.inventory', 'location']),
+            'data' => $product->load(['category', 'primaryImage', 'images', 'variants.inventory', 'location']),
         ], 201);
     }
 
@@ -182,6 +214,7 @@ class AdminProductController extends Controller
             'model' => 'nullable|string',
             'status' => 'nullable|in:active,draft,archived',
             'image_url' => 'nullable|string',
+            'images' => 'nullable|array',
         ]);
 
         $product->update($request->only([
@@ -189,7 +222,21 @@ class AdminProductController extends Controller
             'description', 'sku', 'barcode', 'brand', 'model', 'status', 'specifications', 'tags',
         ]));
 
-        if ($request->filled('image_url')) {
+        if ($request->has('images') && is_array($request->images)) {
+            ProductImage::where('product_id', $product->id)->delete();
+            $order = 1;
+            foreach ($request->images as $idx => $img) {
+                $imgUrl = is_array($img) ? ($img['image_url'] ?? $img['url'] ?? null) : $img;
+                if (!empty($imgUrl)) {
+                    ProductImage::create([
+                        'product_id' => $product->id,
+                        'image_url' => $imgUrl,
+                        'is_primary' => (isset($img['is_primary']) && $img['is_primary']) || $order === 1,
+                        'display_order' => $order++,
+                    ]);
+                }
+            }
+        } elseif ($request->filled('image_url')) {
             $img = ProductImage::where('product_id', $product->id)->where('is_primary', true)->first();
             if ($img) {
                 $img->update(['image_url' => $request->image_url]);
@@ -206,12 +253,42 @@ class AdminProductController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Product updated successfully',
-            'data' => $product->fresh(['category', 'primaryImage', 'location', 'variants.inventory']),
+            'data' => $product->fresh(['category', 'primaryImage', 'images', 'location', 'variants.inventory']),
         ]);
     }
 
     public function uploadImage(Request $request)
     {
+        // Handle multiple file upload if images array provided
+        if ($request->hasFile('images')) {
+            $request->validate([
+                'images' => 'required|array',
+                'images.*' => 'image|mimes:jpeg,png,jpg,webp,gif|max:5120',
+            ]);
+
+            $destinationPath = public_path('uploads/products');
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+
+            $uploaded = [];
+            foreach ($request->file('images') as $file) {
+                $filename = 'prod_' . time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+                $file->move($destinationPath, $filename);
+                $url = url('uploads/products/' . $filename);
+                $uploaded[] = [
+                    'url' => $url,
+                    'filename' => $filename,
+                ];
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => count($uploaded) . ' images uploaded successfully',
+                'data' => $uploaded,
+            ]);
+        }
+
         $request->validate([
             'image' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
         ]);

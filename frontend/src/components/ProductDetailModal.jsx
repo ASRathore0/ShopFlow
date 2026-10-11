@@ -7,9 +7,11 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
   const [selectedVariant, setSelectedVariant] = useState(
     product.variants && product.variants.length > 0 ? product.variants[0] : null
   );
-  const [selectedImage, setSelectedImage] = useState(
-    product.primary_image?.image_url || product.images?.[0]?.image_url || 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=600&q=80'
-  );
+  const allImages = (product.images && product.images.length > 0)
+    ? product.images.map((img) => (typeof img === 'string' ? img : (img.image_url || img.url))).filter(Boolean)
+    : (product.primary_image?.image_url ? [product.primary_image.image_url] : ['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=600&q=80']);
+
+  const [selectedImage, setSelectedImage] = useState(allImages[0]);
 
   const effectivePrice = selectedVariant
     ? (selectedVariant.price ? parseFloat(selectedVariant.price) : parseFloat(product.price) + parseFloat(selectedVariant.price_modifier || 0))
@@ -57,18 +59,18 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
                   className="w-full h-full object-cover"
                 />
               </div>
-              {product.images && product.images.length > 1 && (
+              {allImages.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                  {product.images.map((img) => (
+                  {allImages.map((imgUrl, idx) => (
                     <button
-                      key={img.id}
-                      onClick={() => setSelectedImage(img.image_url)}
-                      className={`w-14 h-14 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${selectedImage === img.image_url
+                      key={idx}
+                      onClick={() => setSelectedImage(imgUrl)}
+                      className={`w-14 h-14 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all cursor-pointer ${selectedImage === imgUrl
                           ? 'border-blue-600 scale-95 shadow-md shadow-blue-500/20'
                           : 'border-slate-200 dark:border-zinc-800 opacity-60 hover:opacity-100'
                         }`}
                     >
-                      <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                      <img src={imgUrl} alt="" className="w-full h-full object-cover" />
                     </button>
                   ))}
                 </div>

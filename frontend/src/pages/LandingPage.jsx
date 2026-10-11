@@ -63,11 +63,11 @@ export default function LandingPage() {
   const pricingPlans = [
     {
       name: 'Starter',
-      price: '₹49',
+      price: '399',
       period: '/month',
       desc: 'Ideal for single-location retail shops and local electronics boutiques.',
       features: [
-        'Up to 5 staff members',
+        'Up to 2 staff members',
         'Store entrance QR generator',
         'Customer digital catalog',
         'Physical shelf breadcrumbs',
@@ -79,12 +79,12 @@ export default function LandingPage() {
     },
     {
       name: 'Growth',
-      price: '₹129',
+      price: '799',
       period: '/month',
       badge: 'MOST POPULAR',
       desc: 'For busy multistoried shops needing automatic staff dispatch and store maps.',
       features: [
-        'Up to 15 staff members',
+        'Up to 5 staff members',
         'Interactive 2D store layout map',
         'Auto request dispatching',
         'Barcode & SKU hardware scanning',
@@ -92,17 +92,18 @@ export default function LandingPage() {
         'Lost customer demand reporting',
         'Priority 24/7 staff dispatch support',
       ],
-      cta: 'Start 14-Day Trial',
+      cta: '45-Days Free Trial',
       highlighted: true,
     },
     {
       name: 'Business',
-      price: '₹299',
+      price: '1599',
       period: '/month',
       desc: 'For high-volume department stores with multiple departments and floors.',
       features: [
-        'Up to 50 staff members',
-        'Multi-floor zone routing',
+        'Up to 15 staff members',
+        'AI Integrated Shopping Assistant',
+        'Personalized Chatbot for Shop & Products',
         'Automated inventory replenishment',
         'Restock & damage audit trails',
         'POS & ERP integration webhooks',
@@ -166,7 +167,7 @@ export default function LandingPage() {
             <div className="pt-3 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs text-slate-500 dark:text-zinc-400">
               <span className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" /> Zero app download</span>
               <span className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" /> Any mobile browser</span>
-              <span className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" /> Shelf micro-location</span>
+              <span className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" /> No Login/Signup Required</span>
             </div>
           </div>
 
@@ -515,9 +516,8 @@ export default function LandingPage() {
               <div
                 key={i}
                 onClick={() => st.slug && navigate(`/shop/${st.slug}`)}
-                className={`p-4 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 space-y-2 transition-all ${
-                  st.slug ? 'cursor-pointer hover:border-blue-500 hover:shadow-md' : 'opacity-85'
-                }`}
+                className={`p-4 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 space-y-2 transition-all ${st.slug ? 'cursor-pointer hover:border-blue-500 hover:shadow-md' : 'opacity-85'
+                  }`}
               >
                 <div className="text-2xl sm:text-3xl">{st.icon}</div>
                 <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">{st.name}</div>
@@ -553,11 +553,10 @@ export default function LandingPage() {
             {pricingPlans.map((plan, idx) => (
               <div
                 key={idx}
-                className={`rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all relative ${
-                  plan.highlighted
+                className={`rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all relative ${plan.highlighted
                     ? 'bg-white dark:bg-[#18181B] border-2 border-blue-600 dark:border-blue-500 shadow-2xl shadow-blue-500/15'
                     : 'bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm'
-                }`}
+                  }`}
               >
                 {plan.badge && (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-extrabold px-3 py-0.5 rounded-full bg-blue-600 text-white shadow-md">
@@ -593,11 +592,10 @@ export default function LandingPage() {
                       const planKey = plan.name.toLowerCase();
                       handleOnboardClick(planKey === 'business' ? 'enterprise' : planKey);
                     }}
-                    className={`w-full py-3 rounded-2xl text-xs font-bold transition-all ${
-                      plan.highlighted
+                    className={`w-full py-3 rounded-2xl text-xs font-bold transition-all ${plan.highlighted
                         ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'
                         : 'bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-900 dark:text-white border border-slate-200 dark:border-zinc-700'
-                    }`}
+                      }`}
                   >
                     {plan.cta}
                   </button>
@@ -624,13 +622,13 @@ export default function LandingPage() {
               className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-xl shadow-blue-600/25 flex items-center justify-center gap-2"
             >
               <PlusCircle className="w-4 h-4" />
-              Onboard Your Store (Super Admin)
+              Onboard Your Store
             </button>
             <Link
               to="/shop/abc-electronics"
               className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 text-xs font-semibold transition-all dark:border-zinc-700 shadow-sm"
             >
-              Launch ABC Electronics Customer View
+              Launch Demo Customer View
             </Link>
           </div>
         </div>

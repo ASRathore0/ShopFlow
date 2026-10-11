@@ -5,14 +5,21 @@ import { shopService } from '../services/shopService';
 import RequestStatusBadge from '../components/RequestStatusBadge';
 import RequestTimeline from '../components/RequestTimeline';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function CustomerRequestTracking() {
   const { shopSlug, requestNumber } = useParams();
   const { isDark, toggleTheme } = useTheme();
+  const { user, isAuthenticated } = useAuth();
   const [request, setRequest] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+
+  // Return to portal helper for authenticated staff, managers & owners
+  const isStaffOrAdmin = isAuthenticated && user && ['staff', 'cashier', 'shop_owner', 'manager', 'super_admin'].includes(user.role);
+  const returnDestination = !user ? '/' : user.role === 'super_admin' ? '/super-admin' : ['shop_owner', 'manager'].includes(user.role) ? '/admin' : '/staff';
+  const returnLabel = !user ? 'Home' : user.role === 'super_admin' ? 'Super Admin' : ['shop_owner', 'manager'].includes(user.role) ? 'Owner Admin' : 'Staff Portal';
 
   const fetchStatus = async () => {
     try {
@@ -77,7 +84,16 @@ export default function CustomerRequestTracking() {
             <ArrowLeft className="w-4 h-4" />
             <span>Showroom Catalog</span>
           </Link>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            {isStaffOrAdmin && (
+              <Link
+                to={returnDestination}
+                className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
+                title={`Return to ${returnLabel}`}
+              >
+                <span>Back to {returnLabel}</span>
+              </Link>
+            )}
             <button
               onClick={toggleTheme}
               className="p-2 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"

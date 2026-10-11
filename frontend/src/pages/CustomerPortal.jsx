@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { shopService } from '../services/shopService';
 import { useCustomer } from '../context/CustomerContext';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import SearchBar from '../components/SearchBar';
 import ProductGrid from '../components/ProductGrid';
@@ -21,7 +22,13 @@ export default function CustomerPortal() {
   const { shopSlug } = useParams();
   const navigate = useNavigate();
   const { sessionToken, customerCode, activeRequests } = useCustomer();
+  const { user, isAuthenticated } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
+
+  // Return to portal helper for authenticated staff, managers & owners
+  const isStaffOrAdmin = isAuthenticated && user && ['staff', 'cashier', 'shop_owner', 'manager', 'super_admin'].includes(user.role);
+  const returnDestination = !user ? '/' : user.role === 'super_admin' ? '/super-admin' : ['shop_owner', 'manager'].includes(user.role) ? '/admin' : '/staff';
+  const returnLabel = !user ? 'Home' : user.role === 'super_admin' ? 'Super Admin' : ['shop_owner', 'manager'].includes(user.role) ? 'Owner Admin' : 'Staff Portal';
 
   const [shop, setShop] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -154,8 +161,21 @@ export default function CustomerPortal() {
             </div>
           </div>
 
-          {/* Action Chips: Theme Toggle & Anonymous Customer Token */}
+          {/* Action Chips: Theme Toggle, Anonymous Customer Token & Staff/Admin Return Button */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            {/* Staff / Shop Owner Switch Back Button (Strictly only visible to logged-in staff/admin) */}
+            {isStaffOrAdmin && (
+              <Link
+                to={returnDestination}
+                className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all active:scale-95"
+                title={`Return to ${returnLabel}`}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Back to {returnLabel}</span>
+                <span className="sm:hidden">Back</span>
+              </Link>
+            )}
+
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
@@ -560,6 +580,19 @@ export default function CustomerPortal() {
           shopSlug={shopSlug}
           onClose={() => setReserveTarget(null)}
         />
+      )}
+      {/* Floating Return Button for Staff & Shop Owner (Strictly only visible to logged-in staff/admin) */}
+      {isStaffOrAdmin && (
+        <div className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50">
+          <Link
+            to={returnDestination}
+            className="px-4 py-2.5 rounded-full bg-slate-900/95 dark:bg-zinc-800/95 hover:bg-blue-600 dark:hover:bg-blue-600 text-white shadow-2xl border border-slate-700 dark:border-zinc-600 text-xs font-bold flex items-center gap-2 transition-all backdrop-blur-md active:scale-95 group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1" />
+            <span>Return to {returnLabel}</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          </Link>
+        </div>
       )}
     </div>
   );

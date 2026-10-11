@@ -9,7 +9,8 @@ import {
   Settings, RefreshCw, BarChart2, CheckCircle2, Bookmark, UserPlus, Filter,
   Sun, Moon, Menu, X, ArrowLeft, LogOut, ExternalLink, ChevronRight, Edit3,
   Trash2, Check, UserCheck, AlertCircle, Eye, CornerDownRight, Tag, ChevronDown, Sparkles,
-  UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera
+  UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera,
+  Star, Images
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../context/AuthContext';
@@ -79,9 +80,11 @@ export default function AdminDashboard() {
     primary_location_id: '',
     initial_stock: 10,
     image_url: '',
+    images: [],
     description: '',
     status: 'active',
   });
+  const [newImageUrl, setNewImageUrl] = useState('');
 
   // Category quick creation state inside product modal
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
@@ -327,6 +330,7 @@ export default function AdminDashboard() {
     setIsCreatingCategory(false);
     setImageUploadMode('upload');
     setIsUploadingImage(false);
+    setNewImageUrl('');
     setProdForm({
       name: '',
       brand: '',
@@ -338,6 +342,7 @@ export default function AdminDashboard() {
       primary_location_id: locations.length > 0 ? locations[0].id : '',
       initial_stock: 10,
       image_url: '',
+      images: [],
       description: '',
       status: 'active',
     });
@@ -350,7 +355,14 @@ export default function AdminDashboard() {
     setNewCategoryName('');
     setNewCategoryIcon('Tag');
     setIsCreatingCategory(false);
-    setImageUploadMode(product.primary_image?.image_url ? 'url' : 'upload');
+    setNewImageUrl('');
+
+    // Extract existing product images
+    const existingImages = (product.images && product.images.length > 0)
+      ? product.images.map((img) => typeof img === 'string' ? img : (img.image_url || img.url)).filter(Boolean)
+      : (product.primary_image?.image_url ? [product.primary_image.image_url] : (product.image_url ? [product.image_url] : []));
+
+    setImageUploadMode('upload');
     setIsUploadingImage(false);
     setProdForm({
       name: product.name || '',
@@ -362,7 +374,8 @@ export default function AdminDashboard() {
       category_id: product.category_id || (categories[0]?.id || ''),
       primary_location_id: product.primary_location_id || (locations[0]?.id || ''),
       initial_stock: product.total_available_stock || 10,
-      image_url: product.primary_image?.image_url || '',
+      image_url: existingImages[0] || '',
+      images: existingImages,
       description: product.description || '',
       status: product.status || 'active',
     });
@@ -396,43 +409,128 @@ export default function AdminDashboard() {
   };
 
   const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const fileList = Array.from(e.target.files || []);
+    if (fileList.length === 0) return;
 
-    if (!file.type.startsWith('image/')) {
-      showToast('Please select a valid image file (PNG, JPG, WEBP, GIF).', 'error');
+    const validFiles = fileList.filter((f) => f.type.startsWith('image/'));
+    if (validFiles.length === 0) {
+      showToast('Please select valid image files (PNG, JPG, WEBP, GIF).', 'error');
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('Image file size must be less than 5MB.', 'error');
+    const oversized = validFiles.some((f) => f.size > 5 * 1024 * 1024);
+    if (oversized) {
+      showToast('Each image file size must be less than 5MB.', 'error');
       return;
     }
 
     setIsUploadingImage(true);
     try {
-      const res = await adminService.uploadProductImage(file);
-      if (res.data?.url) {
-        setProdForm((prev) => ({ ...prev, image_url: res.data.url }));
-        showToast('Product photo uploaded successfully!');
+      if (validFiles.length === 1) {
+        const res = await adminService.uploadProductImage(validFiles[0]);
+        if (res.data?.url) {
+          const newUrl = res.data.url;
+          setProdForm((prev) => {
+            const nextImgs = [...(prev.images || []), newUrl];
+            return {
+              ...prev,
+              image_url: prev.image_url || newUrl,
+              images: nextImgs,
+            };
+          });
+          showToast('Product photo uploaded successfully!');
+        }
+      } else {
+        const res = await adminService.uploadProductImages(validFiles);
+        const uploadedList = res.data || [];
+        const newUrls = uploadedList.map((item) => item.url).filter(Boolean);
+        if (newUrls.length > 0) {
+          setProdForm((prev) => {
+            const nextImgs = [...(prev.images || []), ...newUrls];
+            return {
+              ...prev,
+              image_url: prev.image_url || nextImgs[0],
+              images: nextImgs,
+            };
+          });
+          showToast(`${newUrls.length} photos uploaded successfully!`);
+        }
       }
     } catch (err) {
       console.error('Server upload failed, using local reader fallback:', err);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setProdForm((prev) => ({ ...prev, image_url: event.target.result }));
-        showToast('Photo loaded from your device.');
-      };
-      reader.readAsDataURL(file);
+      const readPromises = validFiles.map((file) => new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.readAsDataURL(file);
+      }));
+      const base64List = await Promise.all(readPromises);
+      setProdForm((prev) => {
+        const nextImgs = [...(prev.images || []), ...base64List];
+        return {
+          ...prev,
+          image_url: prev.image_url || nextImgs[0],
+          images: nextImgs,
+        };
+      });
+      showToast(`${validFiles.length} photo(s) loaded from device.`);
     } finally {
       setIsUploadingImage(false);
+      if (e.target) e.target.value = '';
     }
+  };
+
+  const handleAddImageUrl = (e) => {
+    e?.preventDefault();
+    if (!newImageUrl.trim()) return;
+    const url = newImageUrl.trim();
+    setProdForm((prev) => {
+      const nextImgs = [...(prev.images || []), url];
+      return {
+        ...prev,
+        image_url: prev.image_url || url,
+        images: nextImgs,
+      };
+    });
+    setNewImageUrl('');
+    showToast('Image URL added to product gallery.');
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    setProdForm((prev) => {
+      const nextImgs = (prev.images || []).filter((_, idx) => idx !== indexToRemove);
+      return {
+        ...prev,
+        image_url: nextImgs[0] || '',
+        images: nextImgs,
+      };
+    });
+  };
+
+  const handleSetPrimaryImage = (indexToPrimary) => {
+    setProdForm((prev) => {
+      const curImgs = [...(prev.images || [])];
+      if (indexToPrimary >= 0 && indexToPrimary < curImgs.length) {
+        const [selected] = curImgs.splice(indexToPrimary, 1);
+        const nextImgs = [selected, ...curImgs];
+        return {
+          ...prev,
+          image_url: selected,
+          images: nextImgs,
+        };
+      }
+      return prev;
+    });
+    showToast('Cover photo updated.');
   };
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
     setActionLoading(true);
     try {
+      const imagesPayload = (prodForm.images && prodForm.images.length > 0)
+        ? prodForm.images
+        : (prodForm.image_url ? [prodForm.image_url] : []);
+
       const payload = {
         name: prodForm.name,
         brand: prodForm.brand,
@@ -443,7 +541,8 @@ export default function AdminDashboard() {
         category_id: prodForm.category_id ? parseInt(prodForm.category_id) : null,
         primary_location_id: prodForm.primary_location_id ? parseInt(prodForm.primary_location_id) : null,
         description: prodForm.description,
-        image_url: prodForm.image_url || undefined,
+        image_url: imagesPayload[0] || undefined,
+        images: imagesPayload,
         status: prodForm.status,
       };
 
@@ -3158,12 +3257,17 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Product Image: Manual File Upload OR Web Link */}
-              <div className="space-y-2">
+              {/* Product Images: Multiple File Upload OR Web Links */}
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                    <ImagePlus className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Product Image</span>
+                    <Images className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Product Images</span>
+                    {prodForm.images?.length > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
+                        {prodForm.images.length} {prodForm.images.length === 1 ? 'image' : 'images'}
+                      </span>
+                    )}
                   </label>
                   <div className="flex items-center bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-xl text-[10px] font-bold">
                     <button
@@ -3176,7 +3280,7 @@ export default function AdminDashboard() {
                       }`}
                     >
                       <UploadCloud className="w-3 h-3" />
-                      <span>Upload Photo</span>
+                      <span>Upload Photos</span>
                     </button>
                     <button
                       type="button"
@@ -3187,7 +3291,7 @@ export default function AdminDashboard() {
                           : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
-                      <span>Image URL</span>
+                      <span>Add by URL</span>
                     </button>
                   </div>
                 </div>
@@ -3198,6 +3302,7 @@ export default function AdminDashboard() {
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       onChange={handleFileUpload}
                       disabled={isUploadingImage}
                       className="hidden"
@@ -3212,57 +3317,105 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <div className="text-xs font-bold text-slate-800 dark:text-zinc-200">
-                          {isUploadingImage ? 'Uploading Image...' : 'Click to upload photo or drag & drop'}
+                          {isUploadingImage ? 'Uploading Photos...' : 'Click to select multiple photos or drag & drop'}
                         </div>
                         <div className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">
-                          PNG, JPG, WEBP, GIF up to 5MB
+                          Select one or multiple images (PNG, JPG, WEBP, GIF up to 5MB each)
                         </div>
                       </div>
                     </div>
                   </label>
                 ) : (
                   /* URL Mode */
-                  <div>
+                  <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="https://images.unsplash.com/... or paste web link"
-                      value={prodForm.image_url}
-                      onChange={(e) => setProdForm({ ...prodForm, image_url: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      placeholder="https://images.unsplash.com/... or paste image web link"
+                      value={newImageUrl}
+                      onChange={(e) => setNewImageUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddImageUrl();
+                        }
+                      }}
+                      className="flex-1 bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
+                    <button
+                      type="button"
+                      onClick={handleAddImageUrl}
+                      className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add</span>
+                    </button>
                   </div>
                 )}
 
-                {/* Attached Image Thumbnail Preview Card */}
-                {prodForm.image_url && (
-                  <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-3 animate-fade-in">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <img
-                        src={prodForm.image_url}
-                        alt="Product preview"
-                        className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-zinc-700 shrink-0 bg-white dark:bg-zinc-800"
-                        onError={(e) => {
-                          e.target.src = 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=100&q=80';
-                        }}
-                      />
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                          Photo Attached
-                        </div>
-                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold truncate flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 shrink-0" />
-                          <span>Visible in catalog & customer showroom</span>
-                        </div>
-                      </div>
+                {/* Multiple Images Gallery Grid & Cover Photo Selector */}
+                {prodForm.images && prodForm.images.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400">
+                      <span className="font-semibold">Product Gallery ({prodForm.images.length})</span>
+                      <span className="text-[10px] text-slate-400 dark:text-zinc-500">First image is the showroom Cover Photo</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setProdForm({ ...prodForm, image_url: '' })}
-                      className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-bold transition-colors shrink-0 cursor-pointer"
-                      title="Remove image"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 p-2.5 bg-slate-50 dark:bg-zinc-900/80 rounded-2xl border border-slate-200 dark:border-zinc-800">
+                      {prodForm.images.map((imgUrl, idx) => {
+                        const isCover = idx === 0;
+                        return (
+                          <div
+                            key={idx}
+                            className={`relative group aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                              isCover
+                                ? 'border-blue-600 ring-2 ring-blue-500/20 shadow-sm'
+                                : 'border-slate-200 dark:border-zinc-700 hover:border-slate-400'
+                            }`}
+                          >
+                            <img
+                              src={imgUrl}
+                              alt={`Product image ${idx + 1}`}
+                              className="w-full h-full object-cover bg-white dark:bg-zinc-800"
+                              onError={(e) => {
+                                e.target.src = 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=200&q=80';
+                              }}
+                            />
+
+                            {/* Cover Badge or Set As Cover Button */}
+                            {isCover ? (
+                              <div className="absolute top-1 left-1 bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-sm">
+                                <Star className="w-2.5 h-2.5 fill-current" />
+                                <span>Cover</span>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSetPrimaryImage(idx)}
+                                className="absolute top-1 left-1 bg-black/70 hover:bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm"
+                                title="Set as showroom Cover Photo"
+                              >
+                                Set Cover
+                              </button>
+                            )}
+
+                            {/* Delete Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(idx)}
+                              className="absolute top-1 right-1 w-6 h-6 rounded-md bg-black/70 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm"
+                              title="Remove image"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Image sequence number */}
+                            <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1 py-0.2 rounded font-mono">
+                              #{idx + 1}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>

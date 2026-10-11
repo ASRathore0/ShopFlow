@@ -44,7 +44,7 @@ class PublicShopController extends Controller
 
         $featuredProducts = Product::where('shop_id', $shop->id)
             ->where('status', 'active')
-            ->with(['primaryImage', 'variants'])
+            ->with(['primaryImage', 'images', 'variants'])
             ->orderBy('request_count', 'desc')
             ->take(6)
             ->get();
@@ -81,7 +81,7 @@ class PublicShopController extends Controller
 
         $query = Product::where('shop_id', $shop->id)
             ->where('status', 'active')
-            ->with(['category', 'primaryImage', 'variants.inventory']);
+            ->with(['category', 'primaryImage', 'images', 'variants.inventory']);
 
         // Search query
         if ($request->filled('q')) {

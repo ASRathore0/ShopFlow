@@ -119,7 +119,7 @@ export default function StaffDashboard() {
                 <span>Shop: <strong className="text-slate-700 dark:text-zinc-200">{shopName}</strong></span>
                 <Link
                   to={`/shop/${shopSlug}`}
-                  target="_blank"
+                  // target="_blank"
                   className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-0.5 ml-1"
                 >
                   <Store className="w-3 h-3" />

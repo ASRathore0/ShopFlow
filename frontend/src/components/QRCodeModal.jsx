@@ -91,7 +91,7 @@ export default function QRCodeModal({ title, subtitle, value, onClose }) {
           </button>
           <a
             href={value}
-            target="_blank"
+            // target="_blank"
             rel="noreferrer"
             className="py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-blue-600/20"
           >
