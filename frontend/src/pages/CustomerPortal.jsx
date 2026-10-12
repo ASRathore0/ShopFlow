@@ -51,7 +51,14 @@ export default function CustomerPortal() {
         const res = await shopService.getShop(shopSlug);
         if (res && res.data) {
           setShop(res.data.shop);
-          setCategories(res.data.categories || []);
+          const rawCats = res.data.categories || [];
+          const sortedCats = [...rawCats].sort((a, b) => {
+            const orderA = a.display_order ?? 0;
+            const orderB = b.display_order ?? 0;
+            if (orderA !== orderB) return orderA - orderB;
+            return (a.id ?? 0) - (b.id ?? 0);
+          });
+          setCategories(sortedCats);
         }
       } catch (err) {
         console.error('Failed to load shop', err);

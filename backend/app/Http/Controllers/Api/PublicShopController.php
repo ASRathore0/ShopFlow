@@ -41,7 +41,8 @@ class PublicShopController extends Controller
         $categories = Category::where('shop_id', $shop->id)
             ->where('is_active', true)
             ->withCount('products')
-            ->orderBy('display_order')
+            ->orderBy('display_order', 'asc')
+            ->orderBy('id', 'asc')
             ->get();
 
         $featuredProducts = Product::where('shop_id', $shop->id)
@@ -68,7 +69,8 @@ class PublicShopController extends Controller
         $categories = Category::where('shop_id', $shop->id)
             ->where('is_active', true)
             ->withCount('products')
-            ->orderBy('display_order')
+            ->orderBy('display_order', 'asc')
+            ->orderBy('id', 'asc')
             ->get();
 
         return response()->json([

@@ -60,6 +60,10 @@ export const adminService = {
     const res = await api.post('/admin/categories', data);
     return res.data;
   },
+  reorderCategories: async (categoryIds) => {
+    const res = await api.post('/admin/categories/reorder', { category_ids: categoryIds });
+    return res.data;
+  },
   updateCategory: async (id, data) => {
     const res = await api.put(`/admin/categories/${id}`, data);
     return res.data;

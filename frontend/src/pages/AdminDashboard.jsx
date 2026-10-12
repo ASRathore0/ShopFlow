@@ -10,7 +10,7 @@ import {
   Sun, Moon, Menu, X, ArrowLeft, LogOut, ExternalLink, ChevronRight, Edit3,
   Trash2, Check, UserCheck, AlertCircle, Eye, CornerDownRight, Tag, ChevronDown, Sparkles,
   UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera,
-  Star, Images
+  Star, Images, GripVertical, ArrowUpDown, Crop
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,7 @@ import { useTheme } from '../context/ThemeContext';
 import QRCodeModal from '../components/QRCodeModal';
 import LocationBreadcrumb from '../components/LocationBreadcrumb';
 import RequestStatusBadge from '../components/RequestStatusBadge';
+import ImageCropperModal from '../components/ImageCropperModal';
 
 export default function AdminDashboard() {
   const { user, quickLoginAs, logout, switchShop } = useAuth();
@@ -97,6 +98,10 @@ export default function AdminDashboard() {
   const [deletingCategory, setDeletingCategory] = useState(null);
   const [catMgrForm, setCatMgrForm] = useState({ name: '', icon: 'Tag' });
   const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [draggedCategoryIndex, setDraggedCategoryIndex] = useState(null);
+  const [dragOverCategoryIndex, setDragOverCategoryIndex] = useState(null);
+  const [isReorderingCategories, setIsReorderingCategories] = useState(false);
+  const categoryTouchCurrentIndexRef = React.useRef(null);
 
   // Product Image manual upload state
   const [imageUploadMode, setImageUploadMode] = useState('upload'); // 'upload' or 'url'
@@ -105,6 +110,14 @@ export default function AdminDashboard() {
   const [cameraFacing, setCameraFacing] = useState('environment'); // 'environment' or 'user'
   const liveVideoRef = React.useRef(null);
   const cameraStreamRef = React.useRef(null);
+
+  // Product Image Cropper & Rotate Modal state
+  const [cropperModal, setCropperModal] = useState({
+    isOpen: false,
+    imageSrc: '',
+    targetIndex: null, // null = new upload, number = existing index in prodForm.images
+    originalFile: null,
+  });
 
   // Inventory Modals
   const [showAdjustStockModal, setShowAdjustStockModal] = useState(false);
@@ -496,6 +509,86 @@ export default function AdminDashboard() {
     }
   };
 
+  const persistCategoryOrder = async (newOrder) => {
+    setCategories(newOrder);
+    try {
+      setIsReorderingCategories(true);
+      await adminService.reorderCategories(newOrder.map((c) => c.id));
+      showToast('Category arrangement updated! Showroom customers will see this order.', 'success');
+    } catch (err) {
+      console.error('Failed to reorder categories:', err);
+      showToast('Failed to save category order.', 'error');
+    } finally {
+      setIsReorderingCategories(false);
+    }
+  };
+
+  const handleMoveCategory = (fromIndex, toIndex) => {
+    if (toIndex < 0 || toIndex >= categories.length || fromIndex === toIndex) return;
+    const updated = [...categories];
+    const [moved] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, moved);
+    persistCategoryOrder(updated);
+  };
+
+  const handleCategoryDragStart = (e, index) => {
+    setDraggedCategoryIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', index.toString());
+    } catch (_) {}
+  };
+
+  const handleCategoryDragEnter = (e, index) => {
+    e.preventDefault();
+    if (draggedCategoryIndex !== null && draggedCategoryIndex !== index) {
+      setDragOverCategoryIndex(index);
+    }
+  };
+
+  const handleCategoryDragEnd = () => {
+    if (
+      draggedCategoryIndex !== null &&
+      dragOverCategoryIndex !== null &&
+      draggedCategoryIndex !== dragOverCategoryIndex
+    ) {
+      handleMoveCategory(draggedCategoryIndex, dragOverCategoryIndex);
+    }
+    setDraggedCategoryIndex(null);
+    setDragOverCategoryIndex(null);
+  };
+
+  // Touch hold-and-drag for mobile & tablets
+  const handleCategoryTouchStart = (e, index) => {
+    if (e.target.closest('button')) return;
+    categoryTouchCurrentIndexRef.current = index;
+    setDraggedCategoryIndex(index);
+  };
+
+  const handleCategoryTouchMove = (e) => {
+    if (categoryTouchCurrentIndexRef.current === null) return;
+    if (e.cancelable) e.preventDefault();
+    const touch = e.touches[0];
+    const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+    const catCard = targetEl?.closest('[data-category-index]');
+    if (catCard) {
+      const hoverIndex = parseInt(catCard.getAttribute('data-category-index'), 10);
+      if (!isNaN(hoverIndex) && hoverIndex !== categoryTouchCurrentIndexRef.current) {
+        setDragOverCategoryIndex(hoverIndex);
+      }
+    }
+  };
+
+  const handleCategoryTouchEnd = () => {
+    const fromIdx = categoryTouchCurrentIndexRef.current;
+    if (fromIdx !== null && dragOverCategoryIndex !== null && fromIdx !== dragOverCategoryIndex) {
+      handleMoveCategory(fromIdx, dragOverCategoryIndex);
+    }
+    categoryTouchCurrentIndexRef.current = null;
+    setDraggedCategoryIndex(null);
+    setDragOverCategoryIndex(null);
+  };
+
   const confirmDeleteCategory = async () => {
     if (!deletingCategory) return;
     setActionLoading(true);
@@ -532,37 +625,37 @@ export default function AdminDashboard() {
       return;
     }
 
+    // Single file selected or camera snap: open ImageCropperModal for crop & rotate!
+    if (validFiles.length === 1) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setCropperModal({
+          isOpen: true,
+          imageSrc: event.target.result,
+          targetIndex: null,
+          originalFile: validFiles[0],
+        });
+      };
+      reader.readAsDataURL(validFiles[0]);
+      if (e.target) e.target.value = '';
+      return;
+    }
+
     setIsUploadingImage(true);
     try {
-      if (validFiles.length === 1) {
-        const res = await adminService.uploadProductImage(validFiles[0]);
-        if (res.data?.url) {
-          const newUrl = res.data.url;
-          setProdForm((prev) => {
-            const nextImgs = [...(prev.images || []), newUrl];
-            return {
-              ...prev,
-              image_url: prev.image_url || newUrl,
-              images: nextImgs,
-            };
-          });
-          showToast('Product photo uploaded successfully!');
-        }
-      } else {
-        const res = await adminService.uploadProductImages(validFiles);
-        const uploadedList = res.data || [];
-        const newUrls = uploadedList.map((item) => item.url).filter(Boolean);
-        if (newUrls.length > 0) {
-          setProdForm((prev) => {
-            const nextImgs = [...(prev.images || []), ...newUrls];
-            return {
-              ...prev,
-              image_url: prev.image_url || nextImgs[0],
-              images: nextImgs,
-            };
-          });
-          showToast(`${newUrls.length} photos uploaded successfully!`);
-        }
+      const res = await adminService.uploadProductImages(validFiles);
+      const uploadedList = res.data || [];
+      const newUrls = uploadedList.map((item) => item.url).filter(Boolean);
+      if (newUrls.length > 0) {
+        setProdForm((prev) => {
+          const nextImgs = [...(prev.images || []), ...newUrls];
+          return {
+            ...prev,
+            image_url: prev.image_url || nextImgs[0],
+            images: nextImgs,
+          };
+        });
+        showToast(`${newUrls.length} photos uploaded! Use the Crop button on any image to adjust.`);
       }
     } catch (err) {
       console.error('Server upload failed, using local reader fallback:', err);
@@ -584,6 +677,100 @@ export default function AdminDashboard() {
     } finally {
       setIsUploadingImage(false);
       if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleSaveCroppedImage = async ({ blob, file, previewUrl }) => {
+    setIsUploadingImage(true);
+    try {
+      const res = await adminService.uploadProductImage(file);
+      const uploadedUrl = res.data?.url || previewUrl;
+
+      if (cropperModal.targetIndex !== null) {
+        // Replace existing image in prodForm.images
+        setProdForm((prev) => {
+          const updated = [...(prev.images || [])];
+          updated[cropperModal.targetIndex] = uploadedUrl;
+          return {
+            ...prev,
+            images: updated,
+            image_url: cropperModal.targetIndex === 0 ? uploadedUrl : prev.image_url,
+          };
+        });
+        showToast('Image cropped and rotated successfully!');
+      } else {
+        // Add as newly cropped photo
+        setProdForm((prev) => {
+          const nextImgs = [...(prev.images || []), uploadedUrl];
+          return {
+            ...prev,
+            image_url: prev.image_url || uploadedUrl,
+            images: nextImgs,
+          };
+        });
+        showToast('Cropped product photo added!');
+      }
+    } catch (err) {
+      console.error('Failed to upload cropped image to server, using local data URL:', err);
+      if (cropperModal.targetIndex !== null) {
+        setProdForm((prev) => {
+          const updated = [...(prev.images || [])];
+          updated[cropperModal.targetIndex] = previewUrl;
+          return {
+            ...prev,
+            images: updated,
+            image_url: cropperModal.targetIndex === 0 ? previewUrl : prev.image_url,
+          };
+        });
+      } else {
+        setProdForm((prev) => ({
+          ...prev,
+          image_url: prev.image_url || previewUrl,
+          images: [...(prev.images || []), previewUrl],
+        }));
+      }
+      showToast('Cropped photo applied!');
+    } finally {
+      setIsUploadingImage(false);
+      setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null });
+    }
+  };
+
+  const handleSkipCrop = async () => {
+    if (!cropperModal.originalFile) {
+      setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null });
+      return;
+    }
+    const file = cropperModal.originalFile;
+    setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null });
+    setIsUploadingImage(true);
+    try {
+      const res = await adminService.uploadProductImage(file);
+      if (res.data?.url) {
+        const newUrl = res.data.url;
+        setProdForm((prev) => {
+          const nextImgs = [...(prev.images || []), newUrl];
+          return {
+            ...prev,
+            image_url: prev.image_url || newUrl,
+            images: nextImgs,
+          };
+        });
+        showToast('Product photo uploaded successfully!');
+      }
+    } catch (err) {
+      console.error('Failed to upload image:', err);
+      setProdForm((prev) => {
+        const nextImgs = [...(prev.images || []), cropperModal.imageSrc];
+        return {
+          ...prev,
+          image_url: prev.image_url || cropperModal.imageSrc,
+          images: nextImgs,
+        };
+      });
+      showToast('Photo added from device.');
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -1339,56 +1526,56 @@ export default function AdminDashboard() {
 
       {/* MOBILE TOP BAR & HORIZONTAL PILL NAVIGATION */}
       <div className="md:hidden sticky top-0 z-40 bg-white/95 dark:bg-[#111113]/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center justify-between px-4 py-3 sm:py-3.5">
+          <div className="flex items-center gap-3 min-w-0">
             {currentShop?.logo_url ? (
-              <div className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-800 p-0.5 border border-slate-200 dark:border-zinc-700 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
+              <div className="w-11 h-11 rounded-xl bg-white dark:bg-zinc-800 p-1 border border-slate-200 dark:border-zinc-700 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
                 <img src={currentShop.logo_url} alt={currentShop.name} className="w-full h-full object-contain rounded-lg" />
               </div>
             ) : (
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center font-bold text-white shrink-0 shadow-sm">
-                <Store className="w-4 h-4" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center font-bold text-white shrink-0 shadow-sm">
+                <Store className="w-5 h-5" />
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+              <h1 className="text-base font-extrabold text-slate-900 dark:text-white truncate">
                 {currentShop.name}
               </h1>
-              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold block">
+              <span className="text-xs text-blue-600 dark:text-blue-400 font-bold block">
                 Shop Admin Panel
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {/* Showroom / Customer View Link Icon */}
             {currentShop?.slug && (
               <Link
                 to={`/shop/${currentShop.slug}`}
-                className="p-2 rounded-xl text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                className="p-2.5 rounded-xl text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
                 title="View Customer Showroom"
                 aria-label="View Customer Showroom"
               >
-                <Store className="w-4 h-4" />
+                <Store className="w-5 h-5" />
               </Link>
             )}
 
             <button
               type="button"
               onClick={toggleTheme}
-              className="p-2 rounded-xl text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="p-2.5 rounded-xl text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               aria-label="Toggle Theme"
             >
               {isDark ? (
-                <Sun className="w-4 h-4 text-amber-400" />
+                <Sun className="w-5 h-5 text-amber-400" />
               ) : (
-                <Moon className="w-4 h-4 text-slate-600" />
+                <Moon className="w-5 h-5 text-slate-600" />
               )}
             </button>
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+              className="p-2.5 rounded-xl text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               aria-label="Open Navigation Menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -1397,7 +1584,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Mobile Horizontal Pill Scroll */}
-        <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto no-scrollbar border-t border-slate-100 dark:border-zinc-800/60 bg-slate-50/70 dark:bg-zinc-950/40">
+        <div className="flex items-center gap-2 px-3.5 py-2.5 overflow-x-auto no-scrollbar border-t border-slate-100 dark:border-zinc-800/60 bg-slate-50/70 dark:bg-zinc-950/40">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeSection === item.id;
@@ -1409,17 +1596,17 @@ export default function AdminDashboard() {
                   setActiveSection(item.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all shrink-0 ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-4 h-4 shrink-0" />
                 <span>{item.label}</span>
                 {item.count !== undefined && item.count > 0 && (
                   <span
-                    className={`text-[9px] px-1 rounded-full font-extrabold ${
+                    className={`text-[11px] px-1.5 py-0.5 rounded-full font-extrabold ${
                       isActive
                         ? 'bg-white/20 text-white'
                         : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
@@ -1435,11 +1622,11 @@ export default function AdminDashboard() {
 
         {/* Mobile Full Menu Dropdown */}
         {mobileMenuOpen && (
-          <div className="border-t border-slate-200 dark:border-zinc-800 bg-white/98 dark:bg-[#111113]/98 px-4 py-3 space-y-2 animate-fade-in shadow-xl">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 pb-1">
+          <div className="border-t border-slate-200 dark:border-zinc-800 bg-white/98 dark:bg-[#111113]/98 px-4 py-3.5 space-y-2.5 animate-fade-in shadow-xl">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 pb-1">
               Select Admin Section
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeSection === item.id;
@@ -1451,13 +1638,13 @@ export default function AdminDashboard() {
                       setActiveSection(item.id);
                       setMobileMenuOpen(false);
                     }}
-                    className={`flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold text-left transition-all ${
+                    className={`flex items-center gap-2.5 p-3 rounded-xl text-sm font-bold text-left transition-all ${
                       isActive
                         ? 'bg-blue-600 text-white'
                         : 'bg-slate-50 dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-800'
                     }`}
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
+                    <Icon className="w-4.5 h-4.5 shrink-0" />
                     <span className="truncate">{item.label}</span>
                   </button>
                 );
@@ -1468,19 +1655,19 @@ export default function AdminDashboard() {
                 <Link
                   to={`/shop/${currentShop.slug}`}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 text-xs font-bold border border-blue-200 dark:border-blue-900/40 hover:bg-blue-100 transition-colors"
+                  className="w-full flex items-center justify-between p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 text-sm font-bold border border-blue-200 dark:border-blue-900/40 hover:bg-blue-100 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <Store className="w-4 h-4" />
+                  <div className="flex items-center gap-2.5">
+                    <Store className="w-4.5 h-4.5" />
                     <span>View Customer Showroom</span>
                   </div>
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <ExternalLink className="w-4 h-4" />
                 </Link>
               </div>
             )}
             {user && (
-              <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs text-slate-600 dark:text-zinc-400">
-                <span className="truncate max-w-[180px]">User: {user.name}</span>
+              <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-sm text-slate-600 dark:text-zinc-400">
+                <span className="truncate max-w-[200px]">User: <strong className="text-slate-900 dark:text-white font-semibold">{user.name}</strong></span>
                 <button
                   type="button"
                   onClick={logout}
@@ -3734,6 +3921,24 @@ export default function AdminDashboard() {
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
 
+                            {/* Crop & Rotate Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCropperModal({
+                                  isOpen: true,
+                                  imageSrc: imgUrl,
+                                  targetIndex: idx,
+                                  originalFile: null,
+                                });
+                              }}
+                              className="absolute bottom-1 left-1 bg-black/75 hover:bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm"
+                              title="Crop & Rotate photo"
+                            >
+                              <Crop className="w-2.5 h-2.5" />
+                              <span>Crop</span>
+                            </button>
+
                             {/* Image sequence number */}
                             <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1 py-0.2 rounded font-mono">
                               #{idx + 1}
@@ -3954,13 +4159,28 @@ export default function AdminDashboard() {
               </div>
             </form>
 
-            {/* Categories List & Delete option */}
-            <div className="space-y-2">
+            {/* Categories List & Rearrangement option */}
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-zinc-300">
                 <span>Your Store's Categories ({categories.length})</span>
                 <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-normal">
-                  Click trash to remove unnecessary category
+                  Top item shows first in showroom
                 </span>
+              </div>
+
+              {/* Rearrange Tip Banner */}
+              <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700/80 flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-slate-700 dark:text-zinc-300 min-w-0">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  <span className="truncate">
+                    <strong>Rearrange:</strong> Hold & drag any category up or down to reorder. Top item appears first to customers.
+                  </span>
+                </div>
+                {isReorderingCategories && (
+                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1 shrink-0 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+                  </span>
+                )}
               </div>
 
               {categories.length === 0 ? (
@@ -3969,43 +4189,95 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {categories.map((cat) => (
-                    <div
-                      key={cat.id}
-                      className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 border border-slate-200/80 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 transition-all group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-900/40">
-                          <Tag className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                            {cat.name}
-                          </h4>
-                          <span className="text-[10px] text-slate-400 dark:text-zinc-500 flex items-center gap-1.5">
-                            <span>slug: {cat.slug}</span>
-                            {cat.products_count !== undefined && (
-                              <>
-                                <span>•</span>
-                                <span className="font-semibold text-slate-600 dark:text-zinc-300">
-                                  {cat.products_count} {cat.products_count === 1 ? 'product' : 'products'}
-                                </span>
-                              </>
-                            )}
+                  {categories.map((cat, idx) => {
+                    const isDragging = draggedCategoryIndex === idx;
+                    const isOver = dragOverCategoryIndex === idx;
+                    return (
+                      <div
+                        key={cat.id}
+                        data-category-index={idx}
+                        draggable
+                        onDragStart={(e) => handleCategoryDragStart(e, idx)}
+                        onDragEnter={(e) => handleCategoryDragEnter(e, idx)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDragEnd={handleCategoryDragEnd}
+                        onTouchStart={(e) => handleCategoryTouchStart(e, idx)}
+                        onTouchMove={handleCategoryTouchMove}
+                        onTouchEnd={handleCategoryTouchEnd}
+                        className={`flex items-center justify-between p-3 rounded-2xl border transition-all select-none cursor-grab active:cursor-grabbing ${
+                          isDragging
+                            ? 'opacity-40 scale-[0.98] border-blue-500 bg-blue-50/50 dark:bg-blue-950/40 shadow-inner'
+                            : isOver
+                            ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-50/70 dark:bg-blue-950/50 scale-[1.01]'
+                            : 'bg-slate-50 dark:bg-zinc-900/80 border-slate-200/80 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {/* Grip Handle icon indicating hold & drag */}
+                          <div
+                            className="p-1 -ml-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 flex items-center justify-center shrink-0 touch-none"
+                            title="Hold and drag to reorder"
+                          >
+                            <GripVertical className="w-4 h-4" />
+                          </div>
+
+                          {/* Position Badge: #1, #2, etc. */}
+                          <span
+                            className={`w-6 h-6 rounded-lg text-[10px] font-extrabold flex items-center justify-center shrink-0 ${
+                              idx === 0
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400'
+                            }`}
+                            title={idx === 0 ? 'Top priority in showroom' : `Position #${idx + 1}`}
+                          >
+                            #{idx + 1}
                           </span>
+
+                          <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-900/40">
+                            <Tag className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                {cat.name}
+                              </h4>
+                              {idx === 0 && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-extrabold shrink-0">
+                                  1st in Showroom
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400 dark:text-zinc-500 flex items-center gap-1.5">
+                              <span>slug: {cat.slug}</span>
+                              {cat.products_count !== undefined && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-semibold text-slate-600 dark:text-zinc-300">
+                                    {cat.products_count} {cat.products_count === 1 ? 'product' : 'products'}
+                                  </span>
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Clean Action button: Delete */}
+                        <div className="flex items-center shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingCategory(cat);
+                            }}
+                            className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                            title={`Delete category "${cat.name}"`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setDeletingCategory(cat)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer shrink-0"
-                        title={`Delete category "${cat.name}"`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -4547,6 +4819,17 @@ export default function AdminDashboard() {
           onClose={() => setShowQRModal(false)}
         />
       )}
+
+      {/* ======================================================== */}
+      {/* IMAGE CROP & ROTATE MODAL */}
+      {/* ======================================================== */}
+      <ImageCropperModal
+        isOpen={cropperModal.isOpen}
+        imageSrc={cropperModal.imageSrc}
+        onClose={() => setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null })}
+        onSave={handleSaveCroppedImage}
+        onSkip={cropperModal.targetIndex === null && cropperModal.originalFile ? handleSkipCrop : null}
+      />
     </div>
   );
 }

@@ -19,10 +19,44 @@ class AdminCategoryController extends Controller
     public function index(Request $request)
     {
         $shopId = $this->getAdminShopId($request);
-        $categories = Category::where('shop_id', $shopId)->withCount('products')->orderBy('display_order')->get();
+        $categories = Category::where('shop_id', $shopId)
+            ->withCount('products')
+            ->orderBy('display_order', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
 
         return response()->json([
             'status' => 'success',
+            'data' => $categories,
+        ]);
+    }
+
+    public function reorder(Request $request)
+    {
+        $shopId = $this->getAdminShopId($request);
+
+        $request->validate([
+            'category_ids' => 'required|array',
+            'category_ids.*' => 'integer',
+        ]);
+
+        $categoryIds = $request->input('category_ids');
+
+        foreach ($categoryIds as $index => $id) {
+            Category::where('shop_id', $shopId)
+                ->where('id', $id)
+                ->update(['display_order' => $index + 1]);
+        }
+
+        $categories = Category::where('shop_id', $shopId)
+            ->withCount('products')
+            ->orderBy('display_order', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Categories reordered successfully',
             'data' => $categories,
         ]);
     }

@@ -30,6 +30,50 @@ Route::post('/staff/login', [AuthController::class, 'staffLogin']);
 Route::post('/onboard', [AuthController::class, 'publicOnboard']);
 Route::post('/auth/register-shop', [AuthController::class, 'publicOnboard']);
 
+// Media Proxy (CORS-friendly media streamer for HTML5 Canvas cropping & manipulation)
+Route::get('/media-proxy', function (\Illuminate\Http\Request $request) {
+    $url = $request->query('url');
+    if (!$url) {
+        return response()->json(['error' => 'URL is required'], 400);
+    }
+
+    // 1. Check if it refers to local public uploads
+    if (str_contains($url, 'uploads/')) {
+        $pathPart = substr($url, strpos($url, 'uploads/'));
+        $pathPart = explode('?', $pathPart)[0];
+        $localPath = public_path($pathPart);
+        if (file_exists($localPath)) {
+            $mime = mime_content_type($localPath) ?: 'image/jpeg';
+            return response()->file($localPath, [
+                'Access-Control-Allow-Origin' => '*',
+                'Access-Control-Allow-Methods' => 'GET, OPTIONS',
+                'Access-Control-Allow-Headers' => '*',
+                'Content-Type' => $mime,
+                'Cache-Control' => 'public, max-age=86400',
+            ]);
+        }
+    }
+
+    // 2. Remote URL fallback
+    try {
+        $response = \Illuminate\Support\Facades\Http::timeout(10)->get($url);
+        if ($response->successful()) {
+            $contentType = $response->header('Content-Type') ?: 'image/jpeg';
+            return response($response->body(), 200, [
+                'Access-Control-Allow-Origin' => '*',
+                'Access-Control-Allow-Methods' => 'GET, OPTIONS',
+                'Access-Control-Allow-Headers' => '*',
+                'Content-Type' => $contentType,
+                'Cache-Control' => 'public, max-age=86400',
+            ]);
+        }
+    } catch (\Throwable $e) {
+        // Fall through
+    }
+
+    return response()->json(['error' => 'Unable to retrieve media'], 404);
+});
+
 // Public Customer Shop Routes
 Route::get('/shops', [PublicShopController::class, 'listShops']);
 Route::get('/shops/{slug}', [PublicShopController::class, 'showShop']);
@@ -85,6 +129,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Categories
         Route::get('/categories', [AdminCategoryController::class, 'index']);
         Route::post('/categories', [AdminCategoryController::class, 'store']);
+        Route::post('/categories/reorder', [AdminCategoryController::class, 'reorder']);
         Route::put('/categories/{id}', [AdminCategoryController::class, 'update']);
         Route::delete('/categories/{id}', [AdminCategoryController::class, 'destroy']);
 

@@ -200,11 +200,11 @@ export default function StaffDashboard() {
     <div className="min-h-screen bg-slate-50 dark:bg-[#0B0B0C] text-slate-900 dark:text-zinc-100 pb-20 selection:bg-blue-600 transition-colors">
       {/* Staff Top Command Bar */}
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#111113]/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-zinc-800 transition-colors shadow-xs">
-        <div className="max-w-6xl mx-auto px-3.5 sm:px-6 py-2.5 sm:py-3.5 space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-4">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-3.5 space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-4">
           
           {/* Top Row: User Identity & Store (Mobile & Desktop) */}
           <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0">
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
               {/* Profile Picture Trigger (Clicking avatar opens staff details) */}
               <button
                 type="button"
@@ -217,15 +217,15 @@ export default function StaffDashboard() {
                   <img
                     src={avatarSrc}
                     alt={employeeName}
-                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover border border-slate-200 dark:border-zinc-700 shadow-md shadow-blue-500/10 group-hover:ring-2 group-hover:ring-blue-500 group-hover:scale-105 transition-all"
+                    className="w-10 h-10 sm:w-10 sm:h-10 rounded-xl object-cover border border-slate-200 dark:border-zinc-700 shadow-md shadow-blue-500/10 group-hover:ring-2 group-hover:ring-blue-500 group-hover:scale-105 transition-all"
                   />
                 ) : (
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-700 flex items-center justify-center font-black text-white text-sm sm:text-base shadow-md shadow-blue-500/20 group-hover:ring-2 group-hover:ring-blue-500 group-hover:scale-105 transition-all">
+                  <div className="w-10 h-10 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-700 flex items-center justify-center font-black text-white text-base shadow-md shadow-blue-500/20 group-hover:ring-2 group-hover:ring-blue-500 group-hover:scale-105 transition-all">
                     {employeeName.charAt(0).toUpperCase()}
                   </div>
                 )}
                 <span
-                  className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-[#111113] ${
+                  className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#111113] ${
                     staffStatus === 'online'
                       ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]'
                       : staffStatus === 'busy'
@@ -238,18 +238,18 @@ export default function StaffDashboard() {
               {/* Name & Shop Info (Clean text only, no Profile button) */}
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                  <span className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
                     {employeeName}
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-zinc-400 flex items-center gap-1 truncate">
+                <div className="text-xs sm:text-xs text-slate-500 dark:text-zinc-400 flex items-center gap-1.5 truncate">
                   <span className="truncate">{shopName}</span>
                   {['shop_owner', 'manager', 'super_admin'].includes(user?.role) && (
                     <>
                       <span className="text-slate-300 dark:text-zinc-600">·</span>
                       <Link
                         to="/admin"
-                        className="text-purple-600 dark:text-purple-400 hover:underline font-medium shrink-0"
+                        className="text-purple-600 dark:text-purple-400 hover:underline font-bold shrink-0"
                       >
                         Admin
                       </Link>
@@ -260,28 +260,28 @@ export default function StaffDashboard() {
             </div>
 
             {/* Quick System Utilities (Right aligned on mobile top row) */}
-            <div className="flex sm:hidden items-center gap-1 shrink-0">
+            <div className="flex sm:hidden items-center gap-1.5 shrink-0">
               {/* Showroom Toggle Icon */}
               <Link
                 to={`/shop/${shopSlug}`}
-                className="p-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
+                className="p-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/30 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
                 title="View Customer Showroom"
                 aria-label="View Customer Showroom"
               >
-                <Store className="w-3.5 h-3.5" />
+                <Store className="w-4 h-4" />
               </Link>
 
               {/* Mobile Notifications Bell */}
               <button
                 type="button"
                 onClick={() => setNotificationsOpen((prev) => !prev)}
-                className="relative p-1.5 text-slate-500 hover:text-purple-600 dark:text-zinc-400 dark:hover:text-purple-400 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/30 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
+                className="relative p-2 text-slate-500 hover:text-purple-600 dark:text-zinc-400 dark:hover:text-purple-400 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/30 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
                 title="Notifications & Reservations"
                 aria-label="Notifications & Reservations"
               >
-                <Bell className="w-3.5 h-3.5" />
+                <Bell className="w-4 h-4" />
                 {notifications.length > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-600 animate-pulse" />
                 )}
               </button>
 
@@ -289,38 +289,38 @@ export default function StaffDashboard() {
                 type="button"
                 onClick={loadData}
                 disabled={refreshing}
-                className="p-1.5 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
+                className="p-2 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
                 title="Refresh live queue"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-blue-600' : ''}`} />
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-blue-600' : ''}`} />
               </button>
 
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="p-1.5 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
+                className="p-2 text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
                 title="Toggle Theme"
               >
-                {isDark ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-700" />}
+                {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
               </button>
 
               <button
                 type="button"
                 onClick={logout}
-                className="p-1.5 text-slate-400 hover:text-rose-500 dark:text-zinc-400 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
+                className="p-2 text-slate-400 hover:text-rose-500 dark:text-zinc-400 dark:hover:text-rose-400 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-slate-200/80 dark:border-zinc-800 transition-colors cursor-pointer"
                 title="Logout"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           </div>
 
           {/* Action Row: Status Selector & Scan Button (Mobile: full-width parallel; Desktop: inline right) */}
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="flex items-center gap-2.5">
             {/* Status Selector Pill */}
             <div className="relative flex-1 sm:flex-initial">
               <div
-                className={`flex items-center justify-between gap-1.5 w-full sm:w-auto px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-bold transition-all shadow-xs ${
+                className={`flex items-center justify-between gap-2 w-full sm:w-auto px-3.5 py-2.5 sm:py-2 rounded-xl border text-xs sm:text-xs font-bold transition-all shadow-xs ${
                   staffStatus === 'online'
                     ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
                     : staffStatus === 'busy'
@@ -328,9 +328,9 @@ export default function StaffDashboard() {
                     : 'bg-slate-100 dark:bg-zinc-800/80 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-700'
                 }`}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                   <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                       staffStatus === 'online'
                         ? 'bg-emerald-500 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.8)]'
                         : staffStatus === 'busy'
@@ -338,11 +338,11 @@ export default function StaffDashboard() {
                         : 'bg-slate-400'
                     }`}
                   />
-                  <span className="truncate uppercase tracking-wider text-[11px]">
+                  <span className="truncate uppercase tracking-wider text-xs font-bold">
                     {staffStatus === 'online' ? 'Online' : staffStatus === 'busy' ? 'Busy' : staffStatus === 'on_break' ? 'Break' : 'Offline'}
                   </span>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                <ChevronDown className="w-4 h-4 opacity-70 shrink-0" />
               </div>
               <select
                 value={staffStatus}
@@ -360,11 +360,11 @@ export default function StaffDashboard() {
             {/* Quick Barcode Scanner Button */}
             <button
               onClick={() => setScannerOpen(true)}
-              className="flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer shrink-0"
+              className="flex-1 sm:flex-initial px-4 sm:px-3.5 py-2.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs sm:text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 transition-all cursor-pointer shrink-0"
               title="Barcode Scanner"
             >
-              <ScanLine className="w-4 h-4 shrink-0" />
-              <span>Scan Barcode</span>
+              <ScanLine className="w-4.5 h-4.5 shrink-0" />
+              <span className="whitespace-nowrap">Scan Barcode</span>
             </button>
 
             {/* Desktop Utility Icons */}
