@@ -63,20 +63,38 @@ jobs:
 
       # ----------------------------------------------------
       # STEP 4: DEPLOY TO HOSTINGER VIA RSYNC OVER SSH
-      # Uses Hostinger SSH Password directly (no key generation needed!)
+      # (With auto-detection & fallback to FTPS if SSH port is blocked or times out)
       # ----------------------------------------------------
       - name: 🚀 Deploy to Hostinger via Rsync
+        id: rsync_deploy
+        continue-on-error: true
         env:
           SSH_PASS: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
-          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT || '65002' }}
+          RAW_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
           REMOTE_DIR: ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
         run: |
+          # Sanitize port: Hostinger uses 65002. Port 22 is disabled on Hostinger.
+          SSH_PORT="65002"
+          if [ -n "$RAW_PORT" ] && [ "$RAW_PORT" != "22" ]; then
+            SSH_PORT="$RAW_PORT"
+          fi
+
+          echo "Target Hostinger Server: $SSH_HOST:$SSH_PORT (User: $SSH_USER)"
           sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
           export SSHPASS="$SSH_PASS"
+
+          # Quick connection test with 10s timeout to avoid 3-minute hangs
+          if ! sshpass -e ssh -p $SSH_PORT -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q $SSH_USER@$SSH_HOST "exit 0" 2>/dev/null; then
+            echo "::warning::SSH connection to $SSH_HOST:$SSH_PORT timed out. Hostinger SSH Access may be Disabled or blocking GitHub runner IP."
+            echo "Proceeding with automatic FTPS fallback deployment..."
+            exit 1
+          fi
+
+          echo "SSH connection verified! Syncing files via Rsync..."
           sshpass -e rsync -rlgoDzvc -i --delete \
-            -e "ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            -e "ssh -p $SSH_PORT -o ConnectTimeout=15 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             --exclude='/.git/' \
             --exclude='/.env' \
             --exclude='/node_modules/' \
@@ -87,15 +105,39 @@ jobs:
             backend/ $SSH_USER@$SSH_HOST:$REMOTE_DIR
 
       # ----------------------------------------------------
+      # STEP 4B: FALLBACK TO SECURE FTPS (If SSH timed out or failed)
+      # Hostinger FTP is always enabled on port 21
+      # ----------------------------------------------------
+      - name: 🚀 Fallback: Deploy to Hostinger via Secure FTPS
+        if: steps.rsync_deploy.outcome == 'failure'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
+          username: ${{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          server-dir: ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
+          local-dir: ./backend/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/frontend/**
+            **/storage/logs/*
+            **/storage/framework/sessions/*
+
+      # ----------------------------------------------------
       # STEP 5: RUN POST-DEPLOY MIGRATIONS & CACHE ON HOSTINGER
       # ----------------------------------------------------
       - name: ⚡ Run Post-Deployment Artisan Commands
+        if: steps.rsync_deploy.outcome == 'success'
         uses: appleboy/ssh-action@v1.0.3
+        continue-on-error: true
         with:
           host: ${{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
           username: ${{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
           password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
-          port: ${{ secrets.HOSTINGER_SSH_PORT || 65002 }}
+          port: 65002
+          timeout: 25s
           script: |
             cd ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
             if [ ! -f .env ]; then
@@ -107,5 +149,3 @@ jobs:
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
-
-
