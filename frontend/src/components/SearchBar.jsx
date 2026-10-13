@@ -2,7 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, ArrowRight, Tag, Smartphone, Laptop, Headphones, Sparkles } from 'lucide-react';
 import { shopService } from '../services/shopService';
 
-export default function SearchBar({ shopSlug, onSelectProduct, placeholder = "Search phones, laptops, SKU..." }) {
+const getCleanImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const backendBase = import.meta.env?.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+    : '';
+  return `${backendBase}/${url.replace(/^\//, '')}`;
+};
+
+export default function SearchBar({ shopSlug, shop, shopLogo, onSelectProduct, placeholder = "Search phones, laptops, SKU..." }) {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -87,18 +96,37 @@ export default function SearchBar({ shopSlug, onSelectProduct, placeholder = "Se
               <div className="px-3.5 py-1 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
                 Matching In-Store Models
               </div>
-              {suggestions.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handleSelect(p)}
-                  className="w-full px-3.5 py-2.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-zinc-800/80 transition-colors text-left group"
-                >
-                  <div className="flex items-center space-x-3">
-                    <img
-                      src={p.primary_image?.image_url || 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=100&q=80'}
-                      alt={p.name}
-                      className="w-9 h-9 object-cover rounded-xl border border-slate-200 dark:border-zinc-700"
-                    />
+              {suggestions.map((p) => {
+                const rawProductImg = p.primary_image?.image_url || p.image_url;
+                const productImg = getCleanImageUrl(rawProductImg);
+                const resolvedLogo = getCleanImageUrl(shopLogo || shop?.logo_url || p.shop?.logo_url);
+                const activeImg = productImg || resolvedLogo;
+
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => handleSelect(p)}
+                    className="w-full px-3.5 py-2.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-zinc-800/80 transition-colors text-left group"
+                  >
+                    <div className="flex items-center space-x-3">
+                      {activeImg ? (
+                        <img
+                          src={activeImg}
+                          alt={p.name}
+                          className="w-9 h-9 object-contain rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5 flex-shrink-0"
+                          onError={(e) => {
+                            if (resolvedLogo && e.target.src !== resolvedLogo) {
+                              e.target.src = resolvedLogo;
+                            } else {
+                              e.target.style.display = 'none';
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center flex-shrink-0 shadow-sm">
+                          {(p.brand || p.name || 'P').charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     <div>
                       <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         {p.name}
@@ -114,7 +142,8 @@ export default function SearchBar({ shopSlug, onSelectProduct, placeholder = "Se
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Available</span>
                   </div>
                 </button>
-              ))}
+              );
+            })}
             </div>
           ) : (
             <div className="p-4 text-center text-xs text-slate-500 dark:text-zinc-400">

@@ -4,6 +4,15 @@ import RequestStatusBadge from './RequestStatusBadge';
 import LocationBreadcrumb from './LocationBreadcrumb';
 import LocationMapVisualizer from './LocationMapVisualizer';
 
+const getCleanImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const backendBase = import.meta.env?.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+    : '';
+  return `${backendBase}/${url.replace(/^\//, '')}`;
+};
+
 export default function StaffRequestCard({
   request,
   onAccept,
@@ -66,11 +75,32 @@ export default function StaffRequestCard({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Product Details */}
         <div className="flex items-start gap-3">
-          <img
-            src={product?.primary_image?.image_url || 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=150&q=80'}
-            alt={product?.name}
-            className="w-14 h-14 object-cover rounded-xl border border-slate-200 dark:border-zinc-700 flex-shrink-0"
-          />
+          {(() => {
+            const rawProductImg = product?.primary_image?.image_url || product?.image_url;
+            const productImg = getCleanImageUrl(rawProductImg);
+            const resolvedLogo = getCleanImageUrl(request?.shop?.logo_url || product?.shop?.logo_url);
+            const activeImg = productImg || resolvedLogo;
+            const brandLetter = (product?.brand || product?.name || 'P').charAt(0).toUpperCase();
+
+            return activeImg ? (
+              <img
+                src={activeImg}
+                alt={product?.name || ''}
+                className="w-14 h-14 object-contain rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5 flex-shrink-0"
+                onError={(e) => {
+                  if (resolvedLogo && e.target.src !== resolvedLogo) {
+                    e.target.src = resolvedLogo;
+                  } else {
+                    e.target.style.display = 'none';
+                  }
+                }}
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-lg flex items-center justify-center flex-shrink-0 shadow-sm">
+                {brandLetter}
+              </div>
+            );
+          })()}
           <div className="space-y-1">
             <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
               {product?.name || 'Product'}

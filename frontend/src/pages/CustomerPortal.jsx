@@ -227,6 +227,8 @@ export default function CustomerPortal() {
             {/* Fast Live Search Bar */}
             <SearchBar
               shopSlug={shopSlug}
+              shop={shop}
+              shopLogo={logoSrc}
               onSelectProduct={(p) => setSelectedProduct(p)}
               placeholder="Search in-store items, SKU, color..."
             />
@@ -313,6 +315,8 @@ export default function CustomerPortal() {
               <ProductGrid
                 products={products}
                 loading={loading}
+                shop={shop}
+                shopLogo={logoSrc}
                 onSelectProduct={(p) => setSelectedProduct(p)}
                 onRequestProduct={(p) => setRequestTarget({ product: p, variant: null })}
                 onResetFilter={() => { setSelectedCategory(null); setSearchQuery(''); }}
@@ -544,6 +548,8 @@ export default function CustomerPortal() {
       {selectedProduct && (
         <ProductDetailModal
           product={selectedProduct}
+          shop={shop}
+          shopLogo={logoSrc}
           onClose={() => setSelectedProduct(null)}
           onRequest={(p, v) => {
             setSelectedProduct(null);
@@ -562,6 +568,7 @@ export default function CustomerPortal() {
           product={requestTarget.product}
           variant={requestTarget.variant}
           shopSlug={shopSlug}
+          shopLogo={logoSrc}
           onClose={() => setRequestTarget(null)}
           onSuccess={(req) => {
             setRequestTarget(null);
@@ -576,6 +583,7 @@ export default function CustomerPortal() {
           product={reserveTarget.product}
           variant={reserveTarget.variant}
           shopSlug={shopSlug}
+          shopLogo={logoSrc}
           onClose={() => setReserveTarget(null)}
         />
       )}

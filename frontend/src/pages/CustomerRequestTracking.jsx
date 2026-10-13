@@ -7,6 +7,15 @@ import RequestTimeline from '../components/RequestTimeline';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
+const getCleanImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const backendBase = import.meta.env?.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+    : '';
+  return `${backendBase}/${url.replace(/^\//, '')}`;
+};
+
 export default function CustomerRequestTracking() {
   const { shopSlug, requestNumber } = useParams();
   const { isDark, toggleTheme } = useTheme();
@@ -175,20 +184,43 @@ export default function CustomerRequestTracking() {
         </div>
 
         {/* Target Item Summary */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200/90 dark:border-zinc-800 flex items-center gap-3 shadow-sm">
-          <img
-            src={product?.primary_image?.image_url || 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=150&q=80'}
-            alt=""
-            className="w-14 h-14 object-cover rounded-xl border border-slate-200 dark:border-zinc-700 flex-shrink-0"
-          />
-          <div className="space-y-0.5 text-xs flex-1 min-w-0">
-            <span className="text-[10px] text-slate-400 dark:text-zinc-400 font-bold uppercase tracking-wider">{product?.brand}</span>
-            <h4 className="font-bold text-slate-900 dark:text-white truncate">{product?.name}</h4>
-            <p className="text-slate-500 dark:text-zinc-400 text-[11px] truncate font-medium">
-              {item?.variant_description || 'Standard'} • {item?.quantity || 1} unit requested
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const rawProductImg = product?.primary_image?.image_url || product?.image_url;
+          const productImg = getCleanImageUrl(rawProductImg);
+          const resolvedLogo = getCleanImageUrl(request?.shop?.logo_url || product?.shop?.logo_url);
+          const activeImg = productImg || resolvedLogo;
+          const brandLetter = (product?.brand || product?.name || request?.shop?.name || 'S').charAt(0).toUpperCase();
+
+          return (
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200/90 dark:border-zinc-800 flex items-center gap-3 shadow-sm">
+              {activeImg ? (
+                <img
+                  src={activeImg}
+                  alt={product?.name || ''}
+                  className="w-14 h-14 object-contain rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5 flex-shrink-0"
+                  onError={(e) => {
+                    if (resolvedLogo && e.target.src !== resolvedLogo) {
+                      e.target.src = resolvedLogo;
+                    } else {
+                      e.target.style.display = 'none';
+                    }
+                  }}
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-lg flex items-center justify-center flex-shrink-0 shadow-sm">
+                  {brandLetter}
+                </div>
+              )}
+              <div className="space-y-0.5 text-xs flex-1 min-w-0">
+                <span className="text-[10px] text-slate-400 dark:text-zinc-400 font-bold uppercase tracking-wider">{product?.brand}</span>
+                <h4 className="font-bold text-slate-900 dark:text-white truncate">{product?.name}</h4>
+                <p className="text-slate-500 dark:text-zinc-400 text-[11px] truncate font-medium">
+                  {item?.variant_description || 'Standard'} • {item?.quantity || 1} unit requested
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Visual Progress Timeline */}
         <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200/90 dark:border-zinc-800 shadow-sm space-y-4">

@@ -2,7 +2,15 @@ import React from 'react';
 import ProductCard from './ProductCard';
 import { PackageSearch } from 'lucide-react';
 
-export default function ProductGrid({ products, loading, onSelectProduct, onRequestProduct, onResetFilter }) {
+export default function ProductGrid({
+  products,
+  loading,
+  onSelectProduct,
+  onRequestProduct,
+  onResetFilter,
+  shop,
+  shopLogo,
+}) {
   if (loading) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -51,6 +59,8 @@ export default function ProductGrid({ products, loading, onSelectProduct, onRequ
         <ProductCard
           key={product.id}
           product={product}
+          shop={shop}
+          shopLogo={shopLogo}
           onSelect={onSelectProduct}
           onRequest={onRequestProduct}
         />

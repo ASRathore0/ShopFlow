@@ -1,17 +1,33 @@
 import React, { useState } from 'react';
 import { X, HandHeart, CheckCircle2, AlertCircle, Bookmark, ShieldCheck, Tag, Info, Cpu, Layers } from 'lucide-react';
 
-export default function ProductDetailModal({ product, onClose, onRequest, onReserve }) {
+const getCleanImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const backendBase = import.meta.env?.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+    : '';
+  return `${backendBase}/${url.replace(/^\//, '')}`;
+};
+
+export default function ProductDetailModal({ product, onClose, onRequest, onReserve, shop, shopLogo }) {
   if (!product) return null;
 
   const [selectedVariant, setSelectedVariant] = useState(
     product.variants && product.variants.length > 0 ? product.variants[0] : null
   );
-  const allImages = (product.images && product.images.length > 0)
-    ? product.images.map((img) => (typeof img === 'string' ? img : (img.image_url || img.url))).filter(Boolean)
-    : (product.primary_image?.image_url ? [product.primary_image.image_url] : ['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=600&q=80']);
 
-  const [selectedImage, setSelectedImage] = useState(allImages[0]);
+  const resolvedShopLogo = getCleanImageUrl(shopLogo || shop?.logo_url || product?.shop?.logo_url);
+  const shopName = shop?.name || product?.shop?.name || product?.brand || 'Store';
+
+  const rawImages = (product.images && product.images.length > 0)
+    ? product.images.map((img) => (typeof img === 'string' ? img : (img.image_url || img.url))).filter(Boolean)
+    : (product.primary_image?.image_url ? [product.primary_image.image_url] : (product.image_url ? [product.image_url] : []));
+
+  const allImages = rawImages.map(getCleanImageUrl).filter(Boolean);
+  const [selectedImage, setSelectedImage] = useState(allImages[0] || null);
+  const [imageError, setImageError] = useState(false);
+  const hasRealImage = selectedImage && !imageError;
 
   const effectivePrice = selectedVariant
     ? (selectedVariant.price ? parseFloat(selectedVariant.price) : parseFloat(product.price) + parseFloat(selectedVariant.price_modifier || 0))
@@ -53,11 +69,36 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
             {/* Image Preview & Gallery */}
             <div className="space-y-3">
               <div className="aspect-square bg-slate-100 dark:bg-zinc-900/80 rounded-2xl overflow-hidden border border-slate-200/80 dark:border-zinc-800 flex items-center justify-center">
-                <img
-                  src={selectedImage}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
+                {hasRealImage ? (
+                  <img
+                    src={selectedImage}
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                    onError={() => setImageError(true)}
+                  />
+                ) : resolvedShopLogo ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-zinc-900/60 select-none">
+                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white dark:bg-zinc-800 p-3.5 shadow-sm border border-slate-200/80 dark:border-zinc-700/60 flex items-center justify-center">
+                      <img
+                        src={resolvedShopLogo}
+                        alt={shopName}
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-slate-400 dark:text-zinc-500 mt-2.5 tracking-wider uppercase text-center truncate max-w-[85%]">
+                      {shopName}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/30 dark:from-zinc-900 dark:via-zinc-900/90 dark:to-zinc-850 select-none">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-black text-white text-3xl shadow-lg shadow-blue-500/20">
+                      {shopName.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 mt-2.5 tracking-wider truncate max-w-[85%]">
+                      {shopName}
+                    </span>
+                  </div>
+                )}
               </div>
               {allImages.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">

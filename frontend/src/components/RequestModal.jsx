@@ -3,7 +3,7 @@ import { X, HandHeart, CheckCircle2, MessageSquare, Plus, Minus, ArrowRight, Shi
 import { shopService } from '../services/shopService';
 import { useCustomer } from '../context/CustomerContext';
 
-export default function RequestModal({ product, variant, shopSlug, onClose, onSuccess }) {
+export default function RequestModal({ product, variant, shopSlug, shopLogo, onClose, onSuccess }) {
   const { sessionToken, customerCode, addRequest } = useCustomer();
   const [requestType, setRequestType] = useState('show_product');
   const [quantity, setQuantity] = useState(1);
@@ -145,11 +145,22 @@ export default function RequestModal({ product, variant, shopSlug, onClose, onSu
           <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
             {/* Target Product Summary */}
             <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800">
-              <img
-                src={product.primary_image?.image_url || 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=150&q=80'}
-                alt={product.name}
-                className="w-12 h-12 object-cover rounded-xl border border-slate-200 dark:border-zinc-700 flex-shrink-0"
-              />
+              {product?.primary_image?.image_url || product?.image_url || shopLogo ? (
+                <img
+                  src={product?.primary_image?.image_url || product?.image_url || shopLogo}
+                  alt={product?.name}
+                  className="w-12 h-12 object-contain rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-1 flex-shrink-0"
+                  onError={(e) => {
+                    if (shopLogo && e.currentTarget.src !== shopLogo) {
+                      e.currentTarget.src = shopLogo;
+                    }
+                  }}
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-sm flex items-center justify-center flex-shrink-0">
+                  {(product?.brand || product?.name || 'S').charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">{product.name}</h4>
                 <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold truncate">{selectedVariantName}</p>

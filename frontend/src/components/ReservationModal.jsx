@@ -2,13 +2,28 @@ import React, { useState } from 'react';
 import { X, Bookmark, CheckCircle2, AlertCircle, Phone, User, Clock } from 'lucide-react';
 import { shopService } from '../services/shopService';
 
-export default function ReservationModal({ product, variant, shopSlug, onClose }) {
+const getCleanImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const backendBase = import.meta.env?.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+    : '';
+  return `${backendBase}/${url.replace(/^\//, '')}`;
+};
+
+export default function ReservationModal({ product, variant, shopSlug, shopLogo, onClose }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successData, setSuccessData] = useState(null);
+  const [imgError, setImgError] = useState(false);
+
+  const rawProductImg = product.primary_image?.image_url || product.image_url;
+  const productImg = getCleanImageUrl(rawProductImg);
+  const resolvedLogo = getCleanImageUrl(shopLogo || product?.shop?.logo_url);
+  const displayImage = (!imgError && productImg) ? productImg : resolvedLogo;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -96,11 +111,18 @@ export default function ReservationModal({ product, variant, shopSlug, onClose }
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div className="p-3 bg-slate-50 dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 flex items-center gap-3">
-              <img
-                src={product.primary_image?.image_url || 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=150&q=80'}
-                alt=""
-                className="w-11 h-11 object-cover rounded-xl border border-slate-200 dark:border-zinc-700"
-              />
+              {displayImage ? (
+                <img
+                  src={displayImage}
+                  alt={product.name}
+                  onError={() => setImgError(true)}
+                  className="w-11 h-11 object-contain rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5 flex-shrink-0"
+                />
+              ) : (
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-sm flex items-center justify-center flex-shrink-0 shadow-sm">
+                  {(product.brand || product.name || 'S').charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="text-xs min-w-0">
                 <div className="font-bold text-slate-900 dark:text-white truncate">{product.name}</div>
                 <div className="text-slate-500 dark:text-zinc-400">{variant ? variant.name : 'Standard'}</div>

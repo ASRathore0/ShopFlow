@@ -1,28 +1,46 @@
 import React, { useState } from 'react';
 import { Eye, HandHeart, CheckCircle2, AlertCircle, Layers, ChevronLeft, ChevronRight, Images } from 'lucide-react';
 
-export default function ProductCard({ product, onSelect, onRequest }) {
+const getCleanImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const backendBase = import.meta.env?.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+    : '';
+  return `${backendBase}/${url.replace(/^\//, '')}`;
+};
+
+export default function ProductCard({ product, onSelect, onRequest, shop, shopLogo }) {
   const isOutOfStock = product.stock_status === 'out_of_stock' || product.total_available_stock === 0;
   const isLowStock = product.stock_status === 'low_stock';
   const variantCount = product.variants ? product.variants.length : 0;
 
-  // Extract all available images
-  const imagesList = (product.images && product.images.length > 0)
+  // Resolve shop logo and branding for fallback
+  const resolvedShopLogo = getCleanImageUrl(shopLogo || shop?.logo_url || product?.shop?.logo_url);
+  const shopName = shop?.name || product?.shop?.name || product?.brand || 'Store';
+
+  // Extract all available product images
+  const rawImages = (product.images && product.images.length > 0)
     ? product.images.map((img) => (typeof img === 'string' ? img : (img.image_url || img.url))).filter(Boolean)
-    : (product.primary_image?.image_url ? [product.primary_image.image_url] : ['https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=400&q=80']);
+    : (product.primary_image?.image_url ? [product.primary_image.image_url] : (product.image_url ? [product.image_url] : []));
+
+  const validImages = rawImages.map(getCleanImageUrl).filter(Boolean);
 
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
-  const hasMultipleImages = imagesList.length > 1;
-  const activeImageUrl = imagesList[currentImgIndex] || imagesList[0];
+  const [imageError, setImageError] = useState(false);
+
+  const hasRealImage = validImages.length > 0 && !imageError;
+  const hasMultipleImages = validImages.length > 1 && !imageError;
+  const activeImageUrl = validImages[currentImgIndex] || validImages[0];
 
   const handlePrevImage = (e) => {
     e.stopPropagation();
-    setCurrentImgIndex((prev) => (prev === 0 ? imagesList.length - 1 : prev - 1));
+    setCurrentImgIndex((prev) => (prev === 0 ? validImages.length - 1 : prev - 1));
   };
 
   const handleNextImage = (e) => {
     e.stopPropagation();
-    setCurrentImgIndex((prev) => (prev === imagesList.length - 1 ? 0 : prev + 1));
+    setCurrentImgIndex((prev) => (prev === validImages.length - 1 ? 0 : prev + 1));
   };
 
   const handleDotClick = (e, idx) => {
@@ -37,15 +55,39 @@ export default function ProductCard({ product, onSelect, onRequest }) {
         onClick={() => onSelect(product)}
         className="relative aspect-square bg-slate-100 dark:bg-zinc-900/80 overflow-hidden cursor-pointer"
       >
-        <img
-          src={activeImageUrl}
-          alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          loading="lazy"
-          onError={(e) => {
-            e.target.src = 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=400&q=80';
-          }}
-        />
+        {hasRealImage ? (
+          <img
+            src={activeImageUrl}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+            onError={() => setImageError(true)}
+          />
+        ) : resolvedShopLogo ? (
+          /* Show Store Logo if product image is not found */
+          <div className="w-full h-full flex flex-col items-center justify-center p-3.5 bg-slate-50 dark:bg-zinc-900/70 select-none group-hover:bg-slate-100/70 dark:group-hover:bg-zinc-850/60 transition-colors">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white dark:bg-zinc-800 p-2.5 shadow-sm border border-slate-200/80 dark:border-zinc-700/60 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
+              <img
+                src={resolvedShopLogo}
+                alt={shopName}
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-zinc-500 mt-2 tracking-wider uppercase text-center truncate max-w-[85%]">
+              {shopName}
+            </span>
+          </div>
+        ) : (
+          /* Store Monogram Fallback if no logo uploaded */
+          <div className="w-full h-full flex flex-col items-center justify-center p-3.5 bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/30 dark:from-zinc-900 dark:via-zinc-900/90 dark:to-zinc-850 select-none">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-black text-white text-xl sm:text-2xl shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300">
+              {shopName.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 mt-2 tracking-wider truncate max-w-[85%]">
+              {shopName}
+            </span>
+          </div>
+        )}
 
         {/* Multi-Image Carousel Controls */}
         {hasMultipleImages && (
@@ -53,7 +95,6 @@ export default function ProductCard({ product, onSelect, onRequest }) {
             {/* Prev Image Arrow */}
             <button
               onClick={handlePrevImage}
-              // className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-black/55 hover:bg-black/85 text-white backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-75 transition-all border border-white/20 active:scale-90 shadow-md cursor-pointer"
               title="Previous Photo"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -62,7 +103,6 @@ export default function ProductCard({ product, onSelect, onRequest }) {
             {/* Next Image Arrow */}
             <button
               onClick={handleNextImage}
-              // className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-black/55 hover:bg-black/85 text-white backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-75 transition-all border border-white/20 active:scale-90 shadow-md cursor-pointer"
               title="Next Photo"
             >
               <ChevronRight className="w-4 h-4" />
@@ -71,12 +111,12 @@ export default function ProductCard({ product, onSelect, onRequest }) {
             {/* Multi-Image Counter Pill */}
             <div className="absolute bottom-2.5 left-2.5 z-10 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-black/60 text-white border border-white/10 backdrop-blur-md flex items-center gap-1 shadow-sm">
               <Images className="w-2.5 h-2.5 text-blue-300" />
-              <span>{currentImgIndex + 1}/{imagesList.length}</span>
+              <span>{currentImgIndex + 1}/{validImages.length}</span>
             </div>
 
             {/* Image Slider Indicator Dots */}
             <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-black/40 backdrop-blur-md px-1.5 py-0.5 rounded-full border border-white/10">
-              {imagesList.map((_, idx) => (
+              {validImages.map((_, idx) => (
                 <span
                   key={idx}
                   onClick={(e) => handleDotClick(e, idx)}
@@ -161,19 +201,8 @@ export default function ProductCard({ product, onSelect, onRequest }) {
               ₹{parseFloat(product.price).toFixed(2)}
             </span>
           </div>
-
-          {/* Full-width "Show Me" Touch Target */}
-          {/* <button
-            onClick={() => onRequest ? onRequest(product) : onSelect(product)}
-            className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 active:scale-[0.97] text-white rounded-xl text-xs font-extrabold transition-all shadow-md shadow-blue-600/25 flex items-center justify-center gap-1.5"
-          >
-            <HandHeart className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>Show Me</span>
-          </button> */}
         </div>
       </div>
     </div>
   );
 }
-
-
