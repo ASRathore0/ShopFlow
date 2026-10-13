@@ -111,12 +111,16 @@ export default function AdminDashboard() {
   const liveVideoRef = React.useRef(null);
   const cameraStreamRef = React.useRef(null);
 
-  // Product Image Cropper & Rotate Modal state
+  // Image Cropper & Rotate Modal state (Supports products, store logo, etc.)
   const [cropperModal, setCropperModal] = useState({
     isOpen: false,
     imageSrc: '',
+    type: 'product', // 'product' or 'logo'
     targetIndex: null, // null = new upload, number = existing index in prodForm.images
     originalFile: null,
+    title: 'Crop & Rotate Product Image',
+    aspectRatio: '1:1',
+    circularCrop: false,
   });
 
   // Inventory Modals
@@ -681,6 +685,32 @@ export default function AdminDashboard() {
   };
 
   const handleSaveCroppedImage = async ({ blob, file, previewUrl }) => {
+    // Handling Store Logo crop
+    if (cropperModal.type === 'logo') {
+      setIsUploadingLogo(true);
+      try {
+        const res = await adminService.uploadShopLogo(file);
+        const uploadedUrl = res.data?.url || previewUrl;
+        setSettingsForm((prev) => ({ ...prev, logo_url: uploadedUrl }));
+        if (dashboardData?.shop) {
+          setDashboardData((prev) => ({
+            ...prev,
+            shop: { ...prev.shop, logo_url: uploadedUrl },
+          }));
+        }
+        showToast('Store logo cropped & updated successfully!');
+      } catch (err) {
+        console.error('Failed to upload cropped logo, using local preview:', err);
+        setSettingsForm((prev) => ({ ...prev, logo_url: previewUrl }));
+        showToast('Logo preview updated. Save settings to apply.');
+      } finally {
+        setIsUploadingLogo(false);
+        setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null, type: 'product' });
+      }
+      return;
+    }
+
+    // Handling Product Images crop
     setIsUploadingImage(true);
     try {
       const res = await adminService.uploadProductImage(file);
@@ -732,13 +762,33 @@ export default function AdminDashboard() {
       showToast('Cropped photo applied!');
     } finally {
       setIsUploadingImage(false);
-      setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null });
+      setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null, type: 'product' });
     }
   };
 
   const handleSkipCrop = async () => {
-    if (!cropperModal.originalFile) {
-      setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null });
+    if (cropperModal.type === 'logo') {
+      const file = cropperModal.originalFile;
+      setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null, type: 'product' });
+      if (!file) return;
+      setIsUploadingLogo(true);
+      try {
+        const res = await adminService.uploadShopLogo(file);
+        if (res.data?.url) {
+          setSettingsForm((prev) => ({ ...prev, logo_url: res.data.url }));
+          if (dashboardData?.shop) {
+            setDashboardData((prev) => ({
+              ...prev,
+              shop: { ...prev.shop, logo_url: res.data.url },
+            }));
+          }
+          showToast('Store logo uploaded successfully!');
+        }
+      } catch (err) {
+        setSettingsForm((prev) => ({ ...prev, logo_url: cropperModal.imageSrc }));
+      } finally {
+        setIsUploadingLogo(false);
+      }
       return;
     }
     const file = cropperModal.originalFile;
@@ -1195,31 +1245,22 @@ export default function AdminDashboard() {
       return;
     }
 
-    setIsUploadingLogo(true);
-    try {
-      const res = await adminService.uploadShopLogo(file);
-      if (res.status === 'success' && res.data?.url) {
-        setSettingsForm((prev) => ({ ...prev, logo_url: res.data.url }));
-        showToast('Store logo uploaded successfully!');
-        if (dashboardData?.shop) {
-          setDashboardData((prev) => ({
-            ...prev,
-            shop: { ...prev.shop, logo_url: res.data.url },
-          }));
-        }
-      }
-    } catch (err) {
-      console.error('Failed to upload logo:', err);
-      // Client-side fallback preview
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setSettingsForm((prev) => ({ ...prev, logo_url: ev.target.result }));
-        showToast('Logo preview updated. Save settings to apply.');
-      };
-      reader.readAsDataURL(file);
-    } finally {
-      setIsUploadingLogo(false);
-    }
+    // Open ImageCropperModal for crop & rotate
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setCropperModal({
+        isOpen: true,
+        imageSrc: ev.target.result,
+        type: 'logo',
+        targetIndex: null,
+        originalFile: file,
+        title: 'Crop & Rotate Store Logo',
+        aspectRatio: '1:1',
+        circularCrop: false,
+      });
+    };
+    reader.readAsDataURL(file);
+    if (e.target) e.target.value = '';
   };
 
   const handleSaveStoreSettings = async (e) => {
@@ -2958,14 +2999,37 @@ export default function AdminDashboard() {
                       {settingsForm.name || 'Store Name'}
                     </span>
                     {settingsForm.logo_url && (
-                      <button
-                        type="button"
-                        onClick={() => setSettingsForm({ ...settingsForm, logo_url: '' })}
-                        className="text-[11px] font-bold text-rose-500 hover:underline flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Remove Logo</span>
-                      </button>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCropperModal({
+                              isOpen: true,
+                              imageSrc: settingsForm.logo_url,
+                              type: 'logo',
+                              targetIndex: null,
+                              originalFile: null,
+                              title: 'Crop & Adjust Store Logo',
+                              aspectRatio: '1:1',
+                              circularCrop: false,
+                            });
+                          }}
+                          className="text-[11px] font-bold text-blue-600 hover:text-blue-500 hover:underline flex items-center gap-1 cursor-pointer"
+                          title="Crop and reframe store logo"
+                        >
+                          <Crop className="w-3 h-3" />
+                          <span>Crop</span>
+                        </button>
+                        <span className="text-slate-300 dark:text-zinc-700">·</span>
+                        <button
+                          type="button"
+                          onClick={() => setSettingsForm({ ...settingsForm, logo_url: '' })}
+                          className="text-[11px] font-bold text-rose-500 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Remove</span>
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -4826,7 +4890,10 @@ export default function AdminDashboard() {
       <ImageCropperModal
         isOpen={cropperModal.isOpen}
         imageSrc={cropperModal.imageSrc}
-        onClose={() => setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null })}
+        title={cropperModal.title || (cropperModal.type === 'logo' ? 'Crop & Rotate Store Logo' : 'Crop & Rotate Product Image')}
+        initialAspectRatio={cropperModal.aspectRatio || '1:1'}
+        circularCrop={cropperModal.circularCrop || false}
+        onClose={() => setCropperModal({ isOpen: false, imageSrc: '', targetIndex: null, originalFile: null, type: 'product' })}
         onSave={handleSaveCroppedImage}
         onSkip={cropperModal.targetIndex === null && cropperModal.originalFile ? handleSkipCrop : null}
       />

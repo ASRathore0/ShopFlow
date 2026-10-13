@@ -4,10 +4,14 @@ const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      return `${window.location.protocol}//${window.location.hostname}:8000/api`;
+  if (typeof window !== 'undefined') {
+    // Development mode (Vite dev server usually runs on port 5173)
+    if (window.location.port === '5173' || window.location.port === '3000') {
+      const host = window.location.hostname || 'localhost';
+      return `${window.location.protocol}//${host}:8000/api`;
     }
+    // Production / Deployed environment on Hostinger or custom domain
+    return `${window.location.origin}/api`;
   }
   return 'http://localhost:8000/api';
 };

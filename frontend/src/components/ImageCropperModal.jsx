@@ -1,62 +1,46 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   X, RotateCw, RotateCcw, FlipHorizontal, FlipVertical,
-  Crop, ZoomIn, ZoomOut, Check, Loader2, RefreshCw, AlertCircle
+  Crop, ZoomIn, ZoomOut, Check, Loader2, RefreshCw, Maximize2, Move
 } from 'lucide-react';
+import api from '../services/api';
 
 /**
- * Resolves an image URL into a CORS-safe local Blob URL.
- * Bypasses cross-origin canvas tainting by loading through Laravel /api/media-proxy.
+ * Resolves an image URL into a CORS-safe local Blob URL for canvas export.
+ * Uses the app's configured Axios instance to reach /api/media-proxy.
  */
-async function resolveCorsSafeImage(rawUrl) {
+async function getCanvasSafeUrl(rawUrl) {
   if (!rawUrl) return null;
-
-  // Fresh uploads / existing blobs / data URIs are already CORS-safe
   if (rawUrl.startsWith('data:') || rawUrl.startsWith('blob:')) {
-    return { url: rawUrl, isBlob: false };
+    return { url: rawUrl, isCreatedBlob: false };
   }
 
-  let targetUrl = rawUrl;
-
-  // If localhost/127.0.0.1 is in the URL but the frontend is being viewed on a LAN IP, normalize hostname
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    const curHost = window.location.hostname;
-    if (curHost !== 'localhost' && curHost !== '127.0.0.1') {
-      targetUrl = targetUrl
-        .replace(/http:\/\/localhost:8000/g, `http://${curHost}:8000`)
-        .replace(/http:\/\/127\.0\.0\.1:8000/g, `http://${curHost}:8000`);
-    }
-  }
-
-  // Method 1: Fetch via Laravel /api/media-proxy with full CORS headers
+  // 1. Fetch via our backend media proxy
   try {
-    const apiHost = (typeof window !== 'undefined' && window.location?.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-      ? `${window.location.protocol}//${window.location.hostname}:8000`
-      : 'http://localhost:8000';
-
-    const proxyUrl = `${apiHost}/api/media-proxy?url=${encodeURIComponent(targetUrl)}`;
-    const response = await fetch(proxyUrl);
-    if (response.ok) {
-      const blob = await response.blob();
-      return { url: URL.createObjectURL(blob), isBlob: true };
+    const res = await api.get('/media-proxy', {
+      params: { url: rawUrl },
+      responseType: 'blob',
+      timeout: 6000,
+    });
+    if (res.data) {
+      return { url: URL.createObjectURL(res.data), isCreatedBlob: true };
     }
   } catch (err) {
-    console.warn('Proxy media fetch failed, attempting direct fetch:', err);
+    console.warn('Backend proxy fetch failed, trying direct fetch:', err);
   }
 
-  // Method 2: Direct fetch fallback (for same-origin or CORS permissive URLs)
+  // 2. Direct fetch fallback
   try {
-    const response = await fetch(targetUrl, { mode: 'cors' });
-    if (response.ok) {
-      const blob = await response.blob();
-      return { url: URL.createObjectURL(blob), isBlob: true };
+    const res = await fetch(rawUrl, { mode: 'cors' });
+    if (res.ok) {
+      const blob = await res.blob();
+      return { url: URL.createObjectURL(blob), isCreatedBlob: true };
     }
   } catch (err) {
     console.warn('Direct image fetch failed:', err);
   }
 
-  // Fallback: return normalized URL directly
-  return { url: targetUrl, isBlob: false };
+  return { url: rawUrl, isCreatedBlob: false };
 }
 
 export default function ImageCropperModal({
@@ -65,98 +49,58 @@ export default function ImageCropperModal({
   onClose,
   onSave,
   onSkip,
-  title = 'Crop & Rotate Product Image'
+  title = 'Crop & Rotate Image',
+  initialAspectRatio = '1:1',
+  circularCrop = false,
 }) {
   const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [aspectRatio, setAspectRatio] = useState('1:1'); // '1:1', '4:3', '16:9', 'free'
+  const [aspectRatio, setAspectRatio] = useState(initialAspectRatio);
   const [isProcessing, setIsProcessing] = useState(false);
-
-  // Safe Image Source state (Blob URL converted to prevent CORS Canvas errors)
-  const [activeImageSrc, setActiveImageSrc] = useState('');
-  const [isLoadingSource, setIsLoadingSource] = useState(false);
-  const [loadError, setLoadError] = useState(null);
-  const activeBlobUrlRef = useRef(null);
 
   // Normalized crop rectangle: { x: 0..100, y: 0..100, width: 0..100, height: 0..100 }
   const [crop, setCrop] = useState({ x: 10, y: 10, width: 80, height: 80 });
 
   const containerRef = useRef(null);
   const imageRef = useRef(null);
-  const dragActionRef = useRef(null); // { type: 'move'|'nw'|'ne'|'sw'|'se'|'n'|'s'|'e'|'w', startX, startY, startCrop }
+  const dragActionRef = useRef(null);
 
-  // Load safe CORS blob URL whenever modal opens or imageSrc changes
+  // Cached safe blob prepared silently in background
+  const cachedBlobRef = useRef(null);
+
+  // Reset controls and immediately show image on modal open (0ms wait)
   useEffect(() => {
-    let isCancelled = false;
+    if (isOpen && imageSrc) {
+      setRotation(0);
+      setFlipH(false);
+      setFlipV(false);
+      setZoom(1);
+      setAspectRatio(initialAspectRatio);
+      setCrop({ x: 10, y: 10, width: 80, height: 80 });
+      setIsProcessing(false);
 
-    if (!isOpen || !imageSrc) {
-      if (activeBlobUrlRef.current) {
-        URL.revokeObjectURL(activeBlobUrlRef.current);
-        activeBlobUrlRef.current = null;
+      // Silently pre-fetch canvas-safe blob in background for fast instant save
+      if (!imageSrc.startsWith('data:') && !imageSrc.startsWith('blob:')) {
+        getCanvasSafeUrl(imageSrc).then((res) => {
+          if (res?.isCreatedBlob) {
+            if (cachedBlobRef.current) URL.revokeObjectURL(cachedBlobRef.current);
+            cachedBlobRef.current = res.url;
+          }
+        }).catch(() => {});
       }
-      setActiveImageSrc('');
-      setIsLoadingSource(false);
-      setLoadError(null);
-      return;
     }
-
-    // Reset controls
-    setRotation(0);
-    setFlipH(false);
-    setFlipV(false);
-    setZoom(1);
-    setAspectRatio('1:1');
-    setCrop({ x: 10, y: 10, width: 80, height: 80 });
-    setIsProcessing(false);
-    setLoadError(null);
-
-    // Fast path: Data URL or existing Blob URL
-    if (imageSrc.startsWith('data:') || imageSrc.startsWith('blob:')) {
-      setActiveImageSrc(imageSrc);
-      setIsLoadingSource(false);
-      return;
-    }
-
-    setIsLoadingSource(true);
-
-    resolveCorsSafeImage(imageSrc)
-      .then((res) => {
-        if (isCancelled) return;
-        if (activeBlobUrlRef.current) {
-          URL.revokeObjectURL(activeBlobUrlRef.current);
-          activeBlobUrlRef.current = null;
-        }
-
-        if (res?.isBlob) {
-          activeBlobUrlRef.current = res.url;
-          setActiveImageSrc(res.url);
-        } else if (res?.url) {
-          setActiveImageSrc(res.url);
-        } else {
-          setActiveImageSrc(imageSrc);
-        }
-        setIsLoadingSource(false);
-      })
-      .catch((err) => {
-        console.error('Failed to resolve CORS safe image:', err);
-        if (isCancelled) return;
-        setActiveImageSrc(imageSrc);
-        setLoadError('Image could not be optimized for canvas. Attempting direct load.');
-        setIsLoadingSource(false);
-      });
 
     return () => {
-      isCancelled = true;
-      if (activeBlobUrlRef.current) {
-        URL.revokeObjectURL(activeBlobUrlRef.current);
-        activeBlobUrlRef.current = null;
+      if (cachedBlobRef.current) {
+        URL.revokeObjectURL(cachedBlobRef.current);
+        cachedBlobRef.current = null;
       }
     };
-  }, [isOpen, imageSrc]);
+  }, [isOpen, imageSrc, initialAspectRatio]);
 
-  // Adjust crop dimensions when aspect ratio preset changes
+  // Adjust crop dimensions when aspect ratio changes
   useEffect(() => {
     if (!containerRef.current || aspectRatio === 'free') return;
 
@@ -184,9 +128,23 @@ export default function ImageCropperModal({
     });
   }, [aspectRatio]);
 
+  // Quick Action: Fit to full 100% frame
+  const handleFitFull = () => {
+    setAspectRatio('free');
+    setCrop({ x: 2, y: 2, width: 96, height: 96 });
+  };
+
+  // Quick Action: Center crop
+  const handleCenterCrop = () => {
+    setCrop((prev) => {
+      const newX = (100 - prev.width) / 2;
+      const newY = (100 - prev.height) / 2;
+      return { ...prev, x: newX, y: newY };
+    });
+  };
+
   // Pointer & Touch handlers for moving/resizing the crop box
   const handlePointerDown = (e, type) => {
-    // Avoid calling preventDefault on touchstart to prevent passive event listener warning
     if (e.cancelable && e.type !== 'touchstart') {
       e.preventDefault();
     }
@@ -227,7 +185,7 @@ export default function ImageCropperModal({
         return { x, y, width, height };
       }
 
-      // Resizing logic
+      // Corner & Edge resizing
       if (type.includes('e')) {
         width = Math.max(15, Math.min(100 - x, startCrop.width + deltaXPercent));
       }
@@ -249,7 +207,7 @@ export default function ImageCropperModal({
         }
       }
 
-      // Enforce aspect ratio constraint if fixed
+      // Constrain aspect ratio if active
       if (aspectRatio !== 'free') {
         const targetRatio = aspectRatio === '1:1' ? 1 : aspectRatio === '4:3' ? 4 / 3 : 16 / 9;
         height = width / targetRatio;
@@ -272,6 +230,13 @@ export default function ImageCropperModal({
     dragActionRef.current = null;
   }, []);
 
+  // Desktop Mouse Wheel Zoom handler
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY * -0.002;
+    setZoom((prev) => Math.min(3, Math.max(0.6, parseFloat((prev + delta).toFixed(2)))));
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     const moveListener = (e) => handlePointerMove(e);
@@ -290,7 +255,7 @@ export default function ImageCropperModal({
     };
   }, [isOpen, handlePointerMove, handlePointerUp]);
 
-  // Rotate handlers
+  // Orientation handlers
   const handleRotateCW = () => setRotation((prev) => (prev + 90) % 360);
   const handleRotateCCW = () => setRotation((prev) => (prev - 90 + 360) % 360);
   const handleReset = () => {
@@ -298,43 +263,45 @@ export default function ImageCropperModal({
     setFlipH(false);
     setFlipV(false);
     setZoom(1);
-    setAspectRatio('1:1');
+    setAspectRatio(initialAspectRatio);
     setCrop({ x: 10, y: 10, width: 80, height: 80 });
   };
 
   // Perform canvas crop, rotation, flip, and export
   const handleApplyAndSave = async () => {
-    if (!imageRef.current || !containerRef.current || !activeImageSrc) return;
+    if (!imageRef.current || !containerRef.current) return;
     setIsProcessing(true);
 
     try {
+      // Determine image source for canvas (prioritize cached blob, then fetch safe url)
+      let exportSource = cachedBlobRef.current || imageSrc;
+      if (!exportSource.startsWith('data:') && !exportSource.startsWith('blob:')) {
+        const safeRes = await getCanvasSafeUrl(imageSrc);
+        if (safeRes?.url) exportSource = safeRes.url;
+      }
+
       const img = new Image();
-      // Only set crossOrigin if not a local blob/data URL
-      if (!activeImageSrc.startsWith('blob:') && !activeImageSrc.startsWith('data:')) {
+      if (!exportSource.startsWith('blob:') && !exportSource.startsWith('data:')) {
         img.crossOrigin = 'anonymous';
       }
 
       await new Promise((resolve, reject) => {
         img.onload = resolve;
-        img.onerror = (e) => {
-          // If anonymous failed on direct URL, try without crossOrigin as last resort
-          if (img.crossOrigin) {
-            const fallbackImg = new Image();
-            fallbackImg.onload = () => {
-              img.width = fallbackImg.width;
-              img.height = fallbackImg.height;
-              resolve();
-            };
-            fallbackImg.onerror = reject;
-            fallbackImg.src = activeImageSrc;
-          } else {
-            reject(e);
-          }
+        img.onerror = () => {
+          // If anonymous failed, try direct load
+          const fallbackImg = new Image();
+          fallbackImg.onload = () => {
+            img.width = fallbackImg.width;
+            img.height = fallbackImg.height;
+            resolve();
+          };
+          fallbackImg.onerror = reject;
+          fallbackImg.src = exportSource;
         };
-        img.src = activeImageSrc;
+        img.src = exportSource;
       });
 
-      // Canvas 1: Rotate & Flip transformed full image
+      // Canvas 1: Rotate & Flip
       const transformCanvas = document.createElement('canvas');
       const is90or270 = rotation === 90 || rotation === 270;
       transformCanvas.width = is90or270 ? img.naturalHeight : img.naturalWidth;
@@ -353,7 +320,7 @@ export default function ImageCropperModal({
       const cropW = (crop.width / 100) * transformCanvas.width;
       const cropH = (crop.height / 100) * transformCanvas.height;
 
-      // Desired export dimensions (max 1600px for high clarity and fast load)
+      // Cap at 1600px for optimal speed and high crispness
       const maxDim = 1600;
       let targetW = cropW;
       let targetH = cropH;
@@ -379,14 +346,14 @@ export default function ImageCropperModal({
         0, 0, cropCanvas.width, cropCanvas.height
       );
 
-      // Export as Blob & Data URL
+      // Export as Blob & File
       cropCanvas.toBlob(
         (blob) => {
           if (!blob) {
             setIsProcessing(false);
             return;
           }
-          const fileName = `product-crop-${Date.now()}.jpg`;
+          const fileName = `crop-${Date.now()}.jpg`;
           const file = new File([blob], fileName, { type: 'image/jpeg' });
           const previewUrl = cropCanvas.toDataURL('image/jpeg', 0.92);
 
@@ -408,12 +375,12 @@ export default function ImageCropperModal({
   if (!isOpen || !imageSrc) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 dark:bg-black/85 backdrop-blur-md animate-fade-in select-none">
-      <div className="bg-white dark:bg-[#151518] border border-slate-200 dark:border-zinc-800 w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in select-none">
+      <div className="bg-white dark:bg-[#141417] border border-slate-200 dark:border-zinc-800 w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[96vh]">
         {/* Header */}
-        <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+        <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-zinc-900/40">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
               <Crop className="w-4 h-4" />
             </div>
             <div>
@@ -421,7 +388,7 @@ export default function ImageCropperModal({
                 {title}
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                Rotate, flip, zoom, and crop to showroom standard
+                Pinch, drag, rotate, and zoom for the cleanest frame
               </p>
             </div>
           </div>
@@ -434,60 +401,45 @@ export default function ImageCropperModal({
           </button>
         </div>
 
-        {/* Workspace: Image Preview & Crop Canvas */}
-        <div className="p-3 sm:p-5 flex-1 overflow-y-auto space-y-3 sm:space-y-4">
+        {/* Workspace: Image Preview & Interactive Crop Box */}
+        <div className="p-3 sm:p-4 flex-1 overflow-y-auto space-y-3">
           <div
             ref={containerRef}
-            className="relative w-full h-64 sm:h-84 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center select-none shadow-inner touch-none"
+            onWheel={handleWheel}
+            className="relative w-full h-64 sm:h-88 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center select-none shadow-inner touch-none cursor-crosshair"
             style={{ touchAction: 'none' }}
           >
-            {/* Loading state indicator */}
-            {isLoadingSource && (
-              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-xs text-white">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-2" />
-                <span className="text-xs font-semibold text-slate-200">Preparing image for edit...</span>
-              </div>
-            )}
-
-            {/* Error indicator banner if any */}
-            {loadError && !isLoadingSource && (
-              <div className="absolute top-2 left-2 right-2 z-20 px-3 py-1.5 rounded-xl bg-amber-500/90 text-white text-[11px] flex items-center gap-1.5 shadow-md">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>{loadError}</span>
-              </div>
-            )}
-
             {/* Visual background image with current rotation & flip transforms */}
             <div
-              className="relative w-full h-full flex items-center justify-center transition-transform duration-200"
+              className="relative w-full h-full flex items-center justify-center transition-transform duration-150"
               style={{
                 transform: `scale(${zoom})`,
               }}
             >
-              {activeImageSrc && (
-                <img
-                  ref={imageRef}
-                  src={activeImageSrc}
-                  alt="Product Crop Target"
-                  className="max-w-full max-h-full object-contain pointer-events-none transition-transform duration-200"
-                  style={{
-                    transform: `rotate(${rotation}deg) scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`,
-                  }}
-                />
-              )}
+              <img
+                ref={imageRef}
+                src={imageSrc}
+                alt="Crop Target"
+                className="max-w-full max-h-full object-contain pointer-events-none transition-transform duration-150"
+                style={{
+                  transform: `rotate(${rotation}deg) scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`,
+                }}
+              />
             </div>
 
             {/* Dark overlay backdrop around the crop area */}
             <div
               className="absolute inset-0 pointer-events-none"
               style={{
-                background: `radial-gradient(ellipse at ${crop.x + crop.width / 2}% ${crop.y + crop.height / 2}%, transparent 0%, rgba(0,0,0,0.65) 100%)`,
+                background: `radial-gradient(ellipse at ${crop.x + crop.width / 2}% ${crop.y + crop.height / 2}%, transparent 0%, rgba(0,0,0,0.68) 100%)`,
               }}
             />
 
             {/* Interactive Crop Boundary Box */}
             <div
-              className="absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] cursor-move touch-none select-none"
+              className={`absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.60)] cursor-move touch-none select-none ${
+                circularCrop ? 'rounded-full' : 'rounded-xs'
+              }`}
               style={{
                 left: `${crop.x}%`,
                 top: `${crop.y}%`,
@@ -498,74 +450,97 @@ export default function ImageCropperModal({
               onMouseDown={(e) => handlePointerDown(e, 'move')}
               onTouchStart={(e) => handlePointerDown(e, 'move')}
             >
-              {/* Rule-of-Thirds Grid Lines */}
-              <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-40">
-                <div className="border-r border-b border-white/60"></div>
-                <div className="border-r border-b border-white/60"></div>
-                <div className="border-b border-white/60"></div>
-                <div className="border-r border-b border-white/60"></div>
-                <div className="border-r border-b border-white/60"></div>
-                <div className="border-b border-white/60"></div>
-                <div className="border-r border-white/60"></div>
-                <div className="border-r border-white/60"></div>
-                <div></div>
-              </div>
+              {/* Circular Avatar Guide Line */}
+              {circularCrop ? (
+                <div className="absolute inset-0 rounded-full border border-dashed border-blue-400 pointer-events-none" />
+              ) : (
+                /* Rule-of-Thirds Grid Lines */
+                <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-40">
+                  <div className="border-r border-b border-white/60"></div>
+                  <div className="border-r border-b border-white/60"></div>
+                  <div className="border-b border-white/60"></div>
+                  <div className="border-r border-b border-white/60"></div>
+                  <div className="border-r border-b border-white/60"></div>
+                  <div className="border-b border-white/60"></div>
+                  <div className="border-r border-b border-white/60"></div>
+                  <div className="border-r border-b border-white/60"></div>
+                  <div></div>
+                </div>
+              )}
 
-              {/* Corner Handles for Resizing (with touchAction: none and mobile touch size) */}
+              {/* Corner Handles (Large 24px Touch Zones with Blue Core) */}
               <div
                 onMouseDown={(e) => handlePointerDown(e, 'nw')}
                 onTouchStart={(e) => handlePointerDown(e, 'nw')}
                 style={{ touchAction: 'none' }}
-                className="absolute -top-2 -left-2 w-4 h-4 bg-blue-600 border-2 border-white rounded-full cursor-nwse-resize shadow-md touch-none"
-              />
+                className="absolute -top-3 -left-3 w-6 h-6 flex items-center justify-center cursor-nwse-resize touch-none"
+              >
+                <span className="w-3.5 h-3.5 bg-blue-600 border-2 border-white rounded-full shadow-md" />
+              </div>
+
               <div
                 onMouseDown={(e) => handlePointerDown(e, 'ne')}
                 onTouchStart={(e) => handlePointerDown(e, 'ne')}
                 style={{ touchAction: 'none' }}
-                className="absolute -top-2 -right-2 w-4 h-4 bg-blue-600 border-2 border-white rounded-full cursor-nesw-resize shadow-md touch-none"
-              />
+                className="absolute -top-3 -right-3 w-6 h-6 flex items-center justify-center cursor-nesw-resize touch-none"
+              >
+                <span className="w-3.5 h-3.5 bg-blue-600 border-2 border-white rounded-full shadow-md" />
+              </div>
+
               <div
                 onMouseDown={(e) => handlePointerDown(e, 'sw')}
                 onTouchStart={(e) => handlePointerDown(e, 'sw')}
                 style={{ touchAction: 'none' }}
-                className="absolute -bottom-2 -left-2 w-4 h-4 bg-blue-600 border-2 border-white rounded-full cursor-nesw-resize shadow-md touch-none"
-              />
+                className="absolute -bottom-3 -left-3 w-6 h-6 flex items-center justify-center cursor-nesw-resize touch-none"
+              >
+                <span className="w-3.5 h-3.5 bg-blue-600 border-2 border-white rounded-full shadow-md" />
+              </div>
+
               <div
                 onMouseDown={(e) => handlePointerDown(e, 'se')}
                 onTouchStart={(e) => handlePointerDown(e, 'se')}
                 style={{ touchAction: 'none' }}
-                className="absolute -bottom-2 -right-2 w-4 h-4 bg-blue-600 border-2 border-white rounded-full cursor-nwse-resize shadow-md touch-none"
-              />
+                className="absolute -bottom-3 -right-3 w-6 h-6 flex items-center justify-center cursor-nwse-resize touch-none"
+              >
+                <span className="w-3.5 h-3.5 bg-blue-600 border-2 border-white rounded-full shadow-md" />
+              </div>
+
+              {/* Center Grab Icon */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                <Move className="w-6 h-6 text-white" />
+              </div>
             </div>
           </div>
 
-          {/* Controls: Rotate, Flip, Aspect Ratio, Zoom */}
-          <div className="space-y-2.5 bg-slate-50 dark:bg-zinc-900/60 p-3 rounded-2xl border border-slate-200/80 dark:border-zinc-800">
-            {/* Row 1: Rotation & Flip buttons */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1">
+          {/* Quick Controls Toolbar */}
+          <div className="space-y-2.5 bg-slate-50 dark:bg-zinc-900/60 p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-zinc-800">
+            {/* Row 1: Rotation, Flip, Fit & Center buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
                 <button
                   type="button"
                   onClick={handleRotateCCW}
-                  className="p-2 rounded-xl text-slate-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Rotate 90° Counter-Clockwise"
+                  className="p-1.5 sm:p-2 rounded-xl text-slate-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Rotate -90°"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Rotate -90°</span>
+                  <span className="text-[11px]">-90°</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={handleRotateCW}
-                  className="p-2 rounded-xl text-slate-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Rotate 90° Clockwise"
+                  className="p-1.5 sm:p-2 rounded-xl text-slate-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-700 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Rotate +90°"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Rotate +90°</span>
+                  <span className="text-[11px]">+90°</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setFlipH(!flipH)}
-                  className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`p-1.5 sm:p-2 rounded-xl border text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
                     flipH
                       ? 'bg-blue-600 text-white border-blue-600'
                       : 'bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 border-slate-200 dark:border-zinc-700'
@@ -573,12 +548,13 @@ export default function ImageCropperModal({
                   title="Flip Horizontally"
                 >
                   <FlipHorizontal className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Flip H</span>
+                  <span className="text-[11px]">Flip H</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setFlipV(!flipV)}
-                  className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`p-1.5 sm:p-2 rounded-xl border text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
                     flipV
                       ? 'bg-blue-600 text-white border-blue-600'
                       : 'bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 border-slate-200 dark:border-zinc-700'
@@ -586,38 +562,59 @@ export default function ImageCropperModal({
                   title="Flip Vertically"
                 >
                   <FlipVertical className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Flip V</span>
+                  <span className="text-[11px]">Flip V</span>
                 </button>
               </div>
 
-              {/* Reset button */}
-              <button
-                type="button"
-                onClick={handleReset}
-                className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                title="Reset all crop and orientation edits"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reset</span>
-              </button>
+              {/* Fit & Reset */}
+              <div className="flex items-center gap-1 sm:gap-1.5 ml-auto">
+                <button
+                  type="button"
+                  onClick={handleFitFull}
+                  className="px-2 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Fit whole image"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                  <span>Full</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCenterCrop}
+                  className="px-2 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Center crop box"
+                >
+                  <span>Center</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="px-2 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Reset edits"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+              </div>
             </div>
 
             {/* Row 2: Aspect Ratios & Zoom Slider */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pt-2 border-t border-slate-200/60 dark:border-zinc-800/60">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-slate-200/60 dark:border-zinc-800/60">
               {/* Aspect Ratio Pills */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 mr-0.5">Ratio:</span>
+              <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 mr-0.5 shrink-0">Ratio:</span>
                 {[
                   { id: '1:1', label: '1:1 Square' },
-                  { id: '4:3', label: '4:3 Standard' },
-                  { id: '16:9', label: '16:9 Wide' },
+                  { id: '4:3', label: '4:3' },
+                  { id: '16:9', label: '16:9' },
                   { id: 'free', label: 'Free' },
                 ].map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => setAspectRatio(item.id)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
                       aspectRatio === item.id
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'bg-white dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 hover:border-slate-300'
@@ -628,32 +625,46 @@ export default function ImageCropperModal({
                 ))}
               </div>
 
-              {/* Zoom Slider */}
-              <div className="flex items-center gap-2">
-                <ZoomOut className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              {/* Zoom Slider + Quick Buttons */}
+              <div className="flex items-center gap-1.5 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setZoom((prev) => Math.max(0.6, parseFloat((prev - 0.1).toFixed(1))))}
+                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-500 transition-colors"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
                 <input
                   type="range"
-                  min="0.8"
-                  max="2.5"
+                  min="0.6"
+                  max="3.0"
                   step="0.05"
                   value={zoom}
                   onChange={(e) => setZoom(parseFloat(e.target.value))}
                   className="w-24 sm:w-28 accent-blue-600 cursor-pointer"
-                  title="Zoom Image"
+                  title="Zoom (or use mouse scroll wheel)"
                 />
-                <ZoomIn className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="text-[10px] font-mono text-slate-500 w-8">{Math.round(zoom * 100)}%</span>
+                <button
+                  type="button"
+                  onClick={() => setZoom((prev) => Math.min(3.0, parseFloat((prev + 0.1).toFixed(1))))}
+                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-500 transition-colors"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[10px] font-mono text-slate-500 w-9 text-right">{Math.round(zoom * 100)}%</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-t border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
+        <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-t border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/50 flex items-center justify-between shrink-0">
           <span className="text-[11px] text-slate-400 dark:text-zinc-500 hidden sm:inline">
-            Drag frame corners to frame your product cleanly
+            Drag frame corners or edges to frame neatly
           </span>
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto w-full sm:w-auto justify-end">
             <button
               type="button"
               onClick={onClose}
@@ -668,7 +679,7 @@ export default function ImageCropperModal({
                 onClick={onSkip}
                 disabled={isProcessing}
                 className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-slate-800 dark:text-zinc-100 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                title="Upload original image without cropping"
+                title="Use original image without cropping"
               >
                 Skip Crop
               </button>
@@ -676,18 +687,13 @@ export default function ImageCropperModal({
             <button
               type="button"
               onClick={handleApplyAndSave}
-              disabled={isProcessing || isLoadingSource}
+              disabled={isProcessing}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : isLoadingSource ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Loading...</span>
+                  <span>Saving...</span>
                 </>
               ) : (
                 <>

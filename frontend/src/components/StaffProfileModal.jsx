@@ -2,10 +2,11 @@ import React, { useState, useRef } from 'react';
 import {
   X, User, Mail, Phone, Shield, Store, MapPin, CheckCircle2,
   Lock, Save, AlertCircle, Award, UserCheck, Sparkles, Check,
-  Camera, Upload, Loader2, Image as ImageIcon
+  Camera, Upload, Loader2, Image as ImageIcon, Crop
 } from 'lucide-react';
 import { staffService } from '../services/staffService';
 import { useAuth } from '../context/AuthContext';
+import ImageCropperModal from './ImageCropperModal';
 
 export default function StaffProfileModal({ isOpen, onClose, employee, shop, onProfileUpdated }) {
   const { user } = useAuth();
@@ -34,6 +35,11 @@ export default function StaffProfileModal({ isOpen, onClose, employee, shop, onP
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [cropperModal, setCropperModal] = useState({
+    isOpen: false,
+    imageSrc: '',
+    originalFile: null,
+  });
 
   if (!isOpen) return null;
 
@@ -48,20 +54,35 @@ export default function StaffProfileModal({ isOpen, onClose, employee, shop, onP
   const employeeCode = employee?.employee_code || `EMP-${String(user?.id || '01').padStart(2, '0')}`;
   const totalCompleted = employee?.total_requests_completed ?? 142;
 
-  // Handle immediate avatar photo upload
-  const handleAvatarFileChange = async (e) => {
+  // Handle photo selection & open ImageCropperModal
+  const handleAvatarFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate size (max 5MB)
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Please select a valid image file (PNG, JPG, WebP).');
+      return;
+    }
     if (file.size > 5 * 1024 * 1024) {
       setErrorMsg('Image size must be less than 5MB.');
       return;
     }
 
-    const localPreview = URL.createObjectURL(file);
-    setAvatarPreview(localPreview);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setCropperModal({
+        isOpen: true,
+        imageSrc: ev.target.result,
+        originalFile: file,
+      });
+    };
+    reader.readAsDataURL(file);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleSaveCroppedAvatar = async ({ blob, file, previewUrl }) => {
     setUploadingAvatar(true);
+    setAvatarPreview(previewUrl);
     setErrorMsg('');
     setSuccessMsg('');
 
@@ -76,10 +97,11 @@ export default function StaffProfileModal({ isOpen, onClose, employee, shop, onP
         }
       }
     } catch (err) {
-      setErrorMsg(err.response?.data?.message || 'Failed to upload profile picture. Please try another image.');
+      setErrorMsg(err.response?.data?.message || 'Failed to upload profile picture.');
       setAvatarPreview(null);
     } finally {
       setUploadingAvatar(false);
+      setCropperModal({ isOpen: false, imageSrc: '', originalFile: null });
     }
   };
 
@@ -213,16 +235,40 @@ export default function StaffProfileModal({ isOpen, onClose, employee, shop, onP
                   <span className="font-mono text-[11px] font-semibold text-slate-500 dark:text-zinc-400">ID: {employeeCode}</span>
                 </div>
 
-                {/* Direct quick button to change photo */}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingAvatar}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline pt-0.5 cursor-pointer"
-                >
-                  <Upload className="w-3 h-3" />
-                  <span>{uploadingAvatar ? 'Uploading Photo...' : 'Change Profile Picture'}</span>
-                </button>
+                {/* Direct quick button to change photo & crop existing */}
+                <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  >
+                    <Upload className="w-3 h-3" />
+                    <span>{uploadingAvatar ? 'Uploading...' : 'Change Photo'}</span>
+                  </button>
+
+                  {activeAvatarSrc && (
+                    <>
+                      <span className="text-slate-300 dark:text-zinc-700">·</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCropperModal({
+                            isOpen: true,
+                            imageSrc: activeAvatarSrc,
+                            originalFile: null,
+                          });
+                        }}
+                        disabled={uploadingAvatar}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer"
+                        title="Crop & reframe current profile photo"
+                      >
+                        <Crop className="w-3 h-3" />
+                        <span>Crop</span>
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -403,6 +449,17 @@ export default function StaffProfileModal({ isOpen, onClose, employee, shop, onP
           </form>
         </div>
       </div>
+
+      {/* Staff Avatar Image Cropper Modal */}
+      <ImageCropperModal
+        isOpen={cropperModal.isOpen}
+        imageSrc={cropperModal.imageSrc}
+        title="Crop Profile Picture"
+        initialAspectRatio="1:1"
+        circularCrop={true}
+        onClose={() => setCropperModal({ isOpen: false, imageSrc: '', originalFile: null })}
+        onSave={handleSaveCroppedAvatar}
+      />
     </div>
   );
 }
