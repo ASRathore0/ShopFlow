@@ -96,12 +96,18 @@ jobs:
           sshpass -e rsync -rlgoDzvc -i --delete \
             -e "ssh -p $SSH_PORT -o ConnectTimeout=15 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             --exclude='/.git/' \
-            --exclude='/.env' \
+            --exclude='/.env*' \
             --exclude='/node_modules/' \
             --exclude='/.github/' \
             --exclude='/frontend/' \
+            --exclude='/uploads/***' \
+            --exclude='/public/uploads/***' \
+            --exclude='/storage/app/***' \
             --exclude='/storage/logs/*' \
             --exclude='/storage/framework/sessions/*' \
+            --exclude='/storage/framework/cache/*' \
+            --exclude='/storage/framework/views/*' \
+            --exclude='/database/*.sqlite*' \
             backend/ $SSH_USER@$SSH_HOST:$REMOTE_DIR
 
       # ----------------------------------------------------
@@ -122,8 +128,13 @@ jobs:
             **/.git*/**
             **/node_modules/**
             **/frontend/**
+            **/.env*
+            **/uploads/**
+            **/public/uploads/**
+            **/storage/app/**
             **/storage/logs/*
             **/storage/framework/sessions/*
+            **/*.sqlite*
 
       # ----------------------------------------------------
       # STEP 5: RUN POST-DEPLOY MIGRATIONS & CACHE ON HOSTINGER
@@ -144,6 +155,10 @@ jobs:
               cp .env.production.example .env
               php artisan key:generate --force
             fi
+            # Ensure upload directories exist and have proper public read permissions (755)
+            mkdir -p public/uploads/products public/uploads/logos public/uploads/avatars
+            chmod -R 755 public/uploads
+            # Run non-destructive migrations only (never wipes or drops tables)
             php artisan migrate --force --no-interaction
             php artisan storage:link || true
             php artisan config:cache
