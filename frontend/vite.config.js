@@ -19,6 +19,11 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      external: ['onnxruntime-web/webgpu'],
+    },
+  },
   preview: {
     host: '0.0.0.0',
     port: 5173,

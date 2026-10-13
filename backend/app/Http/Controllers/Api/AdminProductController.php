@@ -263,7 +263,7 @@ class AdminProductController extends Controller
         if ($request->hasFile('images')) {
             $request->validate([
                 'images' => 'required|array',
-                'images.*' => 'image|mimes:jpeg,png,jpg,webp,gif|max:5120',
+                'images.*' => 'image|mimes:jpeg,png,jpg,webp,gif|max:10240',
             ]);
 
             $destinationPath = public_path('uploads/products');
@@ -290,7 +290,7 @@ class AdminProductController extends Controller
         }
 
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
+            'image' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:10240',
         ]);
 
         $file = $request->file('image');

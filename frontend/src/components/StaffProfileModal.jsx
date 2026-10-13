@@ -63,8 +63,8 @@ export default function StaffProfileModal({ isOpen, onClose, employee, shop, onP
       setErrorMsg('Please select a valid image file (PNG, JPG, WebP).');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setErrorMsg('Image size must be less than 5MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMsg('Image size must be less than 10MB.');
       return;
     }
 

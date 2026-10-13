@@ -17,8 +17,8 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import QRCodeModal from '../components/QRCodeModal';
 import LocationBreadcrumb from '../components/LocationBreadcrumb';
-import RequestStatusBadge from '../components/RequestStatusBadge';
 import ImageCropperModal from '../components/ImageCropperModal';
+import { removeImageBackground } from '../services/bgRemovalService';
 
 export default function AdminDashboard() {
   const { user, quickLoginAs, logout, switchShop } = useAuth();
@@ -108,6 +108,10 @@ export default function AdminDashboard() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [showLiveCameraModal, setShowLiveCameraModal] = useState(false);
   const [cameraFacing, setCameraFacing] = useState('environment'); // 'environment' or 'user'
+  const [isCapturingLive, setIsCapturingLive] = useState(false);
+  const [capturedCount, setCapturedCount] = useState(0);
+  const [cameraFlash, setCameraFlash] = useState(false);
+  const [removingBgIndex, setRemovingBgIndex] = useState(null);
   const liveVideoRef = React.useRef(null);
   const cameraStreamRef = React.useRef(null);
 
@@ -178,6 +182,7 @@ export default function AdminDashboard() {
     wifi_password: '',
     announcement: '',
     exchange_policy: '7 Days Instant Showroom Exchange',
+    auto_remove_bg: localStorage.getItem('shopflow_auto_remove_bg') === 'true',
     social_links: {
       instagram: '',
       facebook: '',
@@ -216,6 +221,9 @@ export default function AdminDashboard() {
       wifi_password: cps.wifi_password || '',
       announcement: cps.announcement || '',
       exchange_policy: cps.exchange_policy || '7 Days Instant Showroom Exchange',
+      auto_remove_bg: cps.auto_remove_bg !== undefined
+        ? Boolean(cps.auto_remove_bg)
+        : (localStorage.getItem('shopflow_auto_remove_bg') === 'true'),
       social_links: {
         instagram: sl.instagram || '',
         facebook: sl.facebook || '',
@@ -613,7 +621,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleFileUpload = async (e) => {
+  const handleFileUpload = async (e, skipCrop = false) => {
     const fileList = Array.from(e.target.files || []);
     if (fileList.length === 0) return;
 
@@ -623,31 +631,64 @@ export default function AdminDashboard() {
       return;
     }
 
-    const oversized = validFiles.some((f) => f.size > 5 * 1024 * 1024);
+    const oversized = validFiles.some((f) => f.size > 10 * 1024 * 1024);
     if (oversized) {
-      showToast('Each image file size must be less than 5MB.', 'error');
+      showToast('Each image file size must be less than 10MB.', 'error');
       return;
     }
 
-    // Single file selected or camera snap: open ImageCropperModal for crop & rotate!
-    if (validFiles.length === 1) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setCropperModal({
-          isOpen: true,
-          imageSrc: event.target.result,
-          targetIndex: null,
-          originalFile: validFiles[0],
-        });
+    // Single file selected from gallery: open ImageCropperModal for crop & rotate (unless skipCrop is requested)
+    if (validFiles.length === 1 && !skipCrop) {
+      const processSingleFile = async () => {
+        let fileToOpen = validFiles[0];
+        if (settingsForm.auto_remove_bg) {
+          showToast('AI auto-removing background...', 'info');
+          try {
+            const bgRes = await removeImageBackground(validFiles[0]);
+            if (bgRes.success && bgRes.file) {
+              fileToOpen = bgRes.file;
+            }
+          } catch (bgErr) {
+            console.warn('Auto BG removal failed on single upload:', bgErr);
+          }
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setCropperModal({
+            isOpen: true,
+            imageSrc: event.target.result,
+            targetIndex: null,
+            originalFile: fileToOpen,
+            type: 'product',
+            title: 'Crop & Rotate Product Image',
+            aspectRatio: '1:1',
+            circularCrop: false,
+          });
+        };
+        reader.readAsDataURL(fileToOpen);
       };
-      reader.readAsDataURL(validFiles[0]);
+      processSingleFile();
       if (e.target) e.target.value = '';
       return;
     }
 
     setIsUploadingImage(true);
     try {
-      const res = await adminService.uploadProductImages(validFiles);
+      let filesToUpload = validFiles;
+      if (settingsForm.auto_remove_bg) {
+        showToast(`AI auto-removing backgrounds for ${validFiles.length} photo(s)...`, 'info');
+        filesToUpload = await Promise.all(
+          validFiles.map(async (file) => {
+            try {
+              const bgRes = await removeImageBackground(file);
+              return (bgRes.success && bgRes.file) ? bgRes.file : file;
+            } catch (err) {
+              return file;
+            }
+          })
+        );
+      }
+      const res = await adminService.uploadProductImages(filesToUpload);
       const uploadedList = res.data || [];
       const newUrls = uploadedList.map((item) => item.url).filter(Boolean);
       if (newUrls.length > 0) {
@@ -659,11 +700,28 @@ export default function AdminDashboard() {
             images: nextImgs,
           };
         });
-        showToast(`${newUrls.length} photos uploaded! Use the Crop button on any image to adjust.`);
+        showToast(
+          settingsForm.auto_remove_bg
+            ? `${newUrls.length} photo(s) uploaded with background removed!`
+            : `${newUrls.length} photos uploaded! Use Crop or BG buttons to adjust.`
+        );
       }
     } catch (err) {
       console.error('Server upload failed, using local reader fallback:', err);
-      const readPromises = validFiles.map((file) => new Promise((resolve) => {
+      let filesToFallback = validFiles;
+      if (settingsForm.auto_remove_bg) {
+        filesToFallback = await Promise.all(
+          validFiles.map(async (file) => {
+            try {
+              const bgRes = await removeImageBackground(file);
+              return (bgRes.success && bgRes.file) ? bgRes.file : file;
+            } catch (err) {
+              return file;
+            }
+          })
+        );
+      }
+      const readPromises = filesToFallback.map((file) => new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (event) => resolve(event.target.result);
         reader.readAsDataURL(file);
@@ -677,7 +735,7 @@ export default function AdminDashboard() {
           images: nextImgs,
         };
       });
-      showToast(`${validFiles.length} photo(s) loaded from device.`);
+      showToast(`${filesToFallback.length} photo(s) loaded from device.`);
     } finally {
       setIsUploadingImage(false);
       if (e.target) e.target.value = '';
@@ -868,6 +926,65 @@ export default function AdminDashboard() {
     showToast('Cover photo updated.');
   };
 
+  // Toggle Auto Remove Background setting & persist immediately to localStorage
+  const toggleAutoRemoveBg = () => {
+    setSettingsForm((prev) => {
+      const nextVal = !prev.auto_remove_bg;
+      localStorage.setItem('shopflow_auto_remove_bg', String(nextVal));
+      showToast(`Auto background removal ${nextVal ? 'enabled' : 'disabled'}`);
+      return { ...prev, auto_remove_bg: nextVal };
+    });
+  };
+
+  // 1-Click Manual Background Removal on any product thumbnail
+  const handleManualRemoveBg = async (idx) => {
+    const currentImg = prodForm.images[idx];
+    if (!currentImg || removingBgIndex !== null) return;
+    setRemovingBgIndex(idx);
+    try {
+      showToast('Removing image background with AI...', 'info');
+      const res = await removeImageBackground(currentImg, {
+        fileName: `product-nobg-${Date.now()}.png`,
+      });
+      if (!res.success || !res.file) {
+        throw new Error(res.error || 'Failed to remove background');
+      }
+
+      // Try uploading clean cutout to server
+      try {
+        const uploadRes = await adminService.uploadProductImage(res.file);
+        const newUrl = uploadRes.data?.url || res.url;
+        setProdForm((prev) => {
+          const updated = [...(prev.images || [])];
+          updated[idx] = newUrl;
+          return {
+            ...prev,
+            images: updated,
+            image_url: idx === 0 ? newUrl : prev.image_url,
+          };
+        });
+        showToast('Background removed successfully!');
+      } catch (uploadErr) {
+        console.warn('Server upload failed, using local URL preview:', uploadErr);
+        setProdForm((prev) => {
+          const updated = [...(prev.images || [])];
+          updated[idx] = res.url;
+          return {
+            ...prev,
+            images: updated,
+            image_url: idx === 0 ? res.url : prev.image_url,
+          };
+        });
+        showToast('Background removed (local preview)!');
+      }
+    } catch (err) {
+      console.error('Manual BG removal error:', err);
+      showToast('Background removal failed: ' + (err.message || 'Error'), 'error');
+    } finally {
+      setRemovingBgIndex(null);
+    }
+  };
+
   // ==========================================
   // LIVE CAMERA PRODUCT PHOTO HANDLERS
   // ==========================================
@@ -875,6 +992,9 @@ export default function AdminDashboard() {
     try {
       setShowLiveCameraModal(true);
       setCameraFacing(facing);
+      setCapturedCount(0);
+      setIsCapturingLive(false);
+
       if (cameraStreamRef.current) {
         cameraStreamRef.current.getTracks().forEach((t) => t.stop());
         cameraStreamRef.current = null;
@@ -911,6 +1031,7 @@ export default function AdminDashboard() {
       cameraStreamRef.current = null;
     }
     setShowLiveCameraModal(false);
+    setIsCapturingLive(false);
   };
 
   const switchLiveCamera = () => {
@@ -919,19 +1040,95 @@ export default function AdminDashboard() {
   };
 
   const captureFromLiveCamera = () => {
-    if (!liveVideoRef.current) return;
+    if (!liveVideoRef.current || isCapturingLive) return;
     const video = liveVideoRef.current;
+    const vw = video.videoWidth || 640;
+    const vh = video.videoHeight || 480;
+
+    // 1:1 Square ratio to perfectly fit customer view product cards
+    const squareSize = Math.min(vw, vh);
+    const startX = Math.round((vw - squareSize) / 2);
+    const startY = Math.round((vh - squareSize) / 2);
+
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const outSize = Math.min(1400, squareSize);
+    canvas.width = outSize;
+    canvas.height = outSize;
+
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Draw the center square portion of the video frame
+    ctx.drawImage(
+      video,
+      startX, startY, squareSize, squareSize,
+      0, 0, outSize, outSize
+    );
+
+    // Trigger visual shutter flash
+    setCameraFlash(true);
+    setTimeout(() => setCameraFlash(false), 160);
+    setIsCapturingLive(true);
 
     canvas.toBlob(async (blob) => {
-      if (!blob) return;
-      const file = new File([blob], `product-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      stopLiveCamera();
-      await handleFileUpload({ target: { files: [file] } });
+      if (!blob) {
+        setIsCapturingLive(false);
+        return;
+      }
+      let fileToUpload = new File([blob], `product-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+      // Auto Background Removal if enabled by admin
+      if (settingsForm.auto_remove_bg) {
+        showToast('AI auto-removing background...', 'info');
+        try {
+          const bgRes = await removeImageBackground(blob, {
+            fileName: `product-photo-nobg-${Date.now()}.png`,
+          });
+          if (bgRes.success && bgRes.file) {
+            fileToUpload = bgRes.file;
+          }
+        } catch (bgErr) {
+          console.warn('Auto BG removal failed on camera snap:', bgErr);
+        }
+      }
+
+      try {
+        // Upload directly without asking for crop!
+        const res = await adminService.uploadProductImage(fileToUpload);
+        const uploadedUrl = res.data?.url;
+        if (uploadedUrl) {
+          setProdForm((prev) => {
+            const nextImgs = [...(prev.images || []), uploadedUrl];
+            return {
+              ...prev,
+              image_url: prev.image_url || uploadedUrl,
+              images: nextImgs,
+            };
+          });
+          setCapturedCount((prev) => prev + 1);
+          showToast(
+            settingsForm.auto_remove_bg
+              ? `Square photo added with background removed! (${(prodForm.images?.length || 0) + 1} total)`
+              : `Square photo added to product! (${(prodForm.images?.length || 0) + 1} total)`
+          );
+        }
+      } catch (err) {
+        console.error('Direct camera photo upload failed, saving local preview:', err);
+        const previewUrl = URL.createObjectURL(fileToUpload);
+        setProdForm((prev) => {
+          const nextImgs = [...(prev.images || []), previewUrl];
+          return {
+            ...prev,
+            image_url: prev.image_url || previewUrl,
+            images: nextImgs,
+          };
+        });
+        setCapturedCount((prev) => prev + 1);
+        showToast('Square photo added to product!');
+      } finally {
+        setIsCapturingLive(false);
+      }
     }, 'image/jpeg', 0.92);
   };
 
@@ -1240,8 +1437,8 @@ export default function AdminDashboard() {
       showToast('Please select a valid image file (PNG, JPG, WebP, SVG).', 'error');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('Logo file size must be less than 5MB.', 'error');
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Logo file size must be less than 10MB.', 'error');
       return;
     }
 
@@ -1293,9 +1490,12 @@ export default function AdminDashboard() {
           wifi_password: settingsForm.wifi_password,
           announcement: settingsForm.announcement,
           exchange_policy: settingsForm.exchange_policy,
+          auto_remove_bg: Boolean(settingsForm.auto_remove_bg),
           social_links: settingsForm.social_links,
         },
       };
+
+      localStorage.setItem('shopflow_auto_remove_bg', String(settingsForm.auto_remove_bg));
 
       const res = await adminService.updateShopSettings(payload);
       if (res && (res.status === 'success' || res.data)) {
@@ -3078,7 +3278,7 @@ export default function AdminDashboard() {
                           <span className="text-xs font-bold text-slate-700 dark:text-zinc-300">
                             {isUploadingLogo ? 'Uploading logo to server...' : 'Drag & drop or click to upload store logo'}
                           </span>
-                          <span className="text-[10px] text-slate-400">PNG, JPG, WebP, SVG up to 5MB</span>
+                          <span className="text-[10px] text-slate-400">PNG, JPG, WebP, SVG up to 10MB</span>
                         </div>
                       </div>
                     ) : (
@@ -3160,6 +3360,36 @@ export default function AdminDashboard() {
                   >
                     <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
                     <span>{settingsForm.is_open ? 'Open Now' : 'Closed'}</span>
+                  </button>
+                </div>
+
+                {/* AI Image Processing Toggle: Auto Remove Product Background */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-blue-500/10 border border-purple-200 dark:border-purple-900/50">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        Auto Remove Background for Product Photos
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-600 text-white">
+                        AI
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 max-w-xl">
+                      When enabled, product photos taken with the camera or uploaded from your device will automatically have their backgrounds removed. You can also manually remove backgrounds with 1-click on any image card anytime.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleAutoRemoveBg}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer ${
+                      settingsForm.auto_remove_bg
+                        ? 'bg-purple-600 text-white shadow-md shadow-purple-600/25 ring-2 ring-purple-400/40'
+                        : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-300 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${settingsForm.auto_remove_bg ? 'bg-white animate-pulse' : 'bg-slate-400'}`}></span>
+                    <span>{settingsForm.auto_remove_bg ? 'Auto BG: Enabled' : 'Auto BG: Disabled'}</span>
                   </button>
                 </div>
               </div>
@@ -3820,42 +4050,41 @@ export default function AdminDashboard() {
                 {imageUploadMode === 'upload' ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {/* Option 1: Direct Click Pic (Camera) */}
+                      {/* Option 1: Direct Click Pic (1:1 Camera) */}
                       <div className="relative rounded-2xl border-2 border-dashed border-blue-400/80 dark:border-blue-500/50 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-all p-3 sm:p-4 flex flex-col justify-between group">
-                        <label className="flex items-center sm:flex-col justify-start sm:justify-center gap-3 cursor-pointer text-left sm:text-center w-full active:scale-[0.98] transition-transform">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            onChange={handleFileUpload}
-                            disabled={isUploadingImage}
-                            className="hidden"
-                          />
+                        <button
+                          type="button"
+                          onClick={() => startLiveCamera('environment')}
+                          className="flex items-center sm:flex-col justify-start sm:justify-center gap-3 cursor-pointer text-left sm:text-center w-full active:scale-[0.98] transition-transform"
+                        >
                           <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-blue-500/30 group-hover:scale-105 transition-transform">
-                            {isUploadingImage ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+                            {isUploadingImage || isCapturingLive ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
                           </div>
                           <div>
                             <div className="text-xs font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 sm:justify-center">
                               <span>Click Pic</span>
                               <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
-                                Camera
+                                1:1 Square
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                              Snap live product photo
+                              Snap 1:1 photo without crop prompt
                             </div>
                           </div>
-                        </label>
-
-                        {/* Optional In-Browser Live Viewfinder button */}
-                        <button
-                          type="button"
-                          onClick={() => startLiveCamera('environment')}
-                          className="mt-2.5 pt-2 border-t border-blue-200/60 dark:border-blue-900/60 w-full text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>Open Live Viewfinder</span>
                         </button>
+
+                        <label className="mt-2.5 pt-2 border-t border-blue-200/60 dark:border-blue-900/60 w-full text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center justify-center gap-1 cursor-pointer transition-colors">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => handleFileUpload(e, true)}
+                            disabled={isUploadingImage}
+                            className="hidden"
+                          />
+                          <Sparkles className="w-3 h-3" />
+                          <span>Native Device Camera</span>
+                        </label>
                       </div>
 
                       {/* Option 2: Select Pics (Gallery / Files) */}
@@ -3893,7 +4122,7 @@ export default function AdminDashboard() {
 
                     {/* Helper status row */}
                     <div className="flex items-center justify-between px-1 text-[10px] text-slate-400 dark:text-zinc-500">
-                      <span>Max 5MB per image</span>
+                      <span>Max 10MB per image</span>
                       {isUploadingImage && (
                         <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1 animate-pulse">
                           <Loader2 className="w-3 h-3 animate-spin" />
@@ -3932,9 +4161,24 @@ export default function AdminDashboard() {
                 {/* Multiple Images Gallery Grid & Cover Photo Selector */}
                 {prodForm.images && prodForm.images.length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] text-slate-500 dark:text-zinc-400">
-                      <span className="font-semibold">Product Gallery ({prodForm.images.length})</span>
-                      <span className="text-[10px] text-slate-400 dark:text-zinc-500">First image is the showroom Cover Photo</span>
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-500 dark:text-zinc-400">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Product Gallery ({prodForm.images.length})</span>
+                        <button
+                          type="button"
+                          onClick={toggleAutoRemoveBg}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            settingsForm.auto_remove_bg
+                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-300 dark:border-purple-800'
+                              : 'bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700'
+                          }`}
+                          title="Toggle auto background removal for camera & uploads"
+                        >
+                          <Sparkles className="w-2.5 h-2.5 text-purple-500" />
+                          <span>Auto BG: {settingsForm.auto_remove_bg ? 'ON' : 'OFF'}</span>
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-slate-400 dark:text-zinc-500">First image is Cover • Tap BG on any photo to remove background</span>
                     </div>
 
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 p-2.5 bg-slate-50 dark:bg-zinc-900/80 rounded-2xl border border-slate-200 dark:border-zinc-800">
@@ -3994,6 +4238,10 @@ export default function AdminDashboard() {
                                   imageSrc: imgUrl,
                                   targetIndex: idx,
                                   originalFile: null,
+                                  type: 'product',
+                                  title: 'Crop & Rotate Product Image',
+                                  aspectRatio: '1:1',
+                                  circularCrop: false,
                                 });
                               }}
                               className="absolute bottom-1 left-1 bg-black/75 hover:bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm"
@@ -4003,10 +4251,29 @@ export default function AdminDashboard() {
                               <span>Crop</span>
                             </button>
 
-                            {/* Image sequence number */}
-                            <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1 py-0.2 rounded font-mono">
-                              #{idx + 1}
-                            </div>
+                            {/* 1-Click Manual Remove BG Button */}
+                            <button
+                              type="button"
+                              disabled={removingBgIndex === idx}
+                              onClick={() => handleManualRemoveBg(idx)}
+                              className="absolute bottom-1 right-1 bg-purple-600/90 hover:bg-purple-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity backdrop-blur-sm cursor-pointer shadow-sm disabled:opacity-60"
+                              title="Remove background with AI (1-click)"
+                            >
+                              {removingBgIndex === idx ? (
+                                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              ) : (
+                                <Sparkles className="w-2.5 h-2.5" />
+                              )}
+                              <span>{removingBgIndex === idx ? '...' : 'BG'}</span>
+                            </button>
+
+                            {/* Loading overlay during background removal */}
+                            {removingBgIndex === idx && (
+                              <div className="absolute inset-0 bg-purple-950/70 backdrop-blur-[1px] flex flex-col items-center justify-center text-white z-20">
+                                <Loader2 className="w-5 h-5 animate-spin text-purple-300" />
+                                <span className="text-[9px] font-bold mt-1 text-purple-200">Cutting BG...</span>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -4059,25 +4326,47 @@ export default function AdminDashboard() {
       {/* LIVE CAMERA CAPTURE MODAL */}
       {/* ======================================================== */}
       {showLiveCameraModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 bg-black/85 backdrop-blur-md animate-fade-in">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 bg-black/85 backdrop-blur-md animate-fade-in select-none">
           <div className="bg-slate-900 border border-zinc-700 w-full max-w-md rounded-3xl p-4 sm:p-5 shadow-2xl flex flex-col items-center gap-3">
             {/* Header */}
             <div className="flex items-center justify-between w-full pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Camera className="w-4 h-4 text-blue-400" />
-                <span>Product Live Viewfinder</span>
+                <span>1:1 Product Camera</span>
               </div>
-              <button
-                type="button"
-                onClick={stopLiveCamera}
-                className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {capturedCount > 0 && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-fade-in">
+                    {capturedCount} photo{capturedCount > 1 ? 's' : ''} added
+                  </span>
+                )}
+                {/* Auto BG live toggle badge inside camera */}
+                <button
+                  type="button"
+                  onClick={toggleAutoRemoveBg}
+                  className={`text-[10px] font-bold px-2 py-1 rounded-full border transition-all cursor-pointer flex items-center gap-1 ${
+                    settingsForm.auto_remove_bg
+                      ? 'bg-purple-600 border-purple-400 text-white shadow-sm'
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'
+                  }`}
+                  title="Toggle Auto Background Removal on camera snaps"
+                >
+                  <Sparkles className="w-2.5 h-2.5" />
+                  <span>Auto BG: {settingsForm.auto_remove_bg ? 'ON' : 'OFF'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={stopLiveCamera}
+                  className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+                  title="Close camera"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Live Video Viewport */}
-            <div className="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center shadow-inner">
+            {/* 1:1 Square Live Video Viewport (Matches Customer View Product Cards) */}
+            <div className="relative w-full aspect-square max-w-[340px] sm:max-w-[370px] bg-black rounded-3xl overflow-hidden border-2 border-zinc-700 flex items-center justify-center shadow-2xl mx-auto">
               <video
                 ref={(el) => {
                   liveVideoRef.current = el;
@@ -4092,22 +4381,42 @@ export default function AdminDashboard() {
                 className="w-full h-full object-cover"
               />
 
-              {/* Framing Guides */}
-              <div className="absolute inset-4 border border-dashed border-white/25 rounded-xl pointer-events-none" />
-              <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5">
+              {/* Shutter White Flash effect */}
+              {cameraFlash && (
+                <div className="absolute inset-0 bg-white/90 z-30 transition-opacity duration-150 pointer-events-none" />
+              )}
+
+              {/* Rule-of-Thirds Grid Lines */}
+              <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-25">
+                <div className="border-r border-b border-white"></div>
+                <div className="border-r border-b border-white"></div>
+                <div className="border-b border-white"></div>
+                <div className="border-r border-b border-white"></div>
+                <div className="border-r border-b border-white"></div>
+                <div className="border-b border-white"></div>
+                <div className="border-r border-b border-white"></div>
+                <div className="border-r border-b border-white"></div>
+                <div></div>
+              </div>
+
+              {/* Viewfinder Outer Guide Frame */}
+              <div className="absolute inset-3.5 border border-dashed border-white/35 rounded-2xl pointer-events-none" />
+
+              {/* Badges */}
+              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 bg-black/65 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full border border-white/10">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                <span>LIVE</span>
+                <span>1:1 Customer Card Fit</span>
               </div>
             </div>
 
             {/* Controls */}
-            <div className="flex items-center justify-between w-full px-4 pt-1">
+            <div className="flex items-center justify-between w-full px-2 pt-1">
               {/* Switch Front/Rear Camera */}
               <button
                 type="button"
                 onClick={switchLiveCamera}
-                className="p-2.5 sm:p-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer flex flex-col items-center gap-1 text-[10px] font-bold"
-                title="Switch camera"
+                className="px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer flex flex-col items-center gap-1 text-[10px] font-bold active:scale-95"
+                title="Switch front/rear camera"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>Flip</span>
@@ -4117,27 +4426,33 @@ export default function AdminDashboard() {
               <button
                 type="button"
                 onClick={captureFromLiveCamera}
-                className="relative w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl cursor-pointer"
-                title="Click Picture"
+                disabled={isCapturingLive}
+                className="relative w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl cursor-pointer disabled:opacity-60"
+                title="Click Picture (Direct 1:1 Snap)"
               >
-                <div className="w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white">
-                  <Camera className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white shadow-md shadow-blue-500/40">
+                  {isCapturingLive ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : (
+                    <Camera className="w-6 h-6" />
+                  )}
                 </div>
               </button>
 
-              {/* Cancel */}
+              {/* Done / Finished Button */}
               <button
                 type="button"
                 onClick={stopLiveCamera}
-                className="p-2.5 sm:p-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer flex flex-col items-center gap-1 text-[10px] font-bold"
+                className="px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all cursor-pointer flex flex-col items-center gap-1 text-[10px] font-bold shadow-md shadow-emerald-600/30 active:scale-95"
+                title="Done taking photos"
               >
-                <X className="w-4 h-4" />
-                <span>Cancel</span>
+                <Check className="w-4 h-4" />
+                <span>Done</span>
               </button>
             </div>
 
             <p className="text-[10px] text-zinc-400 text-center">
-              Point camera at product and click the shutter button to save photo.
+              Frames in exact 1:1 square ratio. Snaps directly without crop popup — take multiple photos, then tap Done.
             </p>
           </div>
         </div>

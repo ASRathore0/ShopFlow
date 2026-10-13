@@ -397,7 +397,7 @@ class StaffController extends Controller
     public function uploadAvatar(Request $request)
     {
         $request->validate([
-            'avatar' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:5120',
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:10240',
         ]);
 
         $user = $request->user();

@@ -67,7 +67,7 @@ class AdminShopController extends Controller
         $shop = Shop::findOrFail($shopId);
 
         $request->validate([
-            'logo' => 'required|image|mimes:jpeg,png,jpg,webp,gif,svg|max:5120',
+            'logo' => 'required|image|mimes:jpeg,png,jpg,webp,gif,svg|max:10240',
         ]);
 
         $file = $request->file('logo');
