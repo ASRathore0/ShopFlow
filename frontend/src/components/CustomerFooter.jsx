@@ -5,12 +5,14 @@ import {
   Globe, HelpCircle, Layers, Tag, ChevronRight, Award, Truck,
   CheckCircle2, Copy, Navigation, Smartphone, ArrowRight, Shield
 } from 'lucide-react';
+import { getThemeConfig } from '../utils/storefrontThemes';
 
 export default function CustomerFooter({ shop, categories = [], onSelectCategory, customerCode, onTrackClick }) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedWifi, setCopiedWifi] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
 
+  const themeConfig = getThemeConfig(shop);
   const portalSettings = shop?.customer_portal_settings || {};
   const socialLinks = portalSettings.social_links || {};
 
@@ -74,7 +76,10 @@ export default function CustomerFooter({ shop, categories = [], onSelectCategory
                   />
                 </div>
               ) : (
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-700 flex items-center justify-center font-black text-white text-lg shadow-md shadow-blue-500/20 shrink-0">
+                <div
+                  className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${themeConfig.accentGradient} flex items-center justify-center font-black text-white text-lg shadow-md ${themeConfig.glowClass} shrink-0`}
+                  style={themeConfig.isCustom ? { backgroundColor: themeConfig.primaryColor } : {}}
+                >
                   {shop?.name ? shop.name.charAt(0).toUpperCase() : 'S'}
                 </div>
               )}
@@ -82,7 +87,10 @@ export default function CustomerFooter({ shop, categories = [], onSelectCategory
                 <h3 className="font-black text-base sm:text-lg text-slate-900 dark:text-white leading-tight truncate tracking-tight">
                   {shop?.name || 'Store Showroom'}
                 </h3>
-                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider block truncate">
+                <span
+                  className="text-[11px] font-bold uppercase tracking-wider block truncate"
+                  style={{ color: themeConfig.primaryColor }}
+                >
                   {tagline}
                 </span>
               </div>

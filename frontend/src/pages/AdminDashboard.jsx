@@ -10,7 +10,7 @@ import {
   Sun, Moon, Menu, X, ArrowLeft, LogOut, ExternalLink, ChevronRight, Edit3,
   Trash2, Check, UserCheck, AlertCircle, Eye, CornerDownRight, Tag, ChevronDown, Sparkles,
   UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera,
-  Star, Images, GripVertical, ArrowUpDown, Crop
+  Star, Images, GripVertical, ArrowUpDown, Crop, Palette
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,7 @@ import QRCodeModal from '../components/QRCodeModal';
 import LocationBreadcrumb from '../components/LocationBreadcrumb';
 import ImageCropperModal from '../components/ImageCropperModal';
 import { removeImageBackground } from '../services/bgRemovalService';
+import StorefrontThemeCustomizer from '../components/StorefrontThemeCustomizer';
 
 export default function AdminDashboard() {
   const { user, quickLoginAs, logout, switchShop } = useAuth();
@@ -176,6 +177,12 @@ export default function AdminDashboard() {
     landmark: '',
     opening_hours: '9:00 AM - 9:00 PM',
     brand_color: '#2563EB',
+    theme_preset: 'midnight_blue',
+    header_style: 'hero_banner',
+    card_style: 'modern',
+    hero_title: '',
+    hero_subtitle: '',
+    hero_banner_image: '',
     is_open: true,
     whatsapp_number: '',
     wifi_ssid: '',
@@ -195,6 +202,7 @@ export default function AdminDashboard() {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [logoInputMode, setLogoInputMode] = useState('upload'); // 'upload' or 'url'
+  const [settingsActiveTab, setSettingsActiveTab] = useState('theme'); // 'theme' | 'identity' | 'location' | 'contact'
 
   const populateSettingsForm = (s) => {
     if (!s) return;
@@ -214,7 +222,13 @@ export default function AdminDashboard() {
       postal_code: cps.postal_code || ad.postal_code || '',
       landmark: cps.landmark || ad.landmark || '',
       opening_hours: s.opening_hours || '9:00 AM - 9:00 PM',
-      brand_color: s.brand_color || '#2563EB',
+      brand_color: s.brand_color || cps.brand_color || '#2563EB',
+      theme_preset: cps.theme_preset || 'midnight_blue',
+      header_style: cps.header_style || 'hero_banner',
+      card_style: cps.card_style || 'modern',
+      hero_title: cps.hero_title || '',
+      hero_subtitle: cps.hero_subtitle || '',
+      hero_banner_image: cps.hero_banner_image || '',
       is_open: s.is_open !== false,
       whatsapp_number: cps.whatsapp_number || '',
       wifi_ssid: cps.wifi_ssid || '',
@@ -1492,6 +1506,12 @@ export default function AdminDashboard() {
           exchange_policy: settingsForm.exchange_policy,
           auto_remove_bg: Boolean(settingsForm.auto_remove_bg),
           social_links: settingsForm.social_links,
+          theme_preset: settingsForm.theme_preset || 'midnight_blue',
+          header_style: settingsForm.header_style || 'hero_banner',
+          card_style: settingsForm.card_style || 'modern',
+          hero_title: settingsForm.hero_title || '',
+          hero_subtitle: settingsForm.hero_subtitle || '',
+          hero_banner_image: settingsForm.hero_banner_image || '',
         },
       };
 
@@ -3166,8 +3186,78 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* SETTINGS SUB-TABS NAVIGATION */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              <button
+                type="button"
+                onClick={() => setSettingsActiveTab('theme')}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
+                  settingsActiveTab === 'theme'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/20'
+                    : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Palette className="w-4 h-4 text-amber-400" />
+                <span>Frontstore Theme & Simulator</span>
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-amber-400 text-slate-950">
+                  New
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsActiveTab('identity')}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
+                  settingsActiveTab === 'identity'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/20'
+                    : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Store className="w-4 h-4 text-blue-500" />
+                <span>Store Identity & Logo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsActiveTab('location')}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
+                  settingsActiveTab === 'location'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/20'
+                    : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <MapPin className="w-4 h-4 text-emerald-500" />
+                <span>Floor Location & Address</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsActiveTab('contact')}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
+                  settingsActiveTab === 'contact'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/20'
+                    : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Phone className="w-4 h-4 text-purple-500" />
+                <span>Contact, Socials & Wi-Fi</span>
+              </button>
+            </div>
+
             <form onSubmit={handleSaveStoreSettings} className="space-y-6">
+              {/* TAB 1: FRONTSTORE THEME & BRANDING STUDIO */}
+              {settingsActiveTab === 'theme' && (
+                <StorefrontThemeCustomizer
+                  settingsForm={settingsForm}
+                  setSettingsForm={setSettingsForm}
+                  shopSlug={currentShop.slug}
+                  isSaving={isSavingSettings}
+                  onSave={handleSaveStoreSettings}
+                />
+              )}
+
               {/* PANEL 1: BRAND IDENTITY & LOGO */}
+              {settingsActiveTab === 'identity' && (
               <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-5">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
                   <div className="flex items-center gap-2">
@@ -3393,8 +3483,10 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </div>
+              )}
 
               {/* PANEL 2: ADDRESS & SHOWROOM LOCATION */}
+              {settingsActiveTab === 'location' && (
               <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
                   <div className="flex items-center gap-2">
@@ -3471,9 +3563,12 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
+              )}
 
-              {/* PANEL 3: CONTACT & CUSTOMER DESK */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+              {/* PANELS 3, 4, 5: CONTACT & CUSTOMER DESK */}
+              {settingsActiveTab === 'contact' && (
+                <>
+                  <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
                   <div className="flex items-center gap-2">
                     <Phone className="w-4 h-4 text-purple-500" />
@@ -3729,6 +3824,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
+              </>
+              )}
 
               {/* BOTTOM FLOATING/STICKY SAVE ACTION */}
               <div className="pt-2 flex justify-end">
@@ -4252,7 +4349,7 @@ export default function AdminDashboard() {
                             </button>
 
                             {/* 1-Click Manual Remove BG Button */}
-                            <button
+                            {/* <button
                               type="button"
                               disabled={removingBgIndex === idx}
                               onClick={() => handleManualRemoveBg(idx)}
@@ -4265,7 +4362,7 @@ export default function AdminDashboard() {
                                 <Sparkles className="w-2.5 h-2.5" />
                               )}
                               <span>{removingBgIndex === idx ? '...' : 'BG'}</span>
-                            </button>
+                            </button> */}
 
                             {/* Loading overlay during background removal */}
                             {removingBgIndex === idx && (

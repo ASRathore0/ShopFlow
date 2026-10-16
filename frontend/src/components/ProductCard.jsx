@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Eye, CheckCircle2, AlertCircle, Layers, ChevronLeft, ChevronRight, Images } from 'lucide-react';
+import { getThemeConfig, hexToRgba } from '../utils/storefrontThemes';
 
 const getCleanImageUrl = (url) => {
   if (!url) return null;
@@ -18,6 +19,7 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
   // Resolve shop logo and branding for fallback
   const resolvedShopLogo = getCleanImageUrl(shopLogo || shop?.logo_url || product?.shop?.logo_url);
   const shopName = shop?.name || product?.shop?.name || product?.brand || 'Store';
+  const themeConfig = getThemeConfig(shop || product?.shop);
 
   // Extract all available product images
   const rawImages = (product.images && product.images.length > 0)
@@ -103,8 +105,15 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
     onSelect(product);
   };
 
+  const cardStyleClass =
+    themeConfig.cardStyle === 'elevated_luxe'
+      ? `rounded-3xl border border-slate-200 dark:border-zinc-700/80 shadow-md ring-1 ring-black/5 dark:ring-white/5 hover:shadow-2xl hover:-translate-y-1 ${themeConfig.cardBorderGlow}`
+      : themeConfig.cardStyle === 'glass'
+      ? `rounded-3xl border border-white/40 dark:border-zinc-700/60 bg-white/80 dark:bg-[#18181B]/80 backdrop-blur-md hover:shadow-xl ${themeConfig.cardBorderGlow}`
+      : `rounded-3xl border border-slate-200/90 dark:border-zinc-800 hover:shadow-xl ${themeConfig.cardBorderGlow}`;
+
   return (
-    <div className="bg-white dark:bg-[#18181B] border border-slate-200/90 dark:border-zinc-800 rounded-3xl overflow-hidden hover:border-blue-400 dark:hover:border-zinc-700 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-200 flex flex-col group shadow-sm">
+    <div className={`bg-white dark:bg-[#18181B] overflow-hidden transition-all duration-300 flex flex-col group ${cardStyleClass}`}>
       {/* Product Image Box */}
       <div
         onClick={handleCardClick}
@@ -140,7 +149,10 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
         ) : (
           /* Store Monogram Fallback if no logo uploaded */
           <div className="w-full h-full flex flex-col items-center justify-center p-3.5 bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/30 dark:from-zinc-900 dark:via-zinc-900/90 dark:to-zinc-850 select-none">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-black text-white text-xl sm:text-2xl shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300">
+            <div
+              className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr ${themeConfig.accentGradient} flex items-center justify-center font-black text-white text-xl sm:text-2xl shadow-md ${themeConfig.glowClass} group-hover:scale-105 transition-transform duration-300`}
+              style={themeConfig.isCustom ? { backgroundColor: themeConfig.primaryColor } : {}}
+            >
               {shopName.charAt(0).toUpperCase()}
             </div>
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 mt-2 tracking-wider truncate max-w-[85%]">
@@ -261,7 +273,10 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
             <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 leading-none">
               In-Store
             </span>
-            <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white tracking-tight">
+            <span
+              className="text-sm sm:text-base font-black tracking-tight"
+              style={{ color: themeConfig.primaryColor }}
+            >
               ₹{parseFloat(product.price).toFixed(2)}
             </span>
           </div>

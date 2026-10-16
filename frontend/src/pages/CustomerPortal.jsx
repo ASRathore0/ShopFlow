@@ -17,6 +17,7 @@ import RequestModal from '../components/RequestModal';
 import ReservationModal from '../components/ReservationModal';
 import RequestStatusBadge from '../components/RequestStatusBadge';
 import CustomerFooter from '../components/CustomerFooter';
+import { getThemeConfig, hexToRgba } from '../utils/storefrontThemes';
 
 export default function CustomerPortal() {
   const { shopSlug } = useParams();
@@ -97,6 +98,7 @@ export default function CustomerPortal() {
   };
 
   const portalSettings = shop?.customer_portal_settings || {};
+  const themeConfig = getThemeConfig(shop);
 
   const getCleanLogoUrl = (url) => {
     if (!url) return null;
@@ -112,10 +114,12 @@ export default function CustomerPortal() {
   const logoSrc = getCleanLogoUrl(shop?.logo_url);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#09090B] text-slate-900 dark:text-zinc-100 pb-24 sm:pb-12 selection:bg-blue-600 transition-colors">
-      {/* Optional Store Announcement Ribbon */}
+    <div className="min-h-screen bg-slate-50 dark:bg-[#09090B] text-slate-900 dark:text-zinc-100 pb-24 sm:pb-12 transition-colors">
+      {/* Optional Store Announcement Ribbon with Themed Gradient */}
       {portalSettings.announcement && (
-        <div className="bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-700 text-white text-[11px] sm:text-xs py-2 px-4 text-center font-bold shadow-sm flex items-center justify-center gap-2">
+        <div
+          className={`bg-gradient-to-r ${themeConfig.announcementGradient} text-white text-[11px] sm:text-xs py-2 px-4 text-center font-bold shadow-sm flex items-center justify-center gap-2`}
+        >
           <Sparkles className="w-3.5 h-3.5 shrink-0 animate-pulse text-amber-300" />
           <span className="truncate">{portalSettings.announcement}</span>
         </div>
@@ -139,12 +143,18 @@ export default function CustomerPortal() {
                     }
                   }}
                 />
-                <div className="hidden w-full h-full bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl items-center justify-center text-white font-black text-sm">
+                <div
+                  className={`hidden w-full h-full bg-gradient-to-tr ${themeConfig.accentGradient} rounded-xl items-center justify-center text-white font-black text-sm`}
+                  style={themeConfig.isCustom ? { backgroundColor: themeConfig.primaryColor } : {}}
+                >
                   {shop?.name ? shop.name.charAt(0).toUpperCase() : 'S'}
                 </div>
               </div>
             ) : (
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-black text-sm sm:text-base shadow-md shadow-blue-500/20 shrink-0">
+              <div
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr ${themeConfig.accentGradient} text-white flex items-center justify-center font-black text-sm sm:text-base shadow-md ${themeConfig.glowClass} shrink-0`}
+                style={themeConfig.isCustom ? { backgroundColor: themeConfig.primaryColor } : {}}
+              >
                 {shop?.name ? shop.name.charAt(0).toUpperCase() : 'S'}
               </div>
             )}
@@ -190,7 +200,7 @@ export default function CustomerPortal() {
 
             {/* Customer anonymous token badge */}
             <div className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700/80 text-[11px] font-mono font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1 shadow-inner">
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <ShieldCheck className="w-3.5 h-3.5" style={{ color: themeConfig.primaryColor }} />
               <span className="tracking-tight">{customerCode}</span>
             </div>
           </div>
@@ -202,27 +212,105 @@ export default function CustomerPortal() {
         {/* TAB 1: SHOWROOM CATALOG */}
         {activeTab === 'home' && (
           <>
-            {/* Showroom Status Card (Slim, Native & Modern) */}
-            <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl shadow-blue-500/15 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="w-4 h-4 text-white" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs sm:text-sm font-black tracking-tight leading-snug truncate">
-                    Showroom Assistant Active
+            {/* DYNAMIC SHOWROOM ENTRANCE (CINEMATIC HERO, GLASS, OR BOUTIQUE) */}
+            {themeConfig.headerStyle === 'hero_banner' ? (
+              <div className={`relative p-5 sm:p-7 rounded-3xl overflow-hidden text-white shadow-xl ${themeConfig.glowClass} border border-white/10 transition-all`}>
+                {themeConfig.heroBannerImage ? (
+                  <div
+                    className="absolute inset-0 bg-cover bg-center transition-transform duration-700"
+                    style={{ backgroundImage: `url(${themeConfig.heroBannerImage})` }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/80 to-slate-900/60 backdrop-blur-[2px]" />
                   </div>
-                  <p className="text-[11px] sm:text-xs text-blue-100 truncate">
-                    Tap <strong className="text-white font-bold">"Show Me"</strong> on any item for floor assistance
-                  </p>
+                ) : (
+                  <div className={`absolute inset-0 bg-gradient-to-r ${themeConfig.headerGradient}`} />
+                )}
+
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1.5 max-w-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md shadow-sm">
+                        <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
+                        <span>In-Store Concierge Active</span>
+                      </span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    </div>
+                    <h2 className="text-base sm:text-xl font-black tracking-tight leading-snug">
+                      {themeConfig.heroTitle || (shop?.name ? `${shop.name} Collection` : 'Showroom Assistant Active')}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-white/80 leading-relaxed">
+                      {themeConfig.heroSubtitle || 'Browse authentic showroom inventory below. Tap "Show Me" on any item to have our floor associate retrieve it for you.'}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2 shrink-0 pt-2 md:pt-0 border-t border-white/10 md:border-t-0">
+                    <span className="text-[11px] sm:text-xs font-bold px-3 py-1.5 rounded-2xl bg-white/15 backdrop-blur-md text-white border border-white/15 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-300" />
+                      <span>{shop?.opening_hours || 'Open Today'}</span>
+                    </span>
+                    {portalSettings.wifi_ssid && (
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-white/80 flex items-center gap-1">
+                        <Wifi className="w-3 h-3 text-emerald-300" />
+                        <span>Free Wi-Fi: {portalSettings.wifi_ssid}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="text-right flex-shrink-0">
-                <span className="text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full bg-white/20 text-white backdrop-blur-md whitespace-nowrap block">
+            ) : themeConfig.headerStyle === 'glassmorphism' ? (
+              <div
+                className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white/85 dark:bg-zinc-900/85 backdrop-blur-xl border flex items-center justify-between gap-3 shadow-lg transition-all"
+                style={{
+                  borderColor: hexToRgba(themeConfig.primaryColor, 0.35),
+                  boxShadow: `0 8px 30px ${hexToRgba(themeConfig.primaryColor, 0.12)}`,
+                }}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-md"
+                    style={{ backgroundColor: themeConfig.primaryColor }}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-black tracking-tight text-slate-900 dark:text-white truncate">
+                      {themeConfig.heroTitle || (shop?.name ? `${shop.name} Assistant` : 'Showroom Assistant Active')}
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 truncate">
+                      {themeConfig.heroSubtitle || 'Tap "Show Me" on any item for private associate assistance.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span
+                    className="text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full border whitespace-nowrap block"
+                    style={{
+                      backgroundColor: hexToRgba(themeConfig.primaryColor, 0.1),
+                      color: themeConfig.primaryColor,
+                      borderColor: hexToRgba(themeConfig.primaryColor, 0.25),
+                    }}
+                  >
+                    {shop?.opening_hours || 'Open Today'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between py-2 px-1 border-b border-slate-200 dark:border-zinc-800 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: themeConfig.primaryColor }} />
+                  <span className="font-extrabold text-slate-900 dark:text-white">
+                    {themeConfig.heroTitle || (shop?.name ? `${shop.name} Collection` : 'Live Showroom')}
+                  </span>
+                  <span className="text-slate-400 dark:text-zinc-500 hidden sm:inline">·</span>
+                  <span className="text-slate-500 dark:text-zinc-400 hidden sm:inline">
+                    {themeConfig.heroSubtitle || 'Floor staff on duty'}
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-zinc-400">
                   {shop?.opening_hours || 'Open Today'}
                 </span>
               </div>
-            </div>
+            )}
 
             {/* Fast Live Search Bar */}
             <SearchBar
@@ -240,7 +328,8 @@ export default function CustomerPortal() {
                 {selectedCategory && (
                   <button
                     onClick={() => setSelectedCategory(null)}
-                    className="text-blue-600 dark:text-blue-400 hover:underline text-[11px] font-semibold"
+                    style={{ color: themeConfig.primaryColor }}
+                    className="hover:underline text-[11px] font-semibold"
                   >
                     View All ({products.length})
                   </button>
@@ -250,10 +339,12 @@ export default function CustomerPortal() {
               <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 <button
                   onClick={() => setSelectedCategory(null)}
-                  className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm active:scale-95 ${selectedCategory === null
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/30'
+                  style={selectedCategory === null ? { backgroundColor: themeConfig.primaryColor } : {}}
+                  className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                    selectedCategory === null
+                      ? 'text-white shadow-md ring-2 ring-white/20'
                       : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
-                    }`}
+                  }`}
                 >
                   <Tag className="w-3.5 h-3.5" />
                   All Products
@@ -266,10 +357,12 @@ export default function CustomerPortal() {
                     <button
                       key={c.id}
                       onClick={() => setSelectedCategory(c.slug)}
-                      className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm active:scale-95 ${isSelected
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/30'
+                      style={isSelected ? { backgroundColor: themeConfig.primaryColor } : {}}
+                      className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                        isSelected
+                          ? 'text-white shadow-md ring-2 ring-white/20'
                           : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
+                      }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
                       {c.name}
@@ -281,9 +374,18 @@ export default function CustomerPortal() {
 
             {/* In-Session Active Requests Sticky Banner */}
             {activeRequests.length > 0 && (
-              <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-600/10 border border-blue-200 dark:border-blue-500/30 flex items-center justify-between shadow-sm transition-all animate-fade-in">
+              <div
+                className="p-3.5 rounded-2xl border flex items-center justify-between shadow-sm transition-all animate-fade-in"
+                style={{
+                  backgroundColor: hexToRgba(themeConfig.primaryColor, 0.08),
+                  borderColor: hexToRgba(themeConfig.primaryColor, 0.28),
+                }}
+              >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-600/30">
+                  <div
+                    className="relative w-8 h-8 rounded-xl text-white flex items-center justify-center flex-shrink-0 shadow-md"
+                    style={{ backgroundColor: themeConfig.primaryColor }}
+                  >
                     <HandHeart className="w-4 h-4" />
                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-zinc-900 animate-ping"></span>
                   </div>
@@ -298,7 +400,8 @@ export default function CustomerPortal() {
                 </div>
                 <button
                   onClick={() => setActiveTab('requests')}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-600/20 whitespace-nowrap ml-2"
+                  className="px-3.5 py-1.5 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md whitespace-nowrap ml-2"
+                  style={{ backgroundColor: themeConfig.primaryColor }}
                 >
                   Track Live
                 </button>
@@ -506,10 +609,12 @@ export default function CustomerPortal() {
         <div className="grid grid-cols-3 h-16 max-w-md mx-auto">
           <button
             onClick={() => setActiveTab('home')}
-            className={`flex flex-col items-center justify-center space-y-1 transition-all active:scale-95 ${activeTab === 'home'
-                ? 'text-blue-600 dark:text-blue-400 font-extrabold'
+            style={activeTab === 'home' ? { color: themeConfig.primaryColor } : {}}
+            className={`flex flex-col items-center justify-center space-y-1 transition-all active:scale-95 ${
+              activeTab === 'home'
+                ? 'font-extrabold'
                 : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
-              }`}
+            }`}
           >
             <Store className="w-5 h-5" />
             <span className="text-[10px] tracking-tight">Catalog</span>
@@ -517,15 +622,20 @@ export default function CustomerPortal() {
 
           <button
             onClick={() => setActiveTab('requests')}
-            className={`flex flex-col items-center justify-center space-y-1 transition-all relative active:scale-95 ${activeTab === 'requests'
-                ? 'text-blue-600 dark:text-blue-400 font-extrabold'
+            style={activeTab === 'requests' ? { color: themeConfig.primaryColor } : {}}
+            className={`flex flex-col items-center justify-center space-y-1 transition-all relative active:scale-95 ${
+              activeTab === 'requests'
+                ? 'font-extrabold'
                 : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
-              }`}
+            }`}
           >
             <HandHeart className="w-5 h-5" />
             <span className="text-[10px] tracking-tight">My Requests</span>
             {activeRequests.length > 0 && (
-              <span className="absolute top-2.5 right-6 px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[9px] font-bold shadow-sm shadow-blue-500/40">
+              <span
+                className="absolute top-2.5 right-6 px-1.5 py-0.2 rounded-full text-white text-[9px] font-bold shadow-sm"
+                style={{ backgroundColor: themeConfig.primaryColor }}
+              >
                 {activeRequests.length}
               </span>
             )}
@@ -533,10 +643,12 @@ export default function CustomerPortal() {
 
           <button
             onClick={() => setActiveTab('info')}
-            className={`flex flex-col items-center justify-center space-y-1 transition-all active:scale-95 ${activeTab === 'info'
-                ? 'text-blue-600 dark:text-blue-400 font-extrabold'
+            style={activeTab === 'info' ? { color: themeConfig.primaryColor } : {}}
+            className={`flex flex-col items-center justify-center space-y-1 transition-all active:scale-95 ${
+              activeTab === 'info'
+                ? 'font-extrabold'
                 : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
-              }`}
+            }`}
           >
             <ShieldCheck className="w-5 h-5" />
             <span className="text-[10px] tracking-tight">Store Info</span>

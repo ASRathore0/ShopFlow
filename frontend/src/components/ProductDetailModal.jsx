@@ -4,6 +4,7 @@ import {
   Tag, Info, Cpu, Layers, ChevronLeft, ChevronRight, Maximize2, Images
 } from 'lucide-react';
 import ImageLightboxModal from './ImageLightboxModal';
+import { getThemeConfig } from '../utils/storefrontThemes';
 
 const getCleanImageUrl = (url) => {
   if (!url) return null;
@@ -16,6 +17,8 @@ const getCleanImageUrl = (url) => {
 
 export default function ProductDetailModal({ product, onClose, onRequest, onReserve, shop, shopLogo }) {
   if (!product) return null;
+
+  const themeConfig = getThemeConfig(shop || product?.shop);
 
   const [selectedVariant, setSelectedVariant] = useState(
     product.variants && product.variants.length > 0 ? product.variants[0] : null
@@ -337,7 +340,10 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
 
                   {/* Price Display */}
                   <div className="mt-3 flex items-baseline gap-2">
-                    <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <span
+                      className="text-2xl sm:text-3xl font-black tracking-tight"
+                      style={{ color: themeConfig.primaryColor }}
+                    >
                       ₹{effectivePrice.toFixed(2)}
                     </span>
                     <span className="text-xs text-slate-400 dark:text-zinc-400 font-medium">In-Store Retail</span>
@@ -446,14 +452,15 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
                 onClick={() => onReserve(product, selectedVariant)}
                 className="px-4 py-3.5 rounded-2xl bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
               >
-                <Bookmark className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <Bookmark className="w-4 h-4" style={{ color: themeConfig.primaryColor }} />
                 <span>Reserve</span>
               </button>
             )}
 
             <button
               onClick={() => onRequest(product, selectedVariant)}
-              className="flex-1 py-3.5 px-6 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-bold text-sm tracking-wide transition-all shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 group"
+              className={`flex-1 py-3.5 px-6 rounded-2xl ${themeConfig.ctaGradient} active:scale-98 text-white font-bold text-sm tracking-wide transition-all shadow-lg ${themeConfig.glowClass} flex items-center justify-center gap-2 group`}
+              style={themeConfig.isCustom ? { backgroundColor: themeConfig.primaryColor } : {}}
             >
               <HandHeart className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
               <span>SHOW ME</span>
