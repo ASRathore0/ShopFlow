@@ -62,6 +62,22 @@ jobs:
           cp -r frontend/dist/* backend/public/
 
       # ----------------------------------------------------
+      # STEP 3B: RESOLVE HOSTINGER DEPLOY PATH
+      # (Defaults to domains/shopsflow.in/public_html/ for Hostinger multi-domain architecture)
+      # ----------------------------------------------------
+      - name: 🎯 Determine Target Directory on Hostinger
+        id: target_dir
+        run: |
+          RAW_PATH="${{ secrets.HOSTINGER_REMOTE_PATH }}"
+          if [ -z "$RAW_PATH" ] || [ "$RAW_PATH" = "public_html/" ] || [ "$RAW_PATH" = "public_html" ]; then
+            DEPLOY_PATH="domains/shopsflow.in/public_html/"
+          else
+            DEPLOY_PATH="${RAW_PATH%/}/"
+          fi
+          echo "Resolved Hostinger Target Path: $DEPLOY_PATH"
+          echo "deploy_path=$DEPLOY_PATH" >> $GITHUB_OUTPUT
+
+      # ----------------------------------------------------
       # STEP 4: DEPLOY TO HOSTINGER VIA RSYNC OVER SSH
       # (With auto-detection & fallback to FTPS if SSH port is blocked or times out)
       # ----------------------------------------------------
@@ -73,7 +89,7 @@ jobs:
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
           RAW_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
-          REMOTE_DIR: ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
+          REMOTE_DIR: ${{ steps.target_dir.outputs.deploy_path }}
         run: |
           # Sanitize port: Hostinger uses 65002. Port 22 is disabled on Hostinger.
           SSH_PORT="65002"
@@ -82,6 +98,7 @@ jobs:
           fi
 
           echo "Target Hostinger Server: $SSH_HOST:$SSH_PORT (User: $SSH_USER)"
+          echo "Target Directory: $REMOTE_DIR"
           sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
           export SSHPASS="$SSH_PASS"
 
@@ -121,7 +138,7 @@ jobs:
           server: ${{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
           username: ${{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
           password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
-          server-dir: ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
+          server-dir: ${{ steps.target_dir.outputs.deploy_path }}
           local-dir: ./backend/
           exclude: |
             **/.git*
@@ -150,7 +167,7 @@ jobs:
           port: 65002
           timeout: 25s
           script: |
-            cd ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
+            cd ${{ steps.target_dir.outputs.deploy_path }}
             echo "Deployment Target Working Directory: $(pwd)"
             if [ ! -f .env ]; then
               cp .env.production.example .env
@@ -169,3 +186,4 @@ jobs:
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+

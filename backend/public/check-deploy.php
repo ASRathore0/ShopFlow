@@ -9,7 +9,7 @@ echo json_encode([
     'current_script' => $_SERVER['SCRIPT_FILENAME'] ?? null,
     'current_dir' => __DIR__,
     'http_host' => $_SERVER['HTTP_HOST'] ?? null,
-    'deployed_commit' => '5969f06-diagnostic',
+    'deployed_commit' => 'feat-luxury-storefront-theme-v2',
     'files_in_current_dir' => is_dir(__DIR__) ? array_diff(scandir(__DIR__), ['.', '..']) : [],
     'files_in_parent_dir' => is_dir(dirname(__DIR__)) ? array_diff(scandir(dirname(__DIR__)), ['.', '..']) : [],
 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
