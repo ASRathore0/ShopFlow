@@ -151,6 +151,7 @@ jobs:
           timeout: 25s
           script: |
             cd ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
+            echo "Deployment Target Working Directory: $(pwd)"
             if [ ! -f .env ]; then
               cp .env.production.example .env
               php artisan key:generate --force
@@ -158,6 +159,8 @@ jobs:
             # Ensure upload directories exist and have proper public read permissions (755)
             mkdir -p public/uploads/products public/uploads/logos public/uploads/avatars
             chmod -R 755 public/uploads
+            # Purge previous route, view, and config caches to prevent stale bundles
+            php artisan optimize:clear
             # Run non-destructive migrations only (never wipes or drops tables)
             php artisan migrate --force --no-interaction
             php artisan storage:link || true
