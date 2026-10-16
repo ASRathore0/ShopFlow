@@ -5,16 +5,16 @@ on:
     inputs:
       command:
         description: 'Artisan Command to execute'
-        required: true
-        default: 'migrate:fresh --seed --force'
+        default: 'optimize:clear'
         type: choice
         options:
-          - 'migrate:fresh --seed --force'
-          - 'migrate --force'
-          - 'db:seed --force'
           - 'optimize:clear'
+          - 'migrate --force'
           - 'config:cache'
+          - 'route:cache'
+          - 'view:cache'
           - 'storage:link'
+          - 'cache:clear'
 
 jobs:
   run-artisan:
