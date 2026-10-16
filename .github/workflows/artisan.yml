@@ -30,5 +30,7 @@ jobs:
           port: ${{ secrets.HOSTINGER_SSH_PORT || 65002 }}
           script: |
             cd ${{ secrets.HOSTINGER_REMOTE_PATH || 'public_html/' }}
+            mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data storage/logs bootstrap/cache
+            chmod -R 775 storage bootstrap/cache
             echo "Running: php artisan ${{ github.event.inputs.command }}"
             php artisan ${{ github.event.inputs.command }}

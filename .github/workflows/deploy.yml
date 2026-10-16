@@ -156,7 +156,9 @@ jobs:
               cp .env.production.example .env
               php artisan key:generate --force
             fi
-            # Ensure upload directories exist and have proper public read permissions (755)
+            # Ensure upload directories and Laravel storage/cache directories exist with proper permissions
+            mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache/data storage/logs bootstrap/cache
+            chmod -R 775 storage bootstrap/cache
             mkdir -p public/uploads/products public/uploads/logos public/uploads/avatars
             chmod -R 755 public/uploads
             # Purge previous route, view, and config caches to prevent stale bundles
