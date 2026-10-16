@@ -56,26 +56,17 @@ jobs:
       # STEP 3: UNIFY FRONTEND ASSETS INTO LARAVEL PUBLIC
       # (This lets Hostinger serve both Frontend & API from 1 domain with 0 CORS issues)
       # ----------------------------------------------------
-      - name: 🔗 Copy Frontend Build to Laravel Public Directory
+      - name: 🔗 Prepare Frontend & Deployment Manifests
         run: |
           mkdir -p backend/public/dist
           cp -r frontend/dist/* backend/public/
-
-      # ----------------------------------------------------
-      # STEP 3B: RESOLVE HOSTINGER DEPLOY PATH
-      # (Defaults to domains/shopsflow.in/public_html/ for Hostinger multi-domain architecture)
-      # ----------------------------------------------------
-      - name: 🎯 Determine Target Directory on Hostinger
-        id: target_dir
-        run: |
-          RAW_PATH="${{ secrets.HOSTINGER_REMOTE_PATH }}"
-          if [ -z "$RAW_PATH" ] || [ "$RAW_PATH" = "public_html/" ] || [ "$RAW_PATH" = "public_html" ]; then
-            DEPLOY_PATH="domains/shopsflow.in/public_html/"
-          else
-            DEPLOY_PATH="${RAW_PATH%/}/"
-          fi
-          echo "Resolved Hostinger Target Path: $DEPLOY_PATH"
-          echo "deploy_path=$DEPLOY_PATH" >> $GITHUB_OUTPUT
+          # Force git-ftp to always upload newly compiled Vite frontend assets
+          echo "!public/index.html" > backend/.git-ftp-include
+          echo "!public/assets/**" >> backend/.git-ftp-include
+          echo "!public/favicon.svg" >> backend/.git-ftp-include
+          echo "!public/icons.svg" >> backend/.git-ftp-include
+          echo "!public/check-deploy.php" >> backend/.git-ftp-include
+          echo "!public/.htaccess" >> backend/.git-ftp-include
 
       # ----------------------------------------------------
       # STEP 4: DEPLOY TO HOSTINGER VIA RSYNC OVER SSH
@@ -89,7 +80,7 @@ jobs:
           SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
           SSH_USER: ${{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
           RAW_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
-          REMOTE_DIR: ${{ steps.target_dir.outputs.deploy_path }}
+          REMOTE_DIR: 'public_html/'
         run: |
           # Sanitize port: Hostinger uses 65002. Port 22 is disabled on Hostinger.
           SSH_PORT="65002"
@@ -138,7 +129,7 @@ jobs:
           server: ${{ secrets.HOSTINGER_SSH_HOST || '82.25.107.63' }}
           username: ${{ secrets.HOSTINGER_SSH_USER || 'u604295259' }}
           password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
-          server-dir: ${{ steps.target_dir.outputs.deploy_path }}
+          server-dir: public_html/
           local-dir: ./backend/
           exclude: |
             **/.git*
@@ -167,7 +158,7 @@ jobs:
           port: 65002
           timeout: 25s
           script: |
-            cd ${{ steps.target_dir.outputs.deploy_path }}
+            cd public_html/
             echo "Deployment Target Working Directory: $(pwd)"
             if [ ! -f .env ]; then
               cp .env.production.example .env
