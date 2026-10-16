@@ -174,6 +174,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard', [SuperAdminController::class, 'dashboard']);
         Route::get('/shops', [SuperAdminController::class, 'listShops']);
         Route::post('/shops', [SuperAdminController::class, 'createShop']);
+        Route::get('/shops/{id}', [SuperAdminController::class, 'showShop']);
+        Route::put('/shops/{id}', [SuperAdminController::class, 'updateShop']);
+        Route::put('/shops/{id}/plan', [SuperAdminController::class, 'updatePlan']);
+        Route::put('/shops/{id}/toggle-status', [SuperAdminController::class, 'toggleShopStatus']);
+        Route::delete('/shops/{id}', [SuperAdminController::class, 'deleteShop']);
+        Route::post('/shops/{id}/reset-owner-password', [SuperAdminController::class, 'resetOwnerPassword']);
         Route::get('/plans', [SuperAdminController::class, 'listPlans']);
         Route::get('/users', [SuperAdminController::class, 'listUsers']);
     });

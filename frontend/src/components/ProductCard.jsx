@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Eye, HandHeart, CheckCircle2, AlertCircle, Layers, ChevronLeft, ChevronRight, Images } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Eye, CheckCircle2, AlertCircle, Layers, ChevronLeft, ChevronRight, Images } from 'lucide-react';
 
 const getCleanImageUrl = (url) => {
   if (!url) return null;
@@ -29,17 +29,25 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
 
+  // Touch tracking for finger sliding on mobile
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const touchDeltaX = useRef(0);
+  const hasSwiped = useRef(false);
+
   const hasRealImage = validImages.length > 0 && !imageError;
   const hasMultipleImages = validImages.length > 1 && !imageError;
   const activeImageUrl = validImages[currentImgIndex] || validImages[0];
 
   const handlePrevImage = (e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
+    if (validImages.length <= 1) return;
     setCurrentImgIndex((prev) => (prev === 0 ? validImages.length - 1 : prev - 1));
   };
 
   const handleNextImage = (e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
+    if (validImages.length <= 1) return;
     setCurrentImgIndex((prev) => (prev === validImages.length - 1 ? 0 : prev + 1));
   };
 
@@ -48,19 +56,70 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
     setCurrentImgIndex(idx);
   };
 
+  const handleTouchStart = (e) => {
+    if (!hasMultipleImages) return;
+    const touch = e.touches[0];
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+    touchDeltaX.current = 0;
+    hasSwiped.current = false;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!hasMultipleImages || touchStartX.current === null) return;
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - touchStartX.current;
+    const deltaY = touch.clientY - touchStartY.current;
+
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      touchDeltaX.current = deltaX;
+      if (Math.abs(deltaX) > 10) {
+        hasSwiped.current = true;
+      }
+      if (e.cancelable && Math.abs(deltaX) > 10) {
+        e.preventDefault();
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!hasMultipleImages || touchStartX.current === null) return;
+    const swipeThreshold = 35;
+    if (touchDeltaX.current > swipeThreshold) {
+      handlePrevImage();
+    } else if (touchDeltaX.current < -swipeThreshold) {
+      handleNextImage();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+    touchDeltaX.current = 0;
+  };
+
+  const handleCardClick = () => {
+    if (hasSwiped.current) {
+      hasSwiped.current = false;
+      return;
+    }
+    onSelect(product);
+  };
+
   return (
     <div className="bg-white dark:bg-[#18181B] border border-slate-200/90 dark:border-zinc-800 rounded-3xl overflow-hidden hover:border-blue-400 dark:hover:border-zinc-700 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-200 flex flex-col group shadow-sm">
       {/* Product Image Box */}
       <div
-        onClick={() => onSelect(product)}
-        className="relative aspect-square bg-slate-100 dark:bg-zinc-900/80 overflow-hidden cursor-pointer"
+        onClick={handleCardClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="relative aspect-square bg-slate-100 dark:bg-zinc-900/80 overflow-hidden cursor-pointer select-none"
       >
         {hasRealImage ? (
           <img
             src={activeImageUrl}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none"
             loading="lazy"
+            draggable={false}
             onError={() => setImageError(true)}
           />
         ) : resolvedShopLogo ? (
@@ -70,7 +129,8 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
               <img
                 src={resolvedShopLogo}
                 alt={shopName}
-                className="max-w-full max-h-full object-contain"
+                className="max-w-full max-h-full object-contain pointer-events-none"
+                draggable={false}
               />
             </div>
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-zinc-500 mt-2 tracking-wider uppercase text-center truncate max-w-[85%]">
@@ -93,20 +153,24 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
         {hasMultipleImages && (
           <>
             {/* Prev Image Arrow */}
-            <button
+            {/* <button
+              type="button"
               onClick={handlePrevImage}
               title="Previous Photo"
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-black/40 hover:bg-black/75 text-white flex items-center justify-center backdrop-blur-md border border-white/15 transition-all opacity-0 group-hover:opacity-100 active:scale-90 shadow-sm"
             >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button> */}
 
             {/* Next Image Arrow */}
-            <button
+            {/* <button
+              type="button"
               onClick={handleNextImage}
               title="Next Photo"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-black/40 hover:bg-black/75 text-white flex items-center justify-center backdrop-blur-md border border-white/15 transition-all opacity-0 group-hover:opacity-100 active:scale-90 shadow-sm"
             >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button> */}
 
             {/* Multi-Image Counter Pill */}
             <div className="absolute bottom-2.5 left-2.5 z-10 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-black/60 text-white border border-white/10 backdrop-blur-md flex items-center gap-1 shadow-sm">
@@ -183,14 +247,14 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
 
           {/* Product Name */}
           <h3
-            onClick={() => onSelect(product)}
+            onClick={handleCardClick}
             className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 cursor-pointer leading-snug min-h-[2rem]"
           >
             {product.name}
           </h3>
         </div>
 
-        {/* Price & Action Section - Fully Non-Overlapping & Mobile-Friendly */}
+        {/* Price & Action Section */}
         <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
           {/* Price Row */}
           <div className="flex items-baseline justify-between">

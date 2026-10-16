@@ -156,6 +156,182 @@ class SuperAdminController extends Controller
         ]);
     }
 
+    public function showShop(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::with([
+            'subscription.plan',
+            'users' => function ($q) {
+                $q->wherePivot('role', 'shop_owner');
+            }
+        ])->withCount(['products', 'employees', 'customerRequests', 'categories', 'orders'])
+          ->findOrFail($id);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $shop,
+        ]);
+    }
+
+    public function updateShop(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'slug' => 'sometimes|required|string|max:255|unique:shops,slug,' . $shop->id,
+            'shop_type' => 'nullable|string|max:100',
+            'phone' => 'nullable|string|max:50',
+            'email' => 'nullable|email|max:255',
+            'address' => 'nullable|string|max:500',
+            'opening_hours' => 'nullable|string|max:100',
+            'brand_color' => 'nullable|string|max:30',
+            'is_active' => 'sometimes|boolean',
+            'is_open' => 'sometimes|boolean',
+            'announcement' => 'nullable|string|max:255',
+        ]);
+
+        if ($request->has('slug')) {
+            $validated['slug'] = Str::slug($validated['slug']);
+        }
+
+        if ($request->has('announcement')) {
+            $portalSettings = $shop->customer_portal_settings ?: [];
+            $portalSettings['announcement'] = $request->announcement;
+            $validated['customer_portal_settings'] = $portalSettings;
+            unset($validated['announcement']);
+        }
+
+        $shop->update($validated);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Shop updated successfully.',
+            'data' => $shop->fresh()->load('subscription.plan')->loadCount(['products', 'employees', 'customerRequests']),
+        ]);
+    }
+
+    public function updatePlan(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+
+        $request->validate([
+            'plan_id' => 'required|exists:plans,id',
+            'status' => 'nullable|string|in:active,trialing,past_due,cancelled',
+        ]);
+
+        $plan = Plan::findOrFail($request->plan_id);
+
+        if ($shop->subscription_id && $shop->subscription) {
+            $subscription = $shop->subscription;
+            $subscription->update([
+                'plan_id' => $plan->id,
+                'status' => $request->status ?: 'active',
+            ]);
+        } else {
+            $subscription = Subscription::create([
+                'plan_id' => $plan->id,
+                'status' => $request->status ?: 'active',
+                'starts_at' => now(),
+                'ends_at' => now()->addMonth(),
+            ]);
+            $shop->subscription_id = $subscription->id;
+            $shop->save();
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Shop subscription plan updated to {$plan->name}.",
+            'data' => $shop->fresh()->load('subscription.plan')->loadCount(['products', 'employees', 'customerRequests']),
+        ]);
+    }
+
+    public function toggleShopStatus(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+        $shop->is_active = !$shop->is_active;
+        $shop->save();
+
+        $statusStr = $shop->is_active ? 'activated' : 'suspended';
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Shop '{$shop->name}' has been {$statusStr}.",
+            'data' => $shop->fresh()->load('subscription.plan')->loadCount(['products', 'employees', 'customerRequests']),
+        ]);
+    }
+
+    public function deleteShop(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+        $shopName = $shop->name;
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($shop) {
+            // Null out any users whose active session points to this shop
+            User::where('current_shop_id', $shop->id)->update(['current_shop_id' => null]);
+
+            $subId = $shop->subscription_id;
+
+            // Delete the shop (cascades related products, locations, employees, etc.)
+            $shop->delete();
+
+            // Clean up subscription if orphaned
+            if ($subId) {
+                Subscription::where('id', $subId)->delete();
+            }
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Store '{$shopName}' and its associated records were permanently deleted.",
+        ]);
+    }
+
+    public function resetOwnerPassword(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+
+        $request->validate([
+            'password' => 'required|string|min:6',
+        ]);
+
+        // Find the owner user
+        $ownerUser = $shop->users()->wherePivot('role', 'shop_owner')->first();
+        if (!$ownerUser) {
+            $ownerUser = $shop->users()->first() ?? User::where('email', $shop->email)->first();
+        }
+
+        if (!$ownerUser) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No owner account found associated with this shop.',
+            ], 404);
+        }
+
+        $ownerUser->password = bcrypt($request->password);
+        $ownerUser->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Password for owner '{$ownerUser->name}' ({$ownerUser->email}) has been updated successfully.",
+            'data' => [
+                'user_id' => $ownerUser->id,
+                'email' => $ownerUser->email,
+            ],
+        ]);
+    }
+
     public function listUsers(Request $request)
     {
         $this->ensureSuperAdmin($request);

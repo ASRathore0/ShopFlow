@@ -4248,7 +4248,7 @@ export default function AdminDashboard() {
                               title="Crop & Rotate photo"
                             >
                               <Crop className="w-2.5 h-2.5" />
-                              <span>Crop</span>
+                              <span>Edit</span>
                             </button>
 
                             {/* 1-Click Manual Remove BG Button */}
