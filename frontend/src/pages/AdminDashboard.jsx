@@ -207,7 +207,7 @@ export default function AdminDashboard() {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [logoInputMode, setLogoInputMode] = useState('upload'); // 'upload' or 'url'
-  const [settingsActiveTab, setSettingsActiveTab] = useState('theme'); // 'theme' | 'identity' | 'location' | 'contact'
+  const [settingsActiveTab, setSettingsActiveTab] = useState('identity'); // 'identity' | 'location' | 'contact' | 'theme'
 
   const populateSettingsForm = (s) => {
     if (!s) return;
@@ -3549,7 +3549,7 @@ export default function AdminDashboard() {
                               title="Crop and reframe store logo"
                             >
                               <Crop className="w-3.5 h-3.5" />
-                              <span>Crop & Rotate</span>
+                              <span>Edit</span>
                             </button>
                             <span className="text-slate-300 dark:text-zinc-700">·</span>
                             <button

@@ -16,8 +16,9 @@ const getCleanImageUrl = (url) => {
   return `${backendBase}/${url.replace(/^\//, '')}`;
 };
 
-export default function CustomerRequestTracking() {
-  const { shopSlug, requestNumber } = useParams();
+export default function CustomerRequestTracking({ defaultShopSlug }) {
+  const { shopSlug: paramShopSlug, requestNumber } = useParams();
+  const shopSlug = paramShopSlug || defaultShopSlug;
   const { isDark, toggleTheme } = useTheme();
   const { user, isAuthenticated } = useAuth();
   const [request, setRequest] = useState(null);

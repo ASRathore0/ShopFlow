@@ -19,8 +19,9 @@ import RequestStatusBadge from '../components/RequestStatusBadge';
 import CustomerFooter from '../components/CustomerFooter';
 import { getThemeConfig, hexToRgba } from '../utils/storefrontThemes';
 
-export default function CustomerPortal() {
-  const { shopSlug } = useParams();
+export default function CustomerPortal({ defaultShopSlug }) {
+  const { shopSlug: paramShopSlug } = useParams();
+  const shopSlug = paramShopSlug || defaultShopSlug;
   const navigate = useNavigate();
   const { sessionToken, customerCode, activeRequests } = useCustomer();
   const { user, isAuthenticated } = useAuth();

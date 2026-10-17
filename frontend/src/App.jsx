@@ -11,8 +11,11 @@ import AdminDashboard from './pages/AdminDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import { getSubdomainSlug } from './utils/subdomain';
 
 export default function App() {
+  const subdomainShopSlug = getSubdomainSlug();
+
   return (
     <BrowserRouter>
       <ThemeProvider>
@@ -20,10 +23,18 @@ export default function App() {
           <CustomerProvider>
             <div className="min-h-screen w-full bg-slate-50 dark:bg-[#09090B] text-slate-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200 overflow-x-hidden">
             <Routes>
-              {/* Marketing Website */}
-              <Route path="/" element={<LandingPage />} />
+              {/* If accessed via subdomain (e.g. amits-wear.shopsflow.in), render that shop at root / */}
+              {subdomainShopSlug ? (
+                <>
+                  <Route path="/" element={<CustomerPortal defaultShopSlug={subdomainShopSlug} />} />
+                  <Route path="/request/:requestNumber" element={<CustomerRequestTracking defaultShopSlug={subdomainShopSlug} />} />
+                </>
+              ) : (
+                /* Marketing Website for main domain (shopsflow.in) */
+                <Route path="/" element={<LandingPage />} />
+              )}
 
-              {/* Customer Mobile Experiences */}
+              {/* Customer Mobile Experiences (always available via /shop/:shopSlug) */}
               <Route path="/shop/:shopSlug" element={<CustomerPortal />} />
               <Route path="/shop/:shopSlug/request/:requestNumber" element={<CustomerRequestTracking />} />
 
