@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ShieldCheck, Store, Users, DollarSign, TrendingUp, CheckCircle2,
   Plus, Search, ArrowRight, BarChart3, AlertCircle, Building, Layers,
-  ExternalLink, Filter, X, ArrowLeft, Sun, Moon, LogOut, Package, RefreshCw,
+  ExternalLink, Filter, X, Sun, Moon, LogOut, Package, RefreshCw,
   Edit3, Trash2, Zap, KeyRound, Power, Check, MoreVertical, Sparkles, AlertTriangle
 } from 'lucide-react';
 import { superAdminService } from '../services/superAdminService';
@@ -17,9 +17,14 @@ import DeleteShopModal from '../components/DeleteShopModal';
 import ResetOwnerPasswordModal from '../components/ResetOwnerPasswordModal';
 
 export default function SuperAdminDashboard() {
-  const { user, switchShop } = useAuth();
+  const { user, switchShop, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const [data, setData] = useState(null);
   const [shops, setShops] = useState([]);
@@ -122,13 +127,14 @@ export default function SuperAdminDashboard() {
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#0B0B0C]/90 backdrop-blur-xl border-b border-slate-200 dark:border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <Link
-              to="/"
-              className="p-1.5 rounded-xl text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-              title="Return to Marketing Landing Page"
+            <button
+              onClick={handleLogout}
+              className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors shrink-0"
+              title="Logout"
+              aria-label="Logout"
             >
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
+              <LogOut className="w-4 h-4" />
+            </button>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-4 h-4" />
             </div>
