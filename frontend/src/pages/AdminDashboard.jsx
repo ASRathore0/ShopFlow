@@ -88,6 +88,11 @@ export default function AdminDashboard() {
   });
   const [newImageUrl, setNewImageUrl] = useState('');
 
+  // Auto-generate description state inside product modal
+  const [autoDescFeedback, setAutoDescFeedback] = useState('');
+  const [previousDescription, setPreviousDescription] = useState('');
+  const [autoDescStyle, setAutoDescStyle] = useState('engaging'); // 'engaging' | 'bullets' | 'concise'
+
   // Category quick creation state inside product modal
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -1153,6 +1158,104 @@ export default function AdminDashboard() {
       }
     };
   }, []);
+
+  // Smart Auto-Description Generator based on Name, Brand, Category, Price & Shelf Location
+  const handleGenerateAutoDescription = (style = autoDescStyle) => {
+    const name = prodForm.name?.trim() || '';
+    const brand = prodForm.brand?.trim() || '';
+    const catObj = categories.find((c) => String(c.id) === String(prodForm.category_id));
+    const categoryName = catObj?.name || '';
+    const priceNum = parseFloat(prodForm.price);
+    const price = !isNaN(priceNum) && priceNum > 0 ? `₹${priceNum.toLocaleString('en-IN')}` : '';
+    const sku = prodForm.sku?.trim() || '';
+    const locObj = locations.find((l) => String(l.id) === String(prodForm.primary_location_id));
+    const locName = locObj ? `${locObj.label}${locObj.position ? ` (Pos ${locObj.position})` : ''}` : '';
+
+    if (!name && !brand) {
+      setAutoDescFeedback('Enter Name or Brand first');
+      setTimeout(() => setAutoDescFeedback(''), 2500);
+      return;
+    }
+
+    // Save previous description for 1-click Undo capability
+    if (prodForm.description && prodForm.description !== previousDescription) {
+      setPreviousDescription(prodForm.description);
+    }
+
+    const displayName = name || `${brand} Item`;
+    const brandPrefix = brand && !displayName.toLowerCase().includes(brand.toLowerCase()) ? `${brand} ` : '';
+    const fullProductName = `${brandPrefix}${displayName}`;
+
+    // Category-tailored tone and vocabulary
+    const catLower = categoryName.toLowerCase();
+    let qualityWord = 'authentic quality and premium craftsmanship';
+    let actionWord = 'daily workflows and modern lifestyle';
+
+    if (catLower.includes('phone') || catLower.includes('mobile') || catLower.includes('electronic') || catLower.includes('gadget') || catLower.includes('laptop')) {
+      qualityWord = 'cutting-edge technology and precision engineering';
+      actionWord = 'seamless performance, reliability, and high productivity';
+    } else if (catLower.includes('cloth') || catLower.includes('fashion') || catLower.includes('apparel') || catLower.includes('wear') || catLower.includes('shirt')) {
+      qualityWord = 'tailored comfort, premium breathable materials, and contemporary styling';
+      actionWord = 'effortless elegance, all-day comfort, and showroom appeal';
+    } else if (catLower.includes('footwear') || catLower.includes('shoe') || catLower.includes('sneaker')) {
+      qualityWord = 'ergonomic cushioning, durable grip, and trendsetting design';
+      actionWord = 'comfort in every step and enduring wear';
+    } else if (catLower.includes('grocer') || catLower.includes('food')) {
+      qualityWord = 'freshness, superior purity, and trusted brand sourcing';
+      actionWord = 'everyday household nourishment';
+    } else if (catLower.includes('furniture') || catLower.includes('decor') || catLower.includes('home')) {
+      qualityWord = 'sturdy construction, refined finish, and ergonomic aesthetics';
+      actionWord = 'elevating your modern home or showroom space';
+    }
+
+    let generated = '';
+    if (style === 'bullets') {
+      const bullets = [];
+      bullets.push(`• Product: ${fullProductName}`);
+      if (brand) bullets.push(`• Brand: ${brand}`);
+      if (categoryName) bullets.push(`• Category: ${categoryName}`);
+      if (sku) bullets.push(`• SKU: ${sku}`);
+      if (price) bullets.push(`• Retail Price: ${price} (All Inclusive)`);
+      if (locName) bullets.push(`• Showroom Location: Available at ${locName}`);
+      bullets.push(`• Key Highlights: Built with ${qualityWord} for ${actionWord}.`);
+      bullets.push(`• Showroom Availability: Genuine in-store piece ready for live trial and immediate pickup.`);
+      generated = bullets.join('\n');
+    } else if (style === 'concise') {
+      const parts = [];
+      parts.push(`Authentic ${fullProductName}`);
+      if (categoryName) parts.push(`in ${categoryName}`);
+      parts.push(`featuring ${qualityWord}.`);
+      if (locName) parts.push(`Available on showroom floor at ${locName}.`);
+      else parts.push(`Available for live in-store demo.`);
+      generated = parts.join(' ');
+    } else {
+      // Engaging showroom pitch (default)
+      const sentences = [];
+      if (categoryName) {
+        sentences.push(`The ${fullProductName} is a premier selection in our ${categoryName} collection, built with ${qualityWord}.`);
+      } else {
+        sentences.push(`The ${fullProductName} is engineered with ${qualityWord} to elevate your ${actionWord}.`);
+      }
+
+      sentences.push(`Features reliable performance, genuine brand warranty, and exceptional attention to detail.`);
+
+      if (locName && sku) {
+        sentences.push(`Ready for live customer demonstration on our showroom floor at ${locName} (SKU: ${sku}).`);
+      } else if (locName) {
+        sentences.push(`Ready for live customer demonstration on our showroom floor at ${locName}.`);
+      } else if (sku) {
+        sentences.push(`In-store unit ready for inspection (SKU: ${sku}). Ask our floor staff for a live trial.`);
+      } else {
+        sentences.push(`Available for immediate floor demonstration and customer inspection.`);
+      }
+      generated = sentences.join(' ');
+    }
+
+    setAutoDescStyle(style);
+    setProdForm((prev) => ({ ...prev, description: generated }));
+    setAutoDescFeedback('Description Generated!');
+    setTimeout(() => setAutoDescFeedback(''), 2500);
+  };
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
@@ -3143,107 +3246,198 @@ export default function AdminDashboard() {
         )}
 
         {/* ======================================================== */}
-        {/* SECTION 9: STORE SETTINGS & CUSTOMIZATION */}
+        {/* SECTION 9: STORE SETTINGS & BRAND EXPERIENCE STUDIO */}
         {/* ======================================================== */}
         {activeSection === 'settings' && (
-          <div className="space-y-6 animate-fade-in max-w-5xl">
-            {/* Page Header with Save CTA */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-zinc-800">
-              <div>
-                <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
-                  <Settings className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                  <span>Store Profile & Experience Settings</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  Customize your showroom logo, name, location details, customer contacts, social links, and Wi-Fi perks.
-                </p>
-              </div>
+          <div className="space-y-6 animate-fade-in max-w-6xl pb-12">
+            {/* EXECUTIVE STUDIO COMMAND BANNER */}
+            <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-slate-900 via-[#0B0F19] to-[#161B2E] border border-slate-800 shadow-2xl text-white">
+              {/* Decorative Ambient Lighting Gradients */}
+              <div className="absolute -top-24 -right-24 w-80 h-80 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-1/2 left-1/3 w-60 h-60 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
 
-              <div className="flex items-center gap-2">
-                <a
-                  href={`/shop/${currentShop.slug}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 font-bold text-xs flex items-center gap-1.5 transition-colors border border-slate-200 dark:border-zinc-700"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
-                  <span>Preview Customer View</span>
-                </a>
+              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="space-y-3 max-w-2xl">
+                  {/* Top Tier Badge & Status Beacon */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-white/10 text-blue-200 border border-white/15 backdrop-blur-md">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>ShopFlow Retail OS • Brand Studio</span>
+                    </span>
 
-                <button
-                  type="button"
-                  onClick={handleSaveStoreSettings}
-                  disabled={isSavingSettings}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs shadow-lg shadow-blue-600/25 flex items-center gap-2 transition-all disabled:opacity-50"
-                >
-                  {isSavingSettings ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  <span>{isSavingSettings ? 'Saving...' : 'Save Settings'}</span>
-                </button>
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold backdrop-blur-md border ${
+                      settingsForm.is_open
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${settingsForm.is_open ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                      <span>{settingsForm.is_open ? 'Showroom Online & Active' : 'Showroom Operating Private'}</span>
+                    </span>
+                  </div>
+
+                  {/* Main Title & Tagline */}
+                  <div>
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-display tracking-tight text-white">
+                      Store Experience & Visual Branding
+                    </h1>
+                    <p className="text-xs sm:text-sm text-slate-300/90 font-medium leading-relaxed mt-1.5">
+                      Orchestrate your customer-facing digital showroom. Tailor high-end color schemes, manage your verified logo vault, set in-store floor coordinates, and curate VIP guest perks.
+                    </p>
+                  </div>
+
+                  {/* Quick Metadata Capsule */}
+                  <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-300">
+                    <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl font-medium">
+                      <Store className="w-3.5 h-3.5 text-blue-400" />
+                      <span className="text-slate-400">Store:</span>
+                      <strong className="text-white font-bold">{settingsForm.name || currentShop.name}</strong>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl font-mono text-[11px]">
+                      <Globe className="w-3 h-3 text-indigo-400" />
+                      <span className="text-slate-400">Domain:</span>
+                      <span className="text-blue-300 font-semibold">{currentShop.slug}.shopsflow.in</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Header Action CTA Buttons */}
+                <div className="flex flex-row sm:flex-col lg:flex-row items-center gap-3 shrink-0">
+                  <a
+                    href={`/shop/${currentShop.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 sm:flex-none px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all border border-white/15 backdrop-blur-md shadow-lg shadow-black/20 group cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-blue-400 group-hover:rotate-45 transition-transform" />
+                    <span>Showroom</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveStoreSettings}
+                    disabled={isSavingSettings}
+                    className="flex-1 sm:flex-none px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-xl shadow-blue-600/30 border border-blue-400/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSavingSettings ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    <span>{isSavingSettings ? 'Publishing...' : 'Publish'}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* SETTINGS SUB-TABS NAVIGATION */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              <button
-                type="button"
-                onClick={() => setSettingsActiveTab('theme')}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
-                  settingsActiveTab === 'theme'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/20'
-                    : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <Palette className="w-4 h-4 text-amber-400" />
-                <span>Frontstore Theme & Simulator</span>
-                <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-amber-400 text-slate-950">
-                  New
-                </span>
-              </button>
-
+            {/* EXECUTIVE SEGMENTED STUDIO DOCK */}
+            <div className="p-1.5 rounded-2xl bg-slate-200/60 dark:bg-zinc-900/90 border border-slate-300/60 dark:border-zinc-800/80 backdrop-blur-xl shadow-sm flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              
               <button
                 type="button"
                 onClick={() => setSettingsActiveTab('identity')}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
+                className={`flex-1 min-w-[210px] p-2.5 rounded-xl text-left transition-all flex items-center gap-3 cursor-pointer ${
                   settingsActiveTab === 'identity'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/20'
-                    : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-md border border-slate-200/80 dark:border-zinc-700/80'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-zinc-800/40'
                 }`}
               >
-                <Store className="w-4 h-4 text-blue-500" />
-                <span>Store Identity & Logo</span>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform ${
+                  settingsActiveTab === 'identity'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 scale-105'
+                    : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                }`}>
+                  <Store className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-extrabold text-xs tracking-tight block truncate">Brand Identity & Logo</span>
+                  <span className="text-[10px] text-slate-500 dark:text-zinc-400 block truncate">
+                    Name, logo vault, bio & AI engine
+                  </span>
+                </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSettingsActiveTab('location')}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
+                className={`flex-1 min-w-[210px] p-2.5 rounded-xl text-left transition-all flex items-center gap-3 cursor-pointer ${
                   settingsActiveTab === 'location'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/20'
-                    : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-md border border-slate-200/80 dark:border-zinc-700/80'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-zinc-800/40'
                 }`}
               >
-                <MapPin className="w-4 h-4 text-emerald-500" />
-                <span>Floor Location & Address</span>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform ${
+                  settingsActiveTab === 'location'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-105'
+                    : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-extrabold text-xs tracking-tight block truncate">Floor Location & Routing</span>
+                  <span className="text-[10px] text-slate-500 dark:text-zinc-400 block truncate">
+                    Physical aisle, floor unit & landmark
+                  </span>
+                </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSettingsActiveTab('contact')}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
+                className={`flex-1 min-w-[210px] p-2.5 rounded-xl text-left transition-all flex items-center gap-3 cursor-pointer ${
                   settingsActiveTab === 'contact'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25 ring-2 ring-blue-600/20'
-                    : 'bg-white dark:bg-[#18181B] text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-zinc-800 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-md border border-slate-200/80 dark:border-zinc-700/80'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-zinc-800/40'
                 }`}
               >
-                <Phone className="w-4 h-4 text-purple-500" />
-                <span>Contact, Socials & Wi-Fi</span>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform ${
+                  settingsActiveTab === 'contact'
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/25 scale-105'
+                    : 'bg-purple-500/15 text-purple-600 dark:text-purple-400'
+                }`}>
+                  <Wifi className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-extrabold text-xs tracking-tight block truncate">Guest Desk, Wi-Fi & Perks</span>
+                  <span className="text-[10px] text-slate-500 dark:text-zinc-400 block truncate">
+                    Concierge desk, socials & guest Wi-Fi
+                  </span>
+                </div>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsActiveTab('theme')}
+                className={`flex-1 min-w-[210px] p-2.5 rounded-xl text-left transition-all flex items-center gap-3 cursor-pointer ${
+                  settingsActiveTab === 'theme'
+                    ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-md border border-slate-200/80 dark:border-zinc-700/80'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-zinc-800/40'
+                }`}
+              >
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform ${
+                  settingsActiveTab === 'theme'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 scale-105'
+                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                }`}>
+                  <Palette className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold text-xs tracking-tight truncate">Theme Studio & Simulator</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-amber-400 text-slate-950">
+                      NEW
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 dark:text-zinc-400 block truncate">
+                    Palettes, hero layouts & device preview
+                  </span>
+                </div>
+              </button>
+
             </div>
 
+            {/* TAB CONTENT PANELS */}
             <form onSubmit={handleSaveStoreSettings} className="space-y-6">
               {/* TAB 1: FRONTSTORE THEME & BRANDING STUDIO */}
               {settingsActiveTab === 'theme' && (
@@ -3256,591 +3450,753 @@ export default function AdminDashboard() {
                 />
               )}
 
-              {/* PANEL 1: BRAND IDENTITY & LOGO */}
+              {/* TAB 2: BRAND IDENTITY & LOGO VAULT */}
               {settingsActiveTab === 'identity' && (
-              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
-                  <div className="flex items-center gap-2">
-                    <Store className="w-4 h-4 text-blue-500" />
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Store Identity & Visual Branding</h3>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium">Customer Facing</span>
-                </div>
-
-                {/* Logo Section */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
-                  {/* Live Preview Card */}
-                  <div className="md:col-span-4 flex flex-col items-center justify-center p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-center space-y-2">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Live Logo Preview</span>
-                    <div className="w-20 h-20 rounded-2xl bg-white dark:bg-zinc-800 border-2 border-dashed border-slate-300 dark:border-zinc-700 flex items-center justify-center overflow-hidden shadow-inner p-1">
-                      {settingsForm.logo_url ? (
-                        <img
-                          src={settingsForm.logo_url}
-                          alt="Store Logo Preview"
-                          className="w-full h-full object-contain rounded-xl"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-tr from-blue-700 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-2xl">
-                          {settingsForm.name ? settingsForm.name.charAt(0).toUpperCase() : 'S'}
+                <div className="space-y-6 animate-fade-in">
+                  {/* CARD 1: OFFICIAL LOGO VAULT */}
+                  <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                          <Store className="w-4 h-4" />
                         </div>
-                      )}
-                    </div>
-                    <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 truncate max-w-full">
-                      {settingsForm.name || 'Store Name'}
-                    </span>
-                    {settingsForm.logo_url && (
-                      <div className="flex items-center gap-2 pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCropperModal({
-                              isOpen: true,
-                              imageSrc: settingsForm.logo_url,
-                              type: 'logo',
-                              targetIndex: null,
-                              originalFile: null,
-                              title: 'Crop & Adjust Store Logo',
-                              aspectRatio: '1:1',
-                              circularCrop: false,
-                            });
-                          }}
-                          className="text-[11px] font-bold text-blue-600 hover:text-blue-500 hover:underline flex items-center gap-1 cursor-pointer"
-                          title="Crop and reframe store logo"
-                        >
-                          <Crop className="w-3 h-3" />
-                          <span>Crop</span>
-                        </button>
-                        <span className="text-slate-300 dark:text-zinc-700">·</span>
-                        <button
-                          type="button"
-                          onClick={() => setSettingsForm({ ...settingsForm, logo_url: '' })}
-                          className="text-[11px] font-bold text-rose-500 hover:underline flex items-center gap-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Remove</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload / URL Controls */}
-                  <div className="md:col-span-8 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setLogoInputMode('upload')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                          logoInputMode === 'upload'
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400'
-                        }`}
-                      >
-                        Upload Image File
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLogoInputMode('url')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                          logoInputMode === 'url'
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400'
-                        }`}
-                      >
-                        Paste Image URL
-                      </button>
-                    </div>
-
-                    {logoInputMode === 'upload' ? (
-                      <div className="relative border-2 border-dashed border-slate-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-500 rounded-2xl p-4 text-center bg-slate-50/50 dark:bg-zinc-900/50 transition-colors">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLogoUpload}
-                          disabled={isUploadingLogo}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        <div className="flex flex-col items-center justify-center space-y-1.5 pointer-events-none">
-                          {isUploadingLogo ? (
-                            <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
-                          ) : (
-                            <UploadCloud className="w-6 h-6 text-blue-500" />
-                          )}
-                          <span className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                            {isUploadingLogo ? 'Uploading logo to server...' : 'Drag & drop or click to upload store logo'}
-                          </span>
-                          <span className="text-[10px] text-slate-400">PNG, JPG, WebP, SVG up to 10MB</span>
+                        <div>
+                          <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                            Official Logo Vault & Brand Icon
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400">
+                            Rendered across your digital showroom header, customer staff alert cards, and shelf QR codes.
+                          </p>
                         </div>
                       </div>
-                    ) : (
+                      <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800 self-start sm:self-auto">
+                        Customer-Facing Asset
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                      {/* Left: Dual Preview Studio */}
+                      <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 flex flex-col items-center text-center space-y-4">
+                        <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                          Live Render Preview
+                        </span>
+
+                        {/* Dual Mode Preview Tiles */}
+                        <div className="flex items-center gap-4">
+                          {/* Light Background Check */}
+                          <div className="space-y-1.5 text-center">
+                            <div className="w-24 h-24 rounded-2xl bg-white border-2 border-slate-200 shadow-md p-2 flex items-center justify-center overflow-hidden relative group">
+                              {settingsForm.logo_url ? (
+                                <img
+                                  src={settingsForm.logo_url}
+                                  alt="Store Logo Light Preview"
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-2xl">
+                                  {settingsForm.name ? settingsForm.name.charAt(0).toUpperCase() : 'S'}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-500">Light Mode</span>
+                          </div>
+
+                          {/* Dark Background Check */}
+                          <div className="space-y-1.5 text-center">
+                            <div className="w-24 h-24 rounded-2xl bg-[#09090B] border-2 border-zinc-800 shadow-md p-2 flex items-center justify-center overflow-hidden relative group">
+                              {settingsForm.logo_url ? (
+                                <img
+                                  src={settingsForm.logo_url}
+                                  alt="Store Logo Dark Preview"
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-2xl">
+                                  {settingsForm.name ? settingsForm.name.charAt(0).toUpperCase() : 'S'}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-500">Dark Mode</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 w-full">
+                          <p className="text-xs font-black text-slate-800 dark:text-zinc-200 truncate">
+                            {settingsForm.name || 'Store Name'}
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            Square 1:1 format recommended for crisp customer presentation
+                          </p>
+                        </div>
+
+                        {settingsForm.logo_url && (
+                          <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-zinc-800 w-full justify-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCropperModal({
+                                  isOpen: true,
+                                  imageSrc: settingsForm.logo_url,
+                                  type: 'logo',
+                                  targetIndex: null,
+                                  originalFile: null,
+                                  title: 'Crop & Reframe Store Logo',
+                                  aspectRatio: '1:1',
+                                  circularCrop: false,
+                                });
+                              }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="Crop and reframe store logo"
+                            >
+                              <Crop className="w-3.5 h-3.5" />
+                              <span>Crop & Rotate</span>
+                            </button>
+                            <span className="text-slate-300 dark:text-zinc-700">·</span>
+                            <button
+                              type="button"
+                              onClick={() => setSettingsForm({ ...settingsForm, logo_url: '' })}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right: Upload Dropzone & Direct URL Switcher */}
+                      <div className="lg:col-span-7 space-y-4">
+                        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 w-fit">
+                          <button
+                            type="button"
+                            onClick={() => setLogoInputMode('upload')}
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              logoInputMode === 'upload'
+                                ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm'
+                                : 'text-slate-500 hover:text-slate-900 dark:text-zinc-400'
+                            }`}
+                          >
+                            Upload File Directly
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLogoInputMode('url')}
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              logoInputMode === 'url'
+                                ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm'
+                                : 'text-slate-500 hover:text-slate-900 dark:text-zinc-400'
+                            }`}
+                          >
+                            Provide Image Link URL
+                          </button>
+                        </div>
+
+                        {logoInputMode === 'upload' ? (
+                          <div className="relative border-2 border-dashed border-slate-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-500 rounded-3xl p-6 sm:p-8 text-center bg-slate-50/50 dark:bg-zinc-900/30 hover:bg-blue-50/20 dark:hover:bg-blue-950/10 transition-all cursor-pointer group">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleLogoUpload}
+                              disabled={isUploadingLogo}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <div className="flex flex-col items-center justify-center space-y-2 pointer-events-none">
+                              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
+                                {isUploadingLogo ? (
+                                  <Loader2 className="w-6 h-6 animate-spin" />
+                                ) : (
+                                  <UploadCloud className="w-6 h-6" />
+                                )}
+                              </div>
+                              <span className="text-sm font-bold text-slate-800 dark:text-zinc-200">
+                                {isUploadingLogo ? 'Uploading logo to studio vault...' : 'Click or drop logo image here'}
+                              </span>
+                              <p className="text-xs text-slate-400 max-w-sm">
+                                High-res PNG with transparent background recommended. SVG, JPG, WebP also supported up to 10MB.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                              Direct Web Image Link
+                            </label>
+                            <input
+                              type="url"
+                              placeholder="https://yourbrand.com/assets/logo.png"
+                              value={settingsForm.logo_url}
+                              onChange={(e) => setSettingsForm({ ...settingsForm, logo_url: e.target.value })}
+                              className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                            <span className="text-[11px] text-slate-400 block">
+                              Paste an HTTPS link to your hosted brand logo image.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 2: STORE NAMING & SHOWROOM NARRATIVE */}
+                  <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none space-y-6">
+                    <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
                       <div>
-                        <input
-                          type="url"
-                          placeholder="https://example.com/images/store-logo.png"
-                          value={settingsForm.logo_url}
-                          onChange={(e) => setSettingsForm({ ...settingsForm, logo_url: e.target.value })}
-                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                        <span className="text-[10px] text-slate-400 mt-1 block">Paste direct link to your store logo</span>
+                        <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                          Store Narrative & Brand Identity
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400">
+                          Configure how your store introduces itself in headers, search results, and customer invites.
+                        </p>
                       </div>
-                    )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                          <span>Store / Showroom Name *</span>
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">Required</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Apex Flagship Audio & Tech"
+                          value={settingsForm.name}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Brand Tagline / Showroom Motto
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Curated Audiophile Excellence & Guided In-Store Trials"
+                          value={settingsForm.tagline}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, tagline: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                          <span>Showroom Bio & Brand Narrative</span>
+                          <span className="text-[10px] text-slate-400">Appears in showroom header and footer</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder="Introduce your retail space, signature specialties, or private floor consultation experience..."
+                          value={settingsForm.description}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, description: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium leading-relaxed focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 3: OPERATING ENGINE & AI PROCESSING */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Operating Status Engine */}
+                    <div className="p-6 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-3 h-3 rounded-full ${settingsForm.is_open ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                          <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                            Physical Store Operating Status
+                          </h4>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+                          When open, customers inside your store can scan shelf QR codes and alert floor staff. When paused, inquiries are queued for next opening.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSettingsForm({ ...settingsForm, is_open: !settingsForm.is_open })}
+                        className={`w-full py-3 px-4 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          settingsForm.is_open
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/25'
+                            : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/25'
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                        <span>{settingsForm.is_open ? 'Showroom Open to Public (Active)' : 'Showroom Operating Private (Paused)'}</span>
+                      </button>
+                    </div>
+
+                    {/* AI Background Removal Studio Engine */}
+                    <div className="p-6 rounded-3xl bg-gradient-to-br from-purple-500/10 via-indigo-500/10 to-blue-500/10 border border-purple-200/80 dark:border-purple-900/50 shadow-xl shadow-purple-500/5 flex flex-col justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-xl bg-purple-600 text-white flex items-center justify-center">
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </div>
+                          <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                            AI Instant Product Cutout Studio
+                          </h4>
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-purple-600 text-white">
+                            AI
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+                          Automatically isolate products from distracting showroom background photos taken on smartphones into clean, high-end catalog cutouts.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={toggleAutoRemoveBg}
+                        className={`w-full py-3 px-4 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          settingsForm.auto_remove_bg
+                            ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/25 ring-2 ring-purple-400/40'
+                            : 'bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${settingsForm.auto_remove_bg ? 'bg-white animate-pulse' : 'bg-slate-400'}`} />
+                        <span>{settingsForm.auto_remove_bg ? 'Auto AI Cutout: Enabled' : 'Auto AI Cutout: Disabled'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* Name, Tagline & Description */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Store Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. ABC Electronics"
-                      value={settingsForm.name}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Tagline / Motto
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Premium Electronics & Fast In-Store Assistance"
-                      value={settingsForm.tagline}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, tagline: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                    Store Bio / About Description
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Short description shown to shoppers in store header and footer..."
-                    value={settingsForm.description}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, description: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* Operating Status Toggle */}
-                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                      Physical Store Operating Status
-                    </span>
-                    <span className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      When open, customers can scan items and dispatch staff. When closed, requests are paused.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSettingsForm({ ...settingsForm, is_open: !settingsForm.is_open })}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      settingsForm.is_open
-                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
-                        : 'bg-amber-600 text-white shadow-md shadow-amber-600/25'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
-                    <span>{settingsForm.is_open ? 'Open Now' : 'Closed'}</span>
-                  </button>
-                </div>
-
-                {/* AI Image Processing Toggle: Auto Remove Product Background */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-blue-500/10 border border-purple-200 dark:border-purple-900/50">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">
-                        Auto Remove Background for Product Photos
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-600 text-white">
-                        AI
+              {/* TAB 3: FLOOR LOCATION & ROUTING */}
+              {settingsActiveTab === 'location' && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                          <MapPin className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                            Showroom Coordinates & Floor Micro-Routing
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400">
+                            Guide customers straight to your showroom door and specific floor sections in commercial complexes.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 self-start sm:self-auto">
+                        In-Store Navigation
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 max-w-xl">
-                      When enabled, product photos taken with the camera or uploaded from your device will automatically have their backgrounds removed. You can also manually remove backgrounds with 1-click on any image card anytime.
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="sm:col-span-2 space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                          <span>Showroom Street Address *</span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Primary Location</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Unit 402, Level 4, Silicon Galleria, 100 Feet Road"
+                          value={settingsForm.address}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, address: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Floor / Mall Wing / Landmark Routing
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Ground Floor, Directly Opposite East Atrium Escalator"
+                          value={settingsForm.landmark}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, landmark: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                        <span className="text-[10px] text-slate-400">
+                          Crucial for shoppers navigating large shopping malls or tech parks.
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Bengaluru"
+                          value={settingsForm.city}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, city: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          State / Province
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Karnataka"
+                          value={settingsForm.state}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, state: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Postal / PIN Code
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 560038"
+                          value={settingsForm.postal_code}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, postal_code: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-mono font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Showroom Navigation Card Preview */}
+                    <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                        <MapPin className="w-4 h-4" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-extrabold text-emerald-950 dark:text-emerald-200">
+                          Customer View Preview:
+                        </span>
+                        <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                          {settingsForm.address || 'Street Address'}, {settingsForm.landmark ? `(${settingsForm.landmark})` : ''} {settingsForm.city ? `· ${settingsForm.city}` : ''} {settingsForm.postal_code}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: GUEST DESK, WI-FI & PERKS */}
+              {settingsActiveTab === 'contact' && (
+                <div className="space-y-6 animate-fade-in">
+                  {/* CARD 1: DIRECT CONCIERGE & DESK */}
+                  <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                          <Phone className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                            Customer Concierge & Support Desk
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400">
+                            Establish immediate contact touchpoints for in-store shoppers and remote inquiries.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border border-purple-200 dark:border-purple-800 self-start sm:self-auto">
+                        Direct Channels
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Showroom Desk Phone
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="+91 98765 43210"
+                          value={settingsForm.phone}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                          <span>WhatsApp Business Desk</span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">1-Tap Connect</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="+91 98765 43210"
+                          value={settingsForm.whatsapp_number}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp_number: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                        <span className="text-[10px] text-slate-400">
+                          Renders a dedicated floating WhatsApp button on customer digital showroom.
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Store Support Email
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="concierge@yourbrand.com"
+                          value={settingsForm.email}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Verified Operating Hours
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Mon - Sat: 10:00 AM - 9:30 PM | Sun: 11:00 AM - 8:00 PM"
+                          value={settingsForm.opening_hours}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, opening_hours: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 2: VIP SHOPPER WI-FI & ANNOUNCEMENT AMENITIES */}
+                  <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none space-y-6">
+                    <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                        <Wifi className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                          In-Store Wi-Fi Concierge & Shopper Ribbon
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400">
+                          Provide complimentary high-speed connectivity to guests browsing your physical catalog.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Showroom Wi-Fi Network Name (SSID)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Apex_VIP_Guest"
+                          value={settingsForm.wifi_ssid}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, wifi_ssid: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Wi-Fi Security Key / Password
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Welcome2026 (Leave blank for open network)"
+                          value={settingsForm.wifi_password}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, wifi_password: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-mono font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                          <span>Live Customer Announcement Ribbon</span>
+                          <span className="text-[10px] text-amber-500 font-bold">Top Ticker Ribbon</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 🎉 Grand Festival: 10% instant bundle discount when you ask floor staff!"
+                          value={settingsForm.announcement}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, announcement: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                          Showroom Exchange & Warranty Commitment
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 7 Days Hassle-Free In-Store Replacement on all electronics"
+                          value={settingsForm.exchange_policy}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, exchange_policy: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 3: SOCIAL MEDIA & BRAND PROFILES */}
+                  <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none space-y-6">
+                    <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="w-9 h-9 rounded-xl bg-pink-500/10 text-pink-600 dark:text-pink-400 flex items-center justify-center">
+                        <Globe className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                          Brand Social Ecosystem
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-zinc-400">
+                          Connected channels displayed in your digital showroom footer for social trust.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-lg bg-pink-500/10 text-pink-600 flex items-center justify-center text-xs">📸</span>
+                          <span>Instagram</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="@yourbrand"
+                          value={settingsForm.social_links.instagram}
+                          onChange={(e) =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              social_links: { ...settingsForm.social_links, instagram: e.target.value },
+                            })
+                          }
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-pink-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center text-xs">📘</span>
+                          <span>Facebook</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="facebook.com/yourbrand"
+                          value={settingsForm.social_links.facebook}
+                          onChange={(e) =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              social_links: { ...settingsForm.social_links, facebook: e.target.value },
+                            })
+                          }
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-lg bg-slate-500/10 text-slate-900 dark:text-white flex items-center justify-center text-xs font-bold">𝕏</span>
+                          <span>X (Twitter)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="@yourbrand"
+                          value={settingsForm.social_links.twitter}
+                          onChange={(e) =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              social_links: { ...settingsForm.social_links, twitter: e.target.value },
+                            })
+                          }
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-lg bg-red-500/10 text-red-600 flex items-center justify-center text-xs">▶️</span>
+                          <span>YouTube</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="youtube.com/@yourbrand"
+                          value={settingsForm.social_links.youtube}
+                          onChange={(e) =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              social_links: { ...settingsForm.social_links, youtube: e.target.value },
+                            })
+                          }
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-red-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
+                          <Globe className="w-4 h-4 text-blue-500" />
+                          <span>Official Website</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="www.yourbrand.com"
+                          value={settingsForm.social_links.website}
+                          onChange={(e) =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              social_links: { ...settingsForm.social_links, website: e.target.value },
+                            })
+                          }
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center text-xs">💼</span>
+                          <span>LinkedIn</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="linkedin.com/company/yourbrand"
+                          value={settingsForm.social_links.linkedin}
+                          onChange={(e) =>
+                            setSettingsForm({
+                              ...settingsForm,
+                              social_links: { ...settingsForm.social_links, linkedin: e.target.value },
+                            })
+                          }
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* FLOATING MASTER SAVE DOCK */}
+              <div className="sticky bottom-4 z-20 p-4 rounded-3xl bg-slate-900/90 dark:bg-black/90 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h5 className="font-extrabold text-xs text-white">
+                      Changes Ready to Publish
+                    </h5>
+                    <p className="text-[11px] text-slate-400">
+                      Instantly synced across customer portal, mobile staff apps, and print QR codes.
                     </p>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
                   <button
-                    type="button"
-                    onClick={toggleAutoRemoveBg}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer ${
-                      settingsForm.auto_remove_bg
-                        ? 'bg-purple-600 text-white shadow-md shadow-purple-600/25 ring-2 ring-purple-400/40'
-                        : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-300 dark:hover:bg-zinc-700'
-                    }`}
+                    type="submit"
+                    disabled={isSavingSettings}
+                    className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-xs sm:text-sm font-black shadow-xl shadow-blue-600/30 border border-blue-400/30 flex items-center justify-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
                   >
-                    <span className={`w-2 h-2 rounded-full ${settingsForm.auto_remove_bg ? 'bg-white animate-pulse' : 'bg-slate-400'}`}></span>
-                    <span>{settingsForm.auto_remove_bg ? 'Auto BG: Enabled' : 'Auto BG: Disabled'}</span>
+                    {isSavingSettings ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    <span>{isSavingSettings ? 'Publishing Studio Changes...' : 'Save & Publish All Settings'}</span>
                   </button>
                 </div>
-              </div>
-              )}
-
-              {/* PANEL 2: ADDRESS & SHOWROOM LOCATION */}
-              {settingsActiveTab === 'location' && (
-              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-emerald-500" />
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Physical Address & Floor Location</h3>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium">Navigation & Maps</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Showroom Street Address *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Shop #104, Silicon Galleria, 100 Feet Road"
-                      value={settingsForm.address}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, address: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Floor / Unit / Landmark
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Ground Floor, Near East Atrium"
-                      value={settingsForm.landmark}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, landmark: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Bengaluru"
-                      value={settingsForm.city}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, city: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      State / Province
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Karnataka"
-                      value={settingsForm.state}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, state: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Postal / PIN Code
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 560038"
-                      value={settingsForm.postal_code}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, postal_code: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-              )}
-
-              {/* PANELS 3, 4, 5: CONTACT & CUSTOMER DESK */}
-              {settingsActiveTab === 'contact' && (
-                <>
-                  <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-purple-500" />
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Contact & Support Channels</h3>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium">Customer Reach</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Showroom Phone Number
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="+91 98765 43210"
-                      value={settingsForm.phone}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      WhatsApp Customer Chat Number
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="+91 98765 43210"
-                      value={settingsForm.whatsapp_number}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp_number: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-1 block">Renders 1-click WhatsApp button in customer footer</span>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Store Support Email
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="store@abcelectronics.com"
-                      value={settingsForm.email}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Operating Hours
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Mon - Sat: 10:00 AM - 9:30 PM | Sun: 11:00 AM - 8:00 PM"
-                      value={settingsForm.opening_hours}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, opening_hours: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* PANEL 4: SOCIAL MEDIA & ONLINE PROFILES */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-pink-500" />
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Social Media & Web Links</h3>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium">Customer Footer Icons</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <span className="text-pink-500">📸</span>
-                      <span>Instagram</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="@abcelectronics or URL"
-                      value={settingsForm.social_links.instagram}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          social_links: { ...settingsForm.social_links, instagram: e.target.value },
-                        })
-                      }
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <span className="text-blue-600">📘</span>
-                      <span>Facebook</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="facebook.com/yourstore"
-                      value={settingsForm.social_links.facebook}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          social_links: { ...settingsForm.social_links, facebook: e.target.value },
-                        })
-                      }
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <span className="text-slate-800 dark:text-white">✖️</span>
-                      <span>X (Twitter)</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="@abcelectronics"
-                      value={settingsForm.social_links.twitter}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          social_links: { ...settingsForm.social_links, twitter: e.target.value },
-                        })
-                      }
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <span className="text-red-600">▶️</span>
-                      <span>YouTube</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="youtube.com/@yourstore"
-                      value={settingsForm.social_links.youtube}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          social_links: { ...settingsForm.social_links, youtube: e.target.value },
-                        })
-                      }
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <Globe className="w-3.5 h-3.5 text-blue-500" />
-                      <span>Official Website</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="www.abcelectronics.com"
-                      value={settingsForm.social_links.website}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          social_links: { ...settingsForm.social_links, website: e.target.value },
-                        })
-                      }
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <span className="text-blue-500">💼</span>
-                      <span>LinkedIn</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="linkedin.com/company/yourstore"
-                      value={settingsForm.social_links.linkedin}
-                      onChange={(e) =>
-                        setSettingsForm({
-                          ...settingsForm,
-                          social_links: { ...settingsForm.social_links, linkedin: e.target.value },
-                        })
-                      }
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* PANEL 5: IN-STORE SHOPPER EXPERIENCE PERKS */}
-              <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
-                  <div className="flex items-center gap-2">
-                    <Wifi className="w-4 h-4 text-blue-500" />
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">In-Store Shopper Experience & Wi-Fi</h3>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-medium">Customer Amenities</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Showroom Wi-Fi Network Name (SSID)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ABC_Guest_WiFi"
-                      value={settingsForm.wifi_ssid}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, wifi_ssid: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Wi-Fi Password (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Welcome2026 or leave blank for open network"
-                      value={settingsForm.wifi_password}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, wifi_password: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Customer Announcement Ribbon (Appears at top of store)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 🎉 Grand Festival: 10% instant bundle discount when you ask floor staff!"
-                      value={settingsForm.announcement}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, announcement: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                      Store Exchange / Warranty Policy
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 7 Days Hassle-Free In-Store Replacement on all electronics"
-                      value={settingsForm.exchange_policy}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, exchange_policy: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-              </>
-              )}
-
-              {/* BOTTOM FLOATING/STICKY SAVE ACTION */}
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="submit"
-                  disabled={isSavingSettings}
-                  className="w-full sm:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                >
-                  {isSavingSettings ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  <span>{isSavingSettings ? 'Saving All Changes...' : 'Save All Store Settings'}</span>
-                </button>
               </div>
             </form>
           </div>
@@ -4379,18 +4735,83 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              {/* Description */}
-              <div>
-                <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
-                  Description
-                </label>
+              {/* Description & Auto-Generate Engine */}
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                      Description
+                    </label>
+                    {autoDescFeedback && (
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1 animate-fade-in">
+                        <Check className="w-2.5 h-2.5" />
+                        <span>{autoDescFeedback}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Auto-Generate Actions */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateAutoDescription('engaging')}
+                      className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer"
+                      title="Auto-write showroom product description using Name, Brand, Category, Price & Location"
+                    >
+                      <Sparkles className="w-3 h-3 animate-pulse" />
+                      <span>Auto Write</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateAutoDescription('bullets')}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer border ${
+                        autoDescStyle === 'bullets'
+                          ? 'bg-slate-200 dark:bg-zinc-700 text-slate-900 dark:text-white border-slate-300 dark:border-zinc-600'
+                          : 'bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-400 border-transparent'
+                      }`}
+                      title="Generate as structured bullet points"
+                    >
+                      Bullets
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateAutoDescription('concise')}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer border ${
+                        autoDescStyle === 'concise'
+                          ? 'bg-slate-200 dark:bg-zinc-700 text-slate-900 dark:text-white border-slate-300 dark:border-zinc-600'
+                          : 'bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-400 border-transparent'
+                      }`}
+                      title="Generate 1-line crisp overview"
+                    >
+                      Crisp
+                    </button>
+                  </div>
+                </div>
+
                 <textarea
-                  rows={2}
-                  placeholder="Key features, specifications, and showroom details..."
+                  rows={3}
+                  placeholder="Key features, specifications, and showroom details... (or tap 'Auto Write' above to generate automatically)"
                   value={prodForm.description}
                   onChange={(e) => setProdForm({ ...prodForm, description: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs mt-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all leading-relaxed"
                 />
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-zinc-500 px-0.5">
+                  <span>Smart auto-copy tailored by Name, Brand, Category, Price & Shelf Location.</span>
+                  {previousDescription && previousDescription !== prodForm.description && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const temp = prodForm.description;
+                        setProdForm({ ...prodForm, description: previousDescription });
+                        setPreviousDescription(temp);
+                      }}
+                      className="text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer"
+                    >
+                      Undo Auto-Text
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Buttons */}

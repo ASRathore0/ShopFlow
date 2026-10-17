@@ -194,7 +194,7 @@ export default function LandingPage() {
                 <div className="p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 space-y-2.5 shadow-sm">
                   <div className="aspect-[16/10] bg-slate-100 dark:bg-zinc-950 rounded-xl overflow-hidden relative">
                     <img
-                      src="https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=600&q=80"
+                      src="https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?auto=format&fit=crop&w=600&q=80"
                       alt="MacBook Air"
                       className="w-full h-full object-cover"
                       loading="lazy"

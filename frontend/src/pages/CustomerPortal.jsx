@@ -163,7 +163,7 @@ export default function CustomerPortal() {
                 {shop?.name || 'Store Showroom'}
               </span>
               <span
-                className="relative flex items-center justify-center shrink-0"
+                className="inline-flex items-center justify-center shrink-0"
                 title={shop?.is_open !== false ? 'Store is Open' : 'Store is Closed'}
                 aria-label={shop?.is_open !== false ? 'Store is Open' : 'Store is Closed'}
               >
@@ -174,9 +174,6 @@ export default function CustomerPortal() {
                       : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]'
                   }`}
                 />
-                {shop?.is_open !== false && (
-                  <span className="absolute w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping opacity-75" />
-                )}
               </span>
             </div>
           </div>
@@ -220,7 +217,7 @@ export default function CustomerPortal() {
                     className="absolute inset-0 bg-cover bg-center transition-transform duration-700"
                     style={{ backgroundImage: `url(${themeConfig.heroBannerImage})` }}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/80 to-slate-900/60 backdrop-blur-[2px]" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/80 to-slate-900/60 backdrop-blur-[1.1px]" />
                   </div>
                 ) : (
                   <div className={`absolute inset-0 bg-gradient-to-r ${themeConfig.headerGradient}`} />
@@ -230,10 +227,9 @@ export default function CustomerPortal() {
                   <div className="space-y-1.5 max-w-xl">
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md shadow-sm">
-                        <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
-                        <span>In-Store Concierge Active</span>
+                        <Sparkles className="w-3 h-3 text-amber-300" />
+                        <span>In-Store Virtual Shopping</span>
                       </span>
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                     </div>
                     <h2 className="text-base sm:text-xl font-black tracking-tight leading-snug">
                       {themeConfig.heroTitle || (shop?.name ? `${shop.name} Collection` : 'Showroom Assistant Active')}

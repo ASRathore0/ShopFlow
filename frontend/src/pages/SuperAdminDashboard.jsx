@@ -127,14 +127,6 @@ export default function SuperAdminDashboard() {
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#0B0B0C]/90 backdrop-blur-xl border-b border-slate-200 dark:border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <button
-              onClick={handleLogout}
-              className="p-1.5 sm:p-2 rounded-xl text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors shrink-0"
-              title="Logout"
-              aria-label="Logout"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-4 h-4" />
             </div>
@@ -153,7 +145,7 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
@@ -163,14 +155,14 @@ export default function SuperAdminDashboard() {
               {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            {/* Onboard New Store Button */}
+            {/* Logout Button */}
             <button
-              onClick={() => setShowCreateShop(true)}
-              className="py-2 px-3 sm:px-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all active:scale-95"
+              onClick={handleLogout}
+              className="p-2 rounded-xl text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+              title="Logout"
+              aria-label="Logout"
             >
-              <Plus className="w-4 h-4" />
-              <span className="hidden xs:inline">Onboard Store</span>
-              <span className="xs:hidden">New</span>
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -255,7 +247,7 @@ export default function SuperAdminDashboard() {
 
         {/* Multi-Tenant Stores Management Section */}
         <div className="space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                 <span>Manage Stores & Tenants</span>
@@ -268,8 +260,18 @@ export default function SuperAdminDashboard() {
               </p>
             </div>
 
-            {/* Search and Filters Bar */}
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {/* Onboard New Store Button */}
+            <button
+              onClick={() => setShowCreateShop(true)}
+              className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all active:scale-95 shrink-0 self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Onboard New Store</span>
+            </button>
+          </div>
+
+          {/* Search and Filters Bar */}
+          <div className="flex flex-wrap items-center gap-2 w-full">
               {/* Search */}
               <div className="relative flex-1 sm:w-56 min-w-[180px]">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -326,7 +328,6 @@ export default function SuperAdminDashboard() {
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>
-          </div>
 
           {/* MOBILE VIEW: High Performance Responsive Cards */}
           <div className="grid grid-cols-1 gap-3 sm:hidden">

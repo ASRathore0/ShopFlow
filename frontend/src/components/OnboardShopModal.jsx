@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 export default function OnboardShopModal({ isOpen, onClose, initialPlan = 'growth' }) {
-  const { registerShop, login } = useAuth();
+  const { user, registerShop, login } = useAuth();
   const { isDark } = useTheme();
   const navigate = useNavigate();
 
