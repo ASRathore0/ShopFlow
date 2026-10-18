@@ -9,7 +9,7 @@ export const adminService = {
 
   // Products CRUD
   getProducts: async (params = {}) => {
-    const res = await api.get('/admin/products', { params });
+    const res = await api.get('/admin/products', { params: { per_page: 500, ...params } });
     return res.data;
   },
   getProduct: async (id) => {
@@ -75,7 +75,7 @@ export const adminService = {
 
   // Inventory & Stock Adjustment
   getInventory: async (params = {}) => {
-    const res = await api.get('/admin/inventory', { params });
+    const res = await api.get('/admin/inventory', { params: { per_page: 500, ...params } });
     return res.data;
   },
   adjustStock: async (data) => {

@@ -40,7 +40,9 @@ class PublicShopController extends Controller
 
         $categories = Category::where('shop_id', $shop->id)
             ->where('is_active', true)
-            ->withCount('products')
+            ->withCount(['products' => function ($q) {
+                $q->where('status', 'active');
+            }])
             ->orderBy('display_order', 'asc')
             ->orderBy('id', 'asc')
             ->get();
@@ -52,12 +54,17 @@ class PublicShopController extends Controller
             ->take(6)
             ->get();
 
+        $totalProductsCount = Product::where('shop_id', $shop->id)
+            ->where('status', 'active')
+            ->count();
+
         return response()->json([
             'status' => 'success',
             'data' => [
                 'shop' => $shop,
                 'categories' => $categories,
                 'featured_products' => $featuredProducts,
+                'total_products_count' => $totalProductsCount,
             ],
         ]);
     }
@@ -68,7 +75,9 @@ class PublicShopController extends Controller
 
         $categories = Category::where('shop_id', $shop->id)
             ->where('is_active', true)
-            ->withCount('products')
+            ->withCount(['products' => function ($q) {
+                $q->where('status', 'active');
+            }])
             ->orderBy('display_order', 'asc')
             ->orderBy('id', 'asc')
             ->get();
@@ -120,18 +129,26 @@ class PublicShopController extends Controller
         }
 
         // Sorting
-        $sort = $request->get('sort', 'popular');
+        $sort = $request->get('sort');
         if ($sort === 'price_asc') {
             $query->orderBy('price', 'asc');
         } elseif ($sort === 'price_desc') {
             $query->orderBy('price', 'desc');
         } elseif ($sort === 'newest') {
             $query->orderBy('created_at', 'desc');
+        } elseif ($request->filled('category') || $request->filled('q')) {
+            // When filtering by a category or search query, order by popularity then ID
+            $query->orderBy('request_count', 'desc')->orderBy('id', 'desc');
         } else {
-            $query->orderBy('request_count', 'desc');
+            // Default "All Products" view:
+            // Interleave products across categories round-robin so customers see a balanced
+            // mix of all categories instead of a cluster of items from a single category.
+            $query->orderByRaw('ROW_NUMBER() OVER (PARTITION BY COALESCE(category_id, 0) ORDER BY request_count DESC, id DESC) ASC')
+                  ->orderByRaw('COALESCE(category_id, 0) ASC');
         }
 
-        $products = $query->paginate($request->get('per_page', 12));
+        $perPage = (int) $request->get('per_page', 16);
+        $products = $query->paginate($perPage);
 
         return response()->json([
             'status' => 'success',

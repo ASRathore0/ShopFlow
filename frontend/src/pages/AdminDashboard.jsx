@@ -2291,8 +2291,11 @@ export default function AdminDashboard() {
           <div className="space-y-4 sm:space-y-6 animate-fade-in">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                  Product Catalog
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Product Catalog</span>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                    {filteredProducts.length} {filteredProducts.length !== products.length ? `of ${products.length} items` : 'items'}
+                  </span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-zinc-400">
                   Manage showroom products, prices, barcodes, physical shelf locations, edit, and delete
@@ -2339,12 +2342,15 @@ export default function AdminDashboard() {
                   onChange={(e) => setProductCategoryFilter(e.target.value)}
                   className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 text-xs px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="all">All Categories ({categories.length})</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
+                  <option value="all">All Categories ({categories.length}) • {products.length} Products</option>
+                  {categories.map((cat) => {
+                    const count = products.filter((p) => String(p.category_id) === String(cat.id)).length;
+                    return (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name} ({count})
+                      </option>
+                    );
+                  })}
                 </select>
 
                 <button

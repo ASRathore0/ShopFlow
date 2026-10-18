@@ -57,7 +57,7 @@ export default function CustomerFooter({ shop, categories = [], onSelectCategory
   const logoSrc = getCleanLogoUrl(shop?.logo_url);
 
   return (
-    <footer className="mt-20 border-t border-slate-200/80 dark:border-white/[0.08] bg-slate-50/70 dark:bg-[#0A0A0D] text-slate-700 dark:text-zinc-300 transition-colors">
+    <footer className="mt-4 sm:mt-6 border-t border-slate-200/80 dark:border-white/[0.08] bg-slate-50/70 dark:bg-[#0A0A0D] text-slate-700 dark:text-zinc-300 transition-colors">
 
       {/* 2. MAIN EDITORIAL STORE DIRECTORY */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 lg:py-12">

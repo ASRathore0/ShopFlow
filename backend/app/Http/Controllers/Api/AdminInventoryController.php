@@ -43,19 +43,30 @@ class AdminInventoryController extends Controller
             });
         }
 
-        $items = $query->orderBy('available_quantity', 'asc')->paginate($request->get('per_page', 20));
+        $perPage = $request->get('per_page');
+        if ($perPage === 'all' || $request->boolean('all')) {
+            $items = $query->orderBy('available_quantity', 'asc')->get();
+            $inventoryData = [
+                'data' => $items,
+                'total' => $items->count(),
+            ];
+        } else {
+            $limit = (int) ($perPage ?: 500);
+            $items = $query->orderBy('available_quantity', 'asc')->paginate($limit);
+            $inventoryData = $items;
+        }
 
         // Inventory movements history
         $movements = InventoryMovement::where('shop_id', $shopId)
             ->with(['product', 'variant', 'user', 'fromLocation', 'toLocation'])
             ->orderBy('created_at', 'desc')
-            ->take(10)
+            ->take(20)
             ->get();
 
         return response()->json([
             'status' => 'success',
             'data' => [
-                'inventory' => $items,
+                'inventory' => $inventoryData,
                 'recent_movements' => $movements,
             ],
         ]);

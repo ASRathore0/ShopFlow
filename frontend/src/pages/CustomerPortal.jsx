@@ -33,9 +33,15 @@ export default function CustomerPortal({ defaultShopSlug }) {
   const returnLabel = !user ? 'Home' : user.role === 'super_admin' ? 'Super Admin' : ['shop_owner', 'manager'].includes(user.role) ? 'Owner Admin' : 'Staff Portal';
 
   const [shop, setShop] = useState(null);
+  const [shopTotalCount, setShopTotalCount] = useState(0);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home'); // home, requests, info
@@ -53,6 +59,9 @@ export default function CustomerPortal({ defaultShopSlug }) {
         const res = await shopService.getShop(shopSlug);
         if (res && res.data) {
           setShop(res.data.shop);
+          if (res.data.total_products_count !== undefined) {
+            setShopTotalCount(res.data.total_products_count);
+          }
           const rawCats = res.data.categories || [];
           const sortedCats = [...rawCats].sort((a, b) => {
             const orderA = a.display_order ?? 0;
@@ -71,24 +80,77 @@ export default function CustomerPortal({ defaultShopSlug }) {
     loadShopData();
   }, [shopSlug]);
 
-  // Load products based on filter
+  // Load initial products (page 1, 16 items) based on category or search filter
   useEffect(() => {
+    let isCancelled = false;
     async function loadProducts() {
+      setProductsLoading(true);
+      setCurrentPage(1);
       try {
-        const params = {};
+        const params = {
+          per_page: 16,
+          page: 1,
+        };
         if (selectedCategory) params.category = selectedCategory;
         if (searchQuery) params.q = searchQuery;
 
         const res = await shopService.getProducts(shopSlug, params);
-        if (res && res.data) {
-          setProducts(res.data.data || []);
+        if (!isCancelled && res && res.data) {
+          const list = res.data.data || [];
+          setProducts(list);
+          setCurrentPage(res.data.current_page || 1);
+          setLastPage(res.data.last_page || 1);
+          setTotalProducts(res.data.total ?? list.length);
         }
       } catch (err) {
-        console.error('Failed to fetch products', err);
+        if (!isCancelled) {
+          console.error('Failed to fetch products', err);
+        }
+      } finally {
+        if (!isCancelled) {
+          setProductsLoading(false);
+        }
       }
     }
     loadProducts();
+    return () => {
+      isCancelled = true;
+    };
   }, [shopSlug, selectedCategory, searchQuery]);
+
+  // Load next batch of 16 products on "Explore More"
+  const handleExploreMore = async () => {
+    if (loadingMore || currentPage >= lastPage) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      const params = {
+        per_page: 16,
+        page: nextPage,
+      };
+      if (selectedCategory) params.category = selectedCategory;
+      if (searchQuery) params.q = searchQuery;
+
+      const res = await shopService.getProducts(shopSlug, params);
+      if (res && res.data) {
+        const newItems = res.data.data || [];
+        setProducts((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const uniqueNew = newItems.filter((p) => !existingIds.has(p.id));
+          return [...prev, ...uniqueNew];
+        });
+        setCurrentPage(res.data.current_page || nextPage);
+        setLastPage(res.data.last_page || lastPage);
+        if (res.data.total !== undefined) {
+          setTotalProducts(res.data.total);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load more products', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const categoryIcons = {
     Mobiles: Smartphone,
@@ -113,6 +175,10 @@ export default function CustomerPortal({ defaultShopSlug }) {
   };
 
   const logoSrc = getCleanLogoUrl(shop?.logo_url);
+
+  const displayCount = selectedCategory || searchQuery
+    ? totalProducts
+    : (shopTotalCount || totalProducts || products.length);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#09090B] text-slate-900 dark:text-zinc-100 pb-24 sm:pb-12 transition-colors">
@@ -328,7 +394,7 @@ export default function CustomerPortal({ defaultShopSlug }) {
                     style={{ color: themeConfig.primaryColor }}
                     className="hover:underline text-[11px] font-semibold"
                   >
-                    View All ({products.length})
+                    View All ({shopTotalCount || totalProducts})
                   </button>
                 )}
               </div>
@@ -406,21 +472,80 @@ export default function CustomerPortal({ defaultShopSlug }) {
             )}
 
             {/* Product Catalog Grid */}
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-zinc-400 px-0.5">
-                <span>In-Store Products ({products.length})</span>
+                <span className="flex items-center gap-2">
+                  <span>In-Store Products ({displayCount})</span>
+                  {selectedCategory && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-medium">
+                      Filtered
+                    </span>
+                  )}
+                </span>
                 <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-normal">Tap to inspect or request</span>
               </div>
 
               <ProductGrid
                 products={products}
-                loading={loading}
+                loading={loading || productsLoading}
                 shop={shop}
                 shopLogo={logoSrc}
                 onSelectProduct={(p) => setSelectedProduct(p)}
                 onRequestProduct={(p) => setRequestTarget({ product: p, variant: null })}
                 onResetFilter={() => { setSelectedCategory(null); setSearchQuery(''); }}
               />
+
+              {/* Explore More Section */}
+              {!loading && !productsLoading && products.length > 0 && (
+                <div className="pt-2 pb-1 flex flex-col items-center justify-center gap-2.5">
+                  {currentPage < lastPage ? (
+                    <>
+                      {/* Visual Item Counter & Mini Progress Indicator */}
+                      <div className="flex items-center gap-3 text-xs font-medium text-slate-500 dark:text-zinc-400 bg-white dark:bg-[#18181B] px-4 py-2 rounded-full border border-slate-200 dark:border-zinc-800 shadow-sm">
+                        <span>
+                          Showing <strong className="text-slate-900 dark:text-zinc-100 font-bold">{products.length}</strong> of{' '}
+                          <strong className="text-slate-900 dark:text-zinc-100 font-bold">{displayCount}</strong> products
+                        </span>
+                        <div className="w-16 h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${Math.min(100, Math.round((products.length / (displayCount || 1)) * 100))}%`,
+                              backgroundColor: themeConfig.primaryColor,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Explore More CTA Button */}
+                      <button
+                        onClick={handleExploreMore}
+                        disabled={loadingMore}
+                        className="group relative px-8 py-3 rounded-2xl text-xs sm:text-sm font-extrabold text-white transition-all shadow-md active:scale-95 hover:shadow-lg disabled:opacity-60 flex items-center gap-2.5 overflow-hidden"
+                        style={{ backgroundColor: themeConfig.primaryColor }}
+                      >
+                        {loadingMore ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Loading In-Store Items...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
+                            <span>Explore More ({displayCount - products.length} remaining)</span>
+                            <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                          </>
+                        )}
+                      </button>
+                    </>
+                  ) : products.length > 16 ? (
+                    <div className="flex items-center gap-2 text-xs font-medium text-slate-400 dark:text-zinc-500 py-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <span>You've explored all {displayCount} showroom products</span>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           </>
         )}

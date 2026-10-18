@@ -46,7 +46,20 @@ class AdminProductController extends Controller
             $query->where('status', $request->status);
         }
 
-        $products = $query->orderBy('created_at', 'desc')->paginate($request->get('per_page', 15));
+        $perPage = $request->get('per_page');
+        if ($perPage === 'all' || $request->boolean('all')) {
+            $products = $query->orderBy('created_at', 'desc')->get();
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'data' => $products,
+                    'total' => $products->count(),
+                ],
+            ]);
+        }
+
+        $limit = (int) ($perPage ?: 500);
+        $products = $query->orderBy('created_at', 'desc')->paginate($limit);
 
         return response()->json([
             'status' => 'success',
