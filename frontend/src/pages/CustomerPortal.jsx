@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Store, Smartphone, Laptop, Headphones, Tv, Watch, Tag,
   Clock, CheckCircle2, Bookmark, HandHeart, ShieldCheck, ChevronRight,
@@ -50,6 +50,92 @@ export default function CustomerPortal({ defaultShopSlug }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [requestTarget, setRequestTarget] = useState(null); // { product, variant }
   const [reserveTarget, setReserveTarget] = useState(null);
+
+  // URL search parameters for direct product deep-linking (?product=...&variant=...)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlProductId = searchParams.get('product') || searchParams.get('item') || searchParams.get('product_id');
+  const urlVariantId = searchParams.get('variant') || searchParams.get('variant_id');
+  const [deepLinkedHandledId, setDeepLinkedHandledId] = useState(null);
+
+  const handleOpenProduct = (p, vId = null) => {
+    setSelectedProduct(p);
+    const pid = String(p?.id || p?.slug || '');
+    setDeepLinkedHandledId(pid);
+    const newParams = new URLSearchParams(searchParams);
+    if (pid) newParams.set('product', pid);
+    if (vId) {
+      newParams.set('variant', String(vId));
+    } else {
+      newParams.delete('variant');
+    }
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const handleCloseProduct = () => {
+    setSelectedProduct(null);
+    setDeepLinkedHandledId(null);
+    const newParams = new URLSearchParams(searchParams);
+    if (newParams.has('product') || newParams.has('variant') || newParams.has('item') || newParams.has('product_id')) {
+      newParams.delete('product');
+      newParams.delete('variant');
+      newParams.delete('item');
+      newParams.delete('product_id');
+      setSearchParams(newParams, { replace: true });
+    }
+  };
+
+  const handleVariantChange = (variant) => {
+    if (!variant?.id) return;
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set('variant', String(variant.id));
+    setSearchParams(newParams, { replace: true });
+  };
+
+  // Automatic Deep-Link Handler: when user opens link from WhatsApp (?product=12&variant=3)
+  useEffect(() => {
+    if (!urlProductId || !shopSlug) return;
+    if (deepLinkedHandledId === String(urlProductId) && selectedProduct) return;
+
+    let isCancelled = false;
+
+    // 1. Try finding in currently loaded products list
+    const found = products.find(
+      (p) => String(p.id) === String(urlProductId) || p.slug === urlProductId
+    );
+
+    if (found) {
+      setSelectedProduct(found);
+      setDeepLinkedHandledId(String(urlProductId));
+      return;
+    }
+
+    // 2. If not loaded in initial page, fetch product directly via API
+    async function fetchDeepLinkedProduct() {
+      try {
+        const res = await shopService.getProduct(shopSlug, urlProductId);
+        if (!isCancelled && res?.data?.product) {
+          setSelectedProduct(res.data.product);
+          setDeepLinkedHandledId(String(urlProductId));
+        }
+      } catch (err) {
+        console.error('Failed to load deep-linked product:', err);
+      }
+    }
+
+    fetchDeepLinkedProduct();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [urlProductId, shopSlug, products, deepLinkedHandledId, selectedProduct]);
+
+  // Close modal if user navigates back in browser history and ?product param disappears
+  useEffect(() => {
+    if (!urlProductId && selectedProduct && deepLinkedHandledId) {
+      setSelectedProduct(null);
+      setDeepLinkedHandledId(null);
+    }
+  }, [urlProductId, selectedProduct, deepLinkedHandledId]);
 
   // Load shop & categories
   useEffect(() => {
@@ -405,7 +491,7 @@ export default function CustomerPortal({ defaultShopSlug }) {
               shopSlug={shopSlug}
               shop={shop}
               shopLogo={logoSrc}
-              onSelectProduct={(p) => setSelectedProduct(p)}
+              onSelectProduct={(p) => handleOpenProduct(p)}
               placeholder="Search in-store items, SKU, color..."
             />
 
@@ -515,7 +601,7 @@ export default function CustomerPortal({ defaultShopSlug }) {
                 loading={loading || productsLoading}
                 shop={shop}
                 shopLogo={logoSrc}
-                onSelectProduct={(p) => setSelectedProduct(p)}
+                onSelectProduct={(p) => handleOpenProduct(p)}
                 onRequestProduct={(p) => setRequestTarget({ product: p, variant: null })}
                 onResetFilter={() => { setSelectedCategory(null); setSearchQuery(''); }}
               />
@@ -809,13 +895,15 @@ export default function CustomerPortal({ defaultShopSlug }) {
           product={selectedProduct}
           shop={shop}
           shopLogo={logoSrc}
-          onClose={() => setSelectedProduct(null)}
+          initialVariantId={urlVariantId}
+          onVariantChange={handleVariantChange}
+          onClose={handleCloseProduct}
           onRequest={(p, v) => {
-            setSelectedProduct(null);
+            handleCloseProduct();
             setRequestTarget({ product: p, variant: v });
           }}
           onReserve={(p, v) => {
-            setSelectedProduct(null);
+            handleCloseProduct();
             setReserveTarget({ product: p, variant: v });
           }}
         />

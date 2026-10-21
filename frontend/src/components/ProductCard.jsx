@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Eye, CheckCircle2, AlertCircle, Layers, ChevronLeft, ChevronRight, Images } from 'lucide-react';
+import { Eye, CheckCircle2, AlertCircle, Layers, ChevronLeft, ChevronRight, Images, Share2, Check } from 'lucide-react';
 import { getThemeConfig, hexToRgba } from '../utils/storefrontThemes';
+import { getDirectProductUrl } from '../utils/whatsappHelper';
 
 const getCleanImageUrl = (url) => {
   if (!url) return null;
@@ -27,6 +28,35 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
     : (product.primary_image?.image_url ? [product.primary_image.image_url] : (product.image_url ? [product.image_url] : []));
 
   const validImages = rawImages.map(getCleanImageUrl).filter(Boolean);
+
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async (e) => {
+    e?.stopPropagation();
+    const shareUrl = getDirectProductUrl({ shop, product });
+    const shareText = `Check out ${product.name} at ${shopName}!`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: product.name,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy product link', err);
+    }
+  };
 
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
@@ -227,17 +257,39 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
           )}
         </div>
 
-        {/* Quick View Icon Button (Top Right Floating Glass) */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(product);
-          }}
-          className="absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-full bg-black/40 hover:bg-black/70 text-white backdrop-blur-md flex items-center justify-center transition-all border border-white/20 active:scale-90 shadow-sm"
-          title="Quick View Details"
-        >
-          <Eye className="w-3.5 h-3.5" />
-        </button>
+        {/* Top Right Floating Action Buttons (Share & Quick View) */}
+        <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleShare}
+            className={`w-7 h-7 rounded-full backdrop-blur-md flex items-center justify-center transition-all border shadow-sm active:scale-90 ${
+              copied
+                ? 'bg-emerald-600 text-white border-emerald-400'
+                : 'bg-black/45 hover:bg-black/75 text-white border-white/20'
+            }`}
+            title={copied ? "Link Copied!" : "Share Product"}
+            aria-label="Share product"
+          >
+            {copied ? (
+              <Check className="w-3.5 h-3.5" />
+            ) : (
+              <Share2 className="w-3.5 h-3.5" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(product);
+            }}
+            className="w-7 h-7 rounded-full bg-black/45 hover:bg-black/75 text-white backdrop-blur-md flex items-center justify-center transition-all border border-white/20 active:scale-90 shadow-sm"
+            title="Quick View Details"
+            aria-label="Quick view details"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
         {/* Variant Count Badge (Bottom Right Floating) */}
         {variantCount > 1 && (

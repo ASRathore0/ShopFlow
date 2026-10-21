@@ -13,6 +13,59 @@ export const cleanPhoneNumber = (phone) => {
   return cleaned;
 };
 
+/**
+ * Convert relative image path to absolute URL for external messengers (WhatsApp)
+ */
+export const getCleanImageUrl = (url) => {
+  if (!url) return null;
+  if (typeof url !== 'string') {
+    url = url.image_url || url.url || '';
+  }
+  if (!url || typeof url !== 'string') return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('data:') || url.startsWith('blob:')) return null;
+
+  if (typeof window !== 'undefined') {
+    const backendBase = import.meta.env?.VITE_API_URL
+      ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+      : (window.location.port === '5173' || window.location.port === '3000')
+        ? `${window.location.protocol}//${window.location.hostname || 'localhost'}:8000`
+        : window.location.origin;
+    return `${backendBase}/${url.replace(/^\//, '')}`;
+  }
+  return url;
+};
+
+/**
+ * Generate a direct link that opens the customer portal and immediately shows this product & variant
+ */
+export const getDirectProductUrl = ({ shop, product, selectedVariant }) => {
+  if (typeof window === 'undefined') return '';
+  try {
+    const origin = window.location.origin;
+    let pathname = window.location.pathname;
+
+    const slug = shop?.slug || product?.shop?.slug;
+    if (slug && !pathname.startsWith('/shop/')) {
+      pathname = `/shop/${slug}`;
+    }
+
+    const url = new URL(pathname, origin);
+
+    const productId = product?.id || product?.slug;
+    if (productId) {
+      url.searchParams.set('product', String(productId));
+    }
+    if (selectedVariant?.id) {
+      url.searchParams.set('variant', String(selectedVariant.id));
+    }
+
+    return url.toString();
+  } catch (err) {
+    return window.location.href;
+  }
+};
+
 export const generateWhatsAppOrderMessage = ({
   product,
   selectedVariant,
@@ -23,13 +76,14 @@ export const generateWhatsAppOrderMessage = ({
   customerPhone = '',
   customerNote = '',
 }) => {
-  const shopName = shop?.name || 'Store';
+  const shopName = shop?.name || product?.shop?.name || 'Store';
   const price = Number(selectedVariant?.price ?? product?.price ?? 0);
   const variantDesc = selectedVariant
     ? [selectedVariant.color, selectedVariant.size, selectedVariant.storage, selectedVariant.name].filter(Boolean).join(' / ')
     : '';
   const sku = selectedVariant?.sku || product?.sku || '';
-  const productUrl = typeof window !== 'undefined' ? window.location.href : '';
+
+  const directProductUrl = getDirectProductUrl({ shop, product, selectedVariant });
 
   const lines = [];
   if (advancePaid) {
@@ -67,8 +121,11 @@ export const generateWhatsAppOrderMessage = ({
   if (shop?.address) {
     lines.push(`📍 *Store Location:* ${shop.address}`);
   }
-  if (productUrl) {
-    lines.push(`🔗 *Showroom Product Link:* ${productUrl}`);
+
+  // Direct clickable link to open this product in the showroom
+  if (directProductUrl) {
+    lines.push(`🔗 *Product Link:*`);
+    lines.push(directProductUrl);
   }
 
   return lines.join('\n');

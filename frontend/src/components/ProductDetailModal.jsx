@@ -1,13 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X, HandHeart, CheckCircle2, AlertCircle, Bookmark, ShieldCheck,
   Tag, Info, Cpu, Layers, ChevronLeft, ChevronRight, Maximize2, Images,
-  MessageCircle
+  MessageCircle, Share2, Check
 } from 'lucide-react';
 import ImageLightboxModal from './ImageLightboxModal';
 import AdvancePaymentModal from './AdvancePaymentModal';
 import { getThemeConfig } from '../utils/storefrontThemes';
-import { generateWhatsAppOrderMessage, openWhatsAppUrl } from '../utils/whatsappHelper';
+import { generateWhatsAppOrderMessage, openWhatsAppUrl, getDirectProductUrl } from '../utils/whatsappHelper';
 
 const getCleanImageUrl = (url) => {
   if (!url) return null;
@@ -18,14 +18,35 @@ const getCleanImageUrl = (url) => {
   return `${backendBase}/${url.replace(/^\//, '')}`;
 };
 
-export default function ProductDetailModal({ product, onClose, onRequest, onReserve, shop, shopLogo }) {
+export default function ProductDetailModal({
+  product,
+  onClose,
+  onRequest,
+  onReserve,
+  shop,
+  shopLogo,
+  initialVariantId,
+  onVariantChange,
+}) {
   if (!product) return null;
 
   const themeConfig = getThemeConfig(shop || product?.shop);
 
-  const [selectedVariant, setSelectedVariant] = useState(
-    product.variants && product.variants.length > 0 ? product.variants[0] : null
-  );
+  const [selectedVariant, setSelectedVariant] = useState(() => {
+    if (initialVariantId && product?.variants?.length > 0) {
+      const match = product.variants.find((v) => String(v.id) === String(initialVariantId));
+      if (match) return match;
+    }
+    return product?.variants && product.variants.length > 0 ? product.variants[0] : null;
+  });
+
+  // Sync selected variant when initialVariantId changes
+  useEffect(() => {
+    if (initialVariantId && product?.variants?.length > 0) {
+      const match = product.variants.find((v) => String(v.id) === String(initialVariantId));
+      if (match) setSelectedVariant(match);
+    }
+  }, [initialVariantId, product]);
 
   const resolvedShopLogo = getCleanImageUrl(shopLogo || shop?.logo_url || product?.shop?.logo_url);
   const shopName = shop?.name || product?.shop?.name || product?.brand || 'Store';
@@ -40,6 +61,33 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async () => {
+    const shareUrl = getDirectProductUrl({ shop, product, selectedVariant });
+    const shareText = `Check out ${product.name}${selectedVariant?.name ? ` (${selectedVariant.name})` : ''} at ${shopName}!`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: product.name,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch (err) {
+      console.error('Failed to copy product link', err);
+    }
+  };
 
   // Storefront action button configuration
   const cps = shop?.customer_portal_settings || product?.shop?.customer_portal_settings || {};
@@ -196,12 +244,32 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
               <span>•</span>
               <span className="font-medium text-slate-600 dark:text-zinc-300">{product.category?.name || 'In Store'}</span>
             </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleShare}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow-sm ${
+                  copied
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-white dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-700/80'
+                }`}
+                title="Share this product"
+                aria-label="Share product"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Share2 className="w-3.5 h-3.5 text-blue-500" />}
+                <span>{copied ? 'Link Copied!' : 'Share'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white rounded-xl hover:bg-slate-200/60 dark:hover:bg-zinc-800 transition-colors"
+                title="Close"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Scrollable Content */}
@@ -426,7 +494,10 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
                     return (
                       <button
                         key={v.id}
-                        onClick={() => setSelectedVariant(v)}
+                        onClick={() => {
+                          setSelectedVariant(v);
+                          onVariantChange?.(v);
+                        }}
                         className={`p-3 rounded-2xl border text-left transition-all flex items-center justify-between ${isSelected
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-600/10 text-slate-900 dark:text-white shadow-sm ring-1 ring-blue-500'
                             : 'border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 text-slate-700 dark:text-zinc-300 hover:border-slate-300 dark:hover:border-zinc-700'
@@ -472,6 +543,22 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
 
           {/* Sticky Mobile/Desktop Action Bar */}
           <div className="p-4 bg-slate-50 dark:bg-zinc-900 border-t border-slate-200 dark:border-zinc-800 flex items-center gap-2.5">
+            {/* Share Action Button */}
+            <button
+              type="button"
+              onClick={handleShare}
+              className={`p-3.5 rounded-2xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 shrink-0 ${
+                copied
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-white dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-700'
+              }`}
+              title="Share this product"
+              aria-label="Share this product"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4 text-blue-500" />}
+              <span className="hidden sm:inline">{copied ? 'Copied' : 'Share'}</span>
+            </button>
+
             {onReserve && (
               <button
                 onClick={() => onReserve(product, selectedVariant)}
