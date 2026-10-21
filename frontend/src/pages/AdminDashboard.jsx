@@ -10,7 +10,7 @@ import {
   Sun, Moon, Menu, X, ArrowLeft, LogOut, ExternalLink, ChevronRight, Edit3,
   Trash2, Check, UserCheck, AlertCircle, Eye, CornerDownRight, Tag, ChevronDown, Sparkles,
   UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera,
-  Star, Images, GripVertical, ArrowUpDown, Crop, Palette
+  Star, Images, GripVertical, ArrowUpDown, Crop, Palette, CreditCard
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +20,7 @@ import LocationBreadcrumb from '../components/LocationBreadcrumb';
 import ImageCropperModal from '../components/ImageCropperModal';
 import { removeImageBackground } from '../services/bgRemovalService';
 import StorefrontThemeCustomizer from '../components/StorefrontThemeCustomizer';
+import RequestStatusBadge from '../components/RequestStatusBadge';
 
 export default function AdminDashboard() {
   const { user, quickLoginAs, logout, switchShop } = useAuth();
@@ -190,6 +191,16 @@ export default function AdminDashboard() {
     hero_banner_image: '',
     is_open: true,
     whatsapp_number: '',
+    action_button_mode: 'show_me', // 'show_me' | 'whatsapp' | 'both'
+    action_button_show_me_label: 'SHOW ME',
+    action_button_label: 'ORDER ON WHATSAPP',
+    enable_advance_payment: false,
+    advance_amount_type: 'fixed', // 'fixed' | 'percentage'
+    advance_amount_value: 500,
+    upi_id: '',
+    upi_name: '',
+    payment_qr_image: '',
+    advance_payment_note: 'Pay advance token via UPI and share transaction reference / UTR on WhatsApp to confirm immediate floor hold.',
     wifi_ssid: '',
     wifi_password: '',
     announcement: '',
@@ -205,9 +216,10 @@ export default function AdminDashboard() {
     },
   });
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingPaymentQr, setIsUploadingPaymentQr] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [logoInputMode, setLogoInputMode] = useState('upload'); // 'upload' or 'url'
-  const [settingsActiveTab, setSettingsActiveTab] = useState('identity'); // 'identity' | 'location' | 'contact' | 'theme'
+  const [settingsActiveTab, setSettingsActiveTab] = useState('identity'); // 'identity' | 'location' | 'contact' | 'theme' | 'actions'
 
   const populateSettingsForm = (s) => {
     if (!s) return;
@@ -236,6 +248,16 @@ export default function AdminDashboard() {
       hero_banner_image: cps.hero_banner_image || '',
       is_open: s.is_open !== false,
       whatsapp_number: cps.whatsapp_number || '',
+      action_button_mode: cps.action_button_mode || 'show_me',
+      action_button_show_me_label: cps.action_button_show_me_label || 'SHOW ME',
+      action_button_label: cps.action_button_label || 'ORDER ON WHATSAPP',
+      enable_advance_payment: Boolean(cps.enable_advance_payment),
+      advance_amount_type: cps.advance_amount_type || 'fixed',
+      advance_amount_value: cps.advance_amount_value !== undefined ? cps.advance_amount_value : 500,
+      upi_id: cps.upi_id || '',
+      upi_name: cps.upi_name || '',
+      payment_qr_image: cps.payment_qr_image || '',
+      advance_payment_note: cps.advance_payment_note || 'Pay advance token via UPI and share transaction reference / UTR on WhatsApp to confirm immediate floor hold.',
       wifi_ssid: cps.wifi_ssid || '',
       wifi_password: cps.wifi_password || '',
       announcement: cps.announcement || '',
@@ -1577,6 +1599,41 @@ export default function AdminDashboard() {
     if (e.target) e.target.value = '';
   };
 
+  const handlePaymentQrUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file (PNG, JPG, WebP).', 'error');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      showToast('QR code image size must be less than 8MB.', 'error');
+      return;
+    }
+
+    setIsUploadingPaymentQr(true);
+    try {
+      const res = await adminService.uploadPaymentQr(file);
+      const url = res.data?.url || res.url;
+      if (url) {
+        setSettingsForm((prev) => ({
+          ...prev,
+          payment_qr_image: url,
+        }));
+        showToast('Store payment QR code uploaded successfully!');
+      } else {
+        showToast('Failed to retrieve uploaded QR image URL.', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to upload payment QR:', err);
+      showToast(err.response?.data?.message || 'Failed to upload QR code image.', 'error');
+    } finally {
+      setIsUploadingPaymentQr(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleSaveStoreSettings = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!settingsForm.name.trim()) {
@@ -1603,6 +1660,16 @@ export default function AdminDashboard() {
           postal_code: settingsForm.postal_code,
           landmark: settingsForm.landmark,
           whatsapp_number: settingsForm.whatsapp_number,
+          action_button_mode: settingsForm.action_button_mode || 'show_me',
+          action_button_show_me_label: settingsForm.action_button_show_me_label || 'SHOW ME',
+          action_button_label: settingsForm.action_button_label || 'ORDER ON WHATSAPP',
+          enable_advance_payment: Boolean(settingsForm.enable_advance_payment),
+          advance_amount_type: settingsForm.advance_amount_type || 'fixed',
+          advance_amount_value: Number(settingsForm.advance_amount_value) || 0,
+          upi_id: (settingsForm.upi_id || '').trim(),
+          upi_name: (settingsForm.upi_name || '').trim(),
+          payment_qr_image: settingsForm.payment_qr_image || '',
+          advance_payment_note: settingsForm.advance_payment_note || '',
           wifi_ssid: settingsForm.wifi_ssid,
           wifi_password: settingsForm.wifi_password,
           announcement: settingsForm.announcement,
@@ -3441,6 +3508,35 @@ export default function AdminDashboard() {
                 </div>
               </button>
 
+              <button
+                type="button"
+                onClick={() => setSettingsActiveTab('actions')}
+                className={`flex-1 min-w-[210px] p-2.5 rounded-xl text-left transition-all flex items-center gap-3 cursor-pointer ${
+                  settingsActiveTab === 'actions'
+                    ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-md border border-slate-200/80 dark:border-zinc-700/80'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-zinc-800/40'
+                }`}
+              >
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform ${
+                  settingsActiveTab === 'actions'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-105'
+                    : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold text-xs tracking-tight truncate">WhatsApp & Action Button</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500 text-white">
+                      HOT
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 dark:text-zinc-400 block truncate">
+                    SHOW ME / WhatsApp, UPI QR & Advance
+                  </span>
+                </div>
+              </button>
+
             </div>
 
             {/* TAB CONTENT PANELS */}
@@ -4168,6 +4264,421 @@ export default function AdminDashboard() {
                           className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         />
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: WHATSAPP, ACTION BUTTONS & ADVANCE PAYMENT QR */}
+              {settingsActiveTab === 'actions' && (
+                <div className="space-y-6 animate-fade-in">
+                  {/* CARD 1: PRIMARY ACTION BUTTON MODE & LABELS */}
+                  <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                          <MessageCircle className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                            Product Action Button & Customer Journey
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400">
+                            Configure how shoppers interact with product items on their phones: In-Store floor assistance, direct WhatsApp order, or both.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 self-start sm:self-auto">
+                        Conversion & Sales
+                      </span>
+                    </div>
+
+                    {/* Mode Selection Cards */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                        Select Button Mode for Product Details Modal
+                      </label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                        {/* Mode 1: SHOW ME */}
+                        <div
+                          onClick={() => setSettingsForm({ ...settingsForm, action_button_mode: 'show_me' })}
+                          className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                            settingsForm.action_button_mode === 'show_me'
+                              ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/20 shadow-md ring-2 ring-blue-500/20'
+                              : 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-slate-50/50 dark:bg-zinc-900/40'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-600 flex items-center justify-center font-bold text-xs">
+                                🛎️
+                              </span>
+                              {settingsForm.action_button_mode === 'show_me' && (
+                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="font-extrabold text-xs text-slate-900 dark:text-white">
+                              In-Store "SHOW ME" Only
+                            </h4>
+                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
+                              Default floor experience. Alerts on-duty sales staff via WebSocket to fetch the item directly to customer.
+                            </p>
+                          </div>
+                          <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-zinc-800 flex items-center gap-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                            <span>Best for Walk-In Showrooms</span>
+                          </div>
+                        </div>
+
+                        {/* Mode 2: WhatsApp Direct */}
+                        <div
+                          onClick={() => setSettingsForm({ ...settingsForm, action_button_mode: 'whatsapp' })}
+                          className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                            settingsForm.action_button_mode === 'whatsapp'
+                              ? 'border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-md ring-2 ring-emerald-500/20'
+                              : 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-slate-50/50 dark:bg-zinc-900/40'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold text-xs">
+                                💬
+                              </span>
+                              {settingsForm.action_button_mode === 'whatsapp' && (
+                                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px]">
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="font-extrabold text-xs text-slate-900 dark:text-white">
+                              Direct WhatsApp Button
+                            </h4>
+                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
+                              Converts "SHOW ME" into a WhatsApp button. Customer sends item details or pays advance via UPI QR before messaging.
+                            </p>
+                          </div>
+                          <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-zinc-800 flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <span>Best for Remote / WhatsApp Orders</span>
+                          </div>
+                        </div>
+
+                        {/* Mode 3: Both Buttons */}
+                        <div
+                          onClick={() => setSettingsForm({ ...settingsForm, action_button_mode: 'both' })}
+                          className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                            settingsForm.action_button_mode === 'both'
+                              ? 'border-purple-600 bg-purple-50/50 dark:bg-purple-950/20 shadow-md ring-2 ring-purple-500/20'
+                              : 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-slate-50/50 dark:bg-zinc-900/40'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="w-7 h-7 rounded-lg bg-purple-500/15 text-purple-600 flex items-center justify-center font-bold text-xs">
+                                ⚡
+                              </span>
+                              {settingsForm.action_button_mode === 'both' && (
+                                <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[10px]">
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="font-extrabold text-xs text-slate-900 dark:text-white">
+                              Dual Action (Both Buttons)
+                            </h4>
+                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
+                              Presents both "SHOW ME" and "WhatsApp" buttons side-by-side in the action footer for maximum flexibility.
+                            </p>
+                          </div>
+                          <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-zinc-800 flex items-center gap-1.5 text-[10px] font-bold text-purple-600 dark:text-purple-400">
+                            <span>Hybrid In-Store + WhatsApp</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Customizable Button Text & WhatsApp Destination */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-2">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                          <span>WhatsApp Button Label</span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">CTA Text</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. ORDER ON WHATSAPP"
+                          value={settingsForm.action_button_label}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, action_button_label: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                          <span>"SHOW ME" Button Label</span>
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">Floor CTA</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. SHOW ME"
+                          value={settingsForm.action_button_show_me_label}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, action_button_show_me_label: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                          <span>Store WhatsApp Number *</span>
+                          <span className="text-[10px] text-emerald-600 font-bold">With Country Code</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. +91 9876543210"
+                          value={settingsForm.whatsapp_number}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp_number: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 2: ADVANCE PAYMENT & UPI QR CODE CONFIGURATION */}
+                  <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800 shadow-xl shadow-slate-200/50 dark:shadow-none space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                          <CreditCard className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                            Advance Payment & Store QR Code Settings
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400">
+                            Prompt customers to pay a token amount via UPI/QR code to hold the product before forwarding order confirmation to WhatsApp.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Advance Payment Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => setSettingsForm({ ...settingsForm, enable_advance_payment: !settingsForm.enable_advance_payment })}
+                        className={`px-4 py-2 rounded-2xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                          settingsForm.enable_advance_payment
+                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25 ring-2 ring-purple-400/40'
+                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${settingsForm.enable_advance_payment ? 'bg-white animate-pulse' : 'bg-slate-400'}`} />
+                        <span>{settingsForm.enable_advance_payment ? 'Advance Payment: Active' : 'Advance Payment: Disabled'}</span>
+                      </button>
+                    </div>
+
+                    {settingsForm.enable_advance_payment ? (
+                      <div className="space-y-6 animate-fade-in">
+                        {/* Token Amount Configuration */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 p-5 rounded-2xl bg-purple-500/5 border border-purple-200/70 dark:border-purple-900/40">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                              Advance Amount Calculation
+                            </label>
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setSettingsForm({ ...settingsForm, advance_amount_type: 'fixed' })}
+                                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${
+                                  settingsForm.advance_amount_type === 'fixed'
+                                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                                    : 'bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700'
+                                }`}
+                              >
+                                Fixed Token (₹)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSettingsForm({ ...settingsForm, advance_amount_type: 'percentage' })}
+                                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-extrabold border transition-all cursor-pointer ${
+                                  settingsForm.advance_amount_type === 'percentage'
+                                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                                    : 'bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700'
+                                }`}
+                              >
+                                Percentage (%)
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                              <span>Advance Value {settingsForm.advance_amount_type === 'percentage' ? '(%)' : '(₹)'}</span>
+                              <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">
+                                {settingsForm.advance_amount_type === 'percentage' ? 'e.g. 15%' : 'e.g. ₹500'}
+                              </span>
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder={settingsForm.advance_amount_type === 'percentage' ? '15' : '500'}
+                              value={settingsForm.advance_amount_value}
+                              onChange={(e) => setSettingsForm({ ...settingsForm, advance_amount_value: e.target.value })}
+                              className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-bold focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* UPI Details & QR Image */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                          {/* Left: UPI VPA and Merchant Name */}
+                          <div className="lg:col-span-7 space-y-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center justify-between">
+                                <span>Store UPI ID / VPA *</span>
+                                <span className="text-[10px] text-slate-500">GPay / PhonePe / Paytm / BHIM</span>
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. yourstore@okhdfcbank or merchant@upi"
+                                value={settingsForm.upi_id}
+                                onChange={(e) => setSettingsForm({ ...settingsForm, upi_id: e.target.value })}
+                                className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-mono font-bold focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                                UPI Registered Business / Payee Name
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Apex Electronics Showroom Pvt Ltd"
+                                value={settingsForm.upi_name}
+                                onChange={(e) => setSettingsForm({ ...settingsForm, upi_name: e.target.value })}
+                                className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200">
+                                Payment Instructions Note for Customer
+                              </label>
+                              <textarea
+                                rows={2}
+                                placeholder="e.g. Scan QR, pay token & share UTR reference number on WhatsApp to hold the product immediately."
+                                value={settingsForm.advance_payment_note}
+                                onChange={(e) => setSettingsForm({ ...settingsForm, advance_payment_note: e.target.value })}
+                                className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Right: Payment QR Code Image Upload */}
+                          <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 flex flex-col items-center text-center space-y-3">
+                            <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                              Store UPI QR Code Image
+                            </span>
+
+                            {settingsForm.payment_qr_image ? (
+                              <div className="relative group">
+                                <div className="w-36 h-36 rounded-2xl bg-white p-2 border-2 border-emerald-500/50 shadow-md flex items-center justify-center overflow-hidden">
+                                  <img
+                                    src={settingsForm.payment_qr_image}
+                                    alt="Store Payment QR"
+                                    className="w-full h-full object-contain"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSettingsForm({ ...settingsForm, payment_qr_image: '' })}
+                                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center text-xs shadow-md hover:bg-red-700 cursor-pointer"
+                                  title="Remove QR code"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="w-36 h-36 rounded-2xl bg-white dark:bg-zinc-800 border-2 border-dashed border-slate-300 dark:border-zinc-700 flex flex-col items-center justify-center text-slate-400 gap-1 p-3">
+                                <QrCode className="w-8 h-8 text-purple-500/60" />
+                                <span className="text-[10px] font-bold text-center">No Custom QR</span>
+                                <span className="text-[9px] text-slate-400 text-center leading-tight">
+                                  {settingsForm.upi_id ? 'Dynamic UPI QR will be auto-generated' : 'Upload your PhonePe/GPay QR'}
+                                </span>
+                              </div>
+                            )}
+
+                            <label className="w-full">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handlePaymentQrUpload}
+                                className="hidden"
+                                disabled={isUploadingPaymentQr}
+                              />
+                              <span className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-purple-600/20 transition-all">
+                                {isUploadingPaymentQr ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Uploading QR...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UploadCloud className="w-3.5 h-3.5" />
+                                    <span>{settingsForm.payment_qr_image ? 'Change QR Image' : 'Upload Payment QR'}</span>
+                                  </>
+                                )}
+                              </span>
+                            </label>
+                            <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">
+                              Upload your counter standee QR code or leave empty to auto-generate from UPI ID.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-5 rounded-2xl bg-slate-50 dark:bg-zinc-900/40 border border-slate-200 dark:border-zinc-800 text-center space-y-1">
+                        <p className="text-xs font-bold text-slate-600 dark:text-zinc-400">
+                          Advance payment is currently turned off.
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          When clicked, the WhatsApp button will open WhatsApp directly with prefilled item specifications without requesting advance payment.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CARD 3: LIVE PREVIEW ACCORDION */}
+                  <div className="p-6 rounded-3xl bg-slate-900 text-white shadow-xl space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                        <h4 className="font-extrabold text-xs uppercase tracking-wider text-slate-300">
+                          Live Customer Action Bar Preview
+                        </h4>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 font-mono text-slate-300">
+                        Mode: {settingsForm.action_button_mode.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-black/60 border border-white/10 flex items-center gap-2.5">
+                      <div className="px-3.5 py-3 rounded-xl bg-white/10 text-white text-xs font-bold shrink-0 flex items-center gap-1.5 opacity-70">
+                        <Bookmark className="w-4 h-4 text-blue-400" />
+                        <span>Reserve</span>
+                      </div>
+
+                      {(settingsForm.action_button_mode === 'show_me' || settingsForm.action_button_mode === 'both') && (
+                        <div className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-blue-500/20 truncate">
+                          <HandHeart className="w-4 h-4 shrink-0" />
+                          <span className="truncate">{settingsForm.action_button_show_me_label || 'SHOW ME'}</span>
+                        </div>
+                      )}
+
+                      {(settingsForm.action_button_mode === 'whatsapp' || settingsForm.action_button_mode === 'both') && (
+                        <div className="flex-1 py-3 px-4 rounded-xl bg-[#25D366] text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 truncate">
+                          <MessageCircle className="w-4 h-4 shrink-0 fill-white" />
+                          <span className="truncate">{settingsForm.action_button_label || 'ORDER ON WHATSAPP'}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

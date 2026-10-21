@@ -176,4 +176,14 @@ export const adminService = {
     });
     return res.data;
   },
+  uploadPaymentQr: async (file) => {
+    const formData = new FormData();
+    formData.append('qr', file);
+    const res = await api.post('/admin/shop/upload-payment-qr', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return res.data;
+  },
 };

@@ -1,10 +1,13 @@
 import React, { useState, useRef } from 'react';
 import {
   X, HandHeart, CheckCircle2, AlertCircle, Bookmark, ShieldCheck,
-  Tag, Info, Cpu, Layers, ChevronLeft, ChevronRight, Maximize2, Images
+  Tag, Info, Cpu, Layers, ChevronLeft, ChevronRight, Maximize2, Images,
+  MessageCircle
 } from 'lucide-react';
 import ImageLightboxModal from './ImageLightboxModal';
+import AdvancePaymentModal from './AdvancePaymentModal';
 import { getThemeConfig } from '../utils/storefrontThemes';
+import { generateWhatsAppOrderMessage, openWhatsAppUrl } from '../utils/whatsappHelper';
 
 const getCleanImageUrl = (url) => {
   if (!url) return null;
@@ -36,6 +39,28 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
   const [imageError, setImageError] = useState({});
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
+
+  // Storefront action button configuration
+  const cps = shop?.customer_portal_settings || product?.shop?.customer_portal_settings || {};
+  const buttonMode = cps.action_button_mode || 'show_me'; // 'show_me' | 'whatsapp' | 'both'
+  const showMeLabel = cps.action_button_show_me_label || 'SHOW ME';
+  const whatsappLabel = cps.action_button_label || 'ORDER ON WHATSAPP';
+  const isAdvanceEnabled = Boolean(cps.enable_advance_payment);
+  const whatsappNumber = cps.whatsapp_number || shop?.phone || product?.shop?.phone || '';
+
+  const handleWhatsAppClick = () => {
+    if (isAdvanceEnabled) {
+      setAdvanceModalOpen(true);
+    } else {
+      const message = generateWhatsAppOrderMessage({
+        product,
+        selectedVariant,
+        shop,
+      });
+      openWhatsAppUrl(whatsappNumber, message);
+    }
+  };
 
   // Finger swipe tracking refs
   const touchStartX = useRef(null);
@@ -450,24 +475,47 @@ export default function ProductDetailModal({ product, onClose, onRequest, onRese
             {onReserve && (
               <button
                 onClick={() => onReserve(product, selectedVariant)}
-                className="px-4 py-3.5 rounded-2xl bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                className="px-4 py-3.5 rounded-2xl bg-white dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 shrink-0"
               >
                 <Bookmark className="w-4 h-4" style={{ color: themeConfig.primaryColor }} />
                 <span>Reserve</span>
               </button>
             )}
 
-            <button
-              onClick={() => onRequest(product, selectedVariant)}
-              className={`flex-1 py-3.5 px-6 rounded-2xl ${themeConfig.ctaGradient} active:scale-98 text-white font-bold text-sm tracking-wide transition-all shadow-lg ${themeConfig.glowClass} flex items-center justify-center gap-2 group`}
-              style={themeConfig.isCustom ? { backgroundColor: themeConfig.primaryColor } : {}}
-            >
-              <HandHeart className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
-              <span>SHOW ME</span>
-            </button>
+            {/* In-Store Show Me Button (Active when mode is 'show_me' or 'both') */}
+            {(buttonMode === 'show_me' || buttonMode === 'both') && (
+              <button
+                onClick={() => onRequest(product, selectedVariant)}
+                className={`flex-1 py-3.5 px-5 rounded-2xl ${themeConfig.ctaGradient} active:scale-98 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-lg ${themeConfig.glowClass} flex items-center justify-center gap-2 group min-w-0`}
+                style={themeConfig.isCustom ? { backgroundColor: themeConfig.primaryColor } : {}}
+              >
+                <HandHeart className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform shrink-0" />
+                <span className="truncate">{showMeLabel}</span>
+              </button>
+            )}
+
+            {/* WhatsApp Direct Order / Advance Payment Button (Active when mode is 'whatsapp' or 'both') */}
+            {(buttonMode === 'whatsapp' || buttonMode === 'both') && (
+              <button
+                onClick={handleWhatsAppClick}
+                className="flex-1 py-3.5 px-5 rounded-2xl bg-[#25D366] hover:bg-[#20ba59] active:scale-98 text-white font-extrabold text-xs sm:text-sm tracking-wide transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 group min-w-0"
+              >
+                <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform shrink-0 fill-white" />
+                <span className="truncate">{whatsappLabel}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Advance Payment & WhatsApp Modal */}
+      <AdvancePaymentModal
+        isOpen={advanceModalOpen}
+        onClose={() => setAdvanceModalOpen(false)}
+        product={product}
+        selectedVariant={selectedVariant}
+        shop={shop}
+      />
 
       {/* Fullscreen High-Res Image Lightbox Modal */}
       {lightboxOpen && allImages.length > 0 && (

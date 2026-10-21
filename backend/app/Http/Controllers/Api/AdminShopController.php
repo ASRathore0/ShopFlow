@@ -93,5 +93,40 @@ class AdminShopController extends Controller
             ],
         ]);
     }
+
+    public function uploadPaymentQr(Request $request)
+    {
+        $shopId = $this->getAdminShopId($request);
+        $shop = Shop::findOrFail($shopId);
+
+        $request->validate([
+            'qr' => 'required|image|mimes:jpeg,png,jpg,webp,gif,svg|max:10240',
+        ]);
+
+        $file = $request->file('qr');
+        $filename = 'payment_qr_' . $shop->id . '_' . time() . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension();
+
+        $destinationPath = public_path('uploads/qr');
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
+        }
+
+        $file->move($destinationPath, $filename);
+        $url = url('uploads/qr/' . $filename);
+
+        $settings = $shop->customer_portal_settings ?: [];
+        $settings['payment_qr_image'] = $url;
+        $shop->update(['customer_portal_settings' => $settings]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Payment QR code uploaded successfully',
+            'data' => [
+                'url' => $url,
+                'filename' => $filename,
+                'shop' => $shop,
+            ],
+        ]);
+    }
 }
 
