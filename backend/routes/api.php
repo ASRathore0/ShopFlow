@@ -168,6 +168,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/shop', [AdminShopController::class, 'update']);
         Route::post('/shop/upload-logo', [AdminShopController::class, 'uploadLogo']);
         Route::post('/shop/upload-payment-qr', [AdminShopController::class, 'uploadPaymentQr']);
+        Route::post('/shop/upload-hero-banner', [AdminShopController::class, 'uploadHeroBanner']);
     });
 
     // Super Admin APIs

@@ -277,50 +277,75 @@ export default function CustomerPortal({ defaultShopSlug }) {
         {activeTab === 'home' && (
           <>
             {/* DYNAMIC SHOWROOM ENTRANCE (CINEMATIC HERO, GLASS, OR BOUTIQUE) */}
-            {themeConfig.headerStyle === 'hero_banner' ? (
-              <div className={`relative p-5 sm:p-7 rounded-3xl overflow-hidden text-white shadow-xl ${themeConfig.glowClass} border border-white/10 transition-all`}>
-                {themeConfig.heroBannerImage ? (
-                  <div
-                    className="absolute inset-0 bg-cover bg-center transition-transform duration-700"
-                    style={{ backgroundImage: `url(${themeConfig.heroBannerImage})` }}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/80 to-slate-900/60 backdrop-blur-[1.1px]" />
-                  </div>
-                ) : (
-                  <div className={`absolute inset-0 bg-gradient-to-r ${themeConfig.headerGradient}`} />
-                )}
+            {themeConfig.headerStyle === 'hero_banner' ? (() => {
+              const hasHeroImage = Boolean(themeConfig.heroBannerImage);
+              const isOnlyImage = hasHeroImage && (
+                themeConfig.hideBannerText ||
+                themeConfig.bannerMode === 'clean_image' ||
+                (themeConfig.heroTitle === '.' && (themeConfig.heroSubtitle === '.' || !themeConfig.heroSubtitle)) ||
+                (!themeConfig.heroTitle?.trim() && !themeConfig.heroSubtitle?.trim())
+              );
+              const customTitle = (themeConfig.heroTitle && themeConfig.heroTitle !== '.') ? themeConfig.heroTitle : '';
+              const customSubtitle = (themeConfig.heroSubtitle && themeConfig.heroSubtitle !== '.') ? themeConfig.heroSubtitle : '';
 
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1.5 max-w-xl">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md shadow-sm">
-                        <Sparkles className="w-3 h-3 text-amber-300" />
-                        <span>In-Store Virtual Shopping</span>
-                      </span>
+              return (
+                <div className={`relative ${isOnlyImage ? 'min-h-[170px] sm:min-h-[220px] md:min-h-[260px]' : 'p-5 sm:p-7'} rounded-3xl overflow-hidden text-white shadow-xl ${themeConfig.glowClass} border border-white/10 transition-all flex flex-col justify-between`}>
+                  {hasHeroImage ? (
+                    <div
+                      className="absolute inset-0 bg-cover bg-center transition-transform duration-700"
+                      style={{ backgroundImage: `url(${themeConfig.heroBannerImage})` }}
+                    >
+                      {/* Only apply a subtle gradient scrim if there is text to read, otherwise keep 100% crystal-clear photo without blur */}
+                      {!isOnlyImage && (
+                        <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-slate-950/85 via-slate-950/40 to-transparent" />
+                      )}
                     </div>
-                    <h2 className="text-base sm:text-xl font-black tracking-tight leading-snug">
-                      {themeConfig.heroTitle || (shop?.name ? `${shop.name} Collection` : 'Showroom Assistant Active')}
-                    </h2>
-                    <p className="text-xs sm:text-sm text-white/80 leading-relaxed">
-                      {themeConfig.heroSubtitle || 'Browse authentic showroom inventory below. Tap "Show Me" on any item to have our floor associate retrieve it for you.'}
-                    </p>
-                  </div>
+                  ) : (
+                    <div className={`absolute inset-0 bg-gradient-to-r ${themeConfig.headerGradient}`} />
+                  )}
 
-                  <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2 shrink-0 pt-2 md:pt-0 border-t border-white/10 md:border-t-0">
-                    <span className="text-[11px] sm:text-xs font-bold px-3 py-1.5 rounded-2xl bg-white/15 backdrop-blur-md text-white border border-white/15 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-300" />
-                      <span>{shop?.opening_hours || 'Open Today'}</span>
-                    </span>
-                    {portalSettings.wifi_ssid && (
-                      <span className="text-[10px] sm:text-[11px] font-semibold text-white/80 flex items-center gap-1">
-                        <Wifi className="w-3 h-3 text-emerald-300" />
-                        <span>Free Wi-Fi: {portalSettings.wifi_ssid}</span>
-                      </span>
-                    )}
-                  </div>
+                  {isOnlyImage ? null : (
+                    /* HERO BANNER WITH TEXT */
+                    <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1.5 max-w-xl">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md shadow-sm">
+                            <Sparkles className="w-3 h-3 text-amber-300" />
+                            <span>In-Store Virtual Shopping</span>
+                          </span>
+                        </div>
+                        {(customTitle || (!hasHeroImage && shop?.name)) && (
+                          <h2 className="text-base sm:text-xl font-black tracking-tight leading-snug drop-shadow-md">
+                            {customTitle || `${shop?.name} Collection`}
+                          </h2>
+                        )}
+                        {(customSubtitle || !hasHeroImage) && (
+                          <p className="text-xs sm:text-sm text-white/90 leading-relaxed drop-shadow-sm">
+                            {customSubtitle || 'Browse authentic showroom inventory below. Tap "Show Me" on any item to have our floor associate retrieve it for you.'}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-2 shrink-0 pt-2 md:pt-0 border-t border-white/10 md:border-t-0">
+                        {/* Only show timing when NO banner image is uploaded */}
+                        {!hasHeroImage && (
+                          <span className="text-[11px] sm:text-xs font-bold px-3 py-1.5 rounded-2xl bg-white/15 backdrop-blur-md text-white border border-white/15 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-amber-300" />
+                            <span>{shop?.opening_hours || 'Open Today'}</span>
+                          </span>
+                        )}
+                        {portalSettings.wifi_ssid && (
+                          <span className="text-[10px] sm:text-[11px] font-semibold text-white/80 flex items-center gap-1">
+                            <Wifi className="w-3 h-3 text-emerald-300" />
+                            <span>Free Wi-Fi: {portalSettings.wifi_ssid}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ) : themeConfig.headerStyle === 'glassmorphism' ? (
+              );
+            })() : themeConfig.headerStyle === 'glassmorphism' ? (
               <div
                 className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white/85 dark:bg-zinc-900/85 backdrop-blur-xl border flex items-center justify-between gap-3 shadow-lg transition-all"
                 style={{

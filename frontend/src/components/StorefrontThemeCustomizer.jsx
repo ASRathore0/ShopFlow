@@ -3,8 +3,10 @@ import {
   Palette, Sparkles, Layers, Store, Eye, Check, ExternalLink,
   Image as ImageIcon, Sliders, CheckCircle2, Zap, ArrowRight,
   ShieldCheck, Search, Tag, HandHeart, UploadCloud, RefreshCw,
-  Smartphone, Monitor, Wifi, BatteryMedium, Crown
+  Smartphone, Monitor, Wifi, BatteryMedium, Crown, Loader2,
+  Upload, X, ImagePlus
 } from 'lucide-react';
+import { adminService } from '../services/adminService';
 import {
   STOREFRONT_THEMES,
   HEADER_STYLES,
@@ -22,10 +24,48 @@ export default function StorefrontThemeCustomizer({
 }) {
   const [activePreviewDevice, setActivePreviewDevice] = useState('mobile'); // 'mobile' | 'desktop'
   const [customColor, setCustomColor] = useState(settingsForm.brand_color || '#2563EB');
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [bannerInputMode, setBannerInputMode] = useState('upload'); // 'upload' | 'url'
+  const [bannerUploadError, setBannerUploadError] = useState('');
 
   const selectedThemeId = settingsForm.theme_preset || 'midnight_blue';
   const selectedHeaderStyle = settingsForm.header_style || 'hero_banner';
   const selectedCardStyle = settingsForm.card_style || 'modern';
+
+  const handleBannerUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setBannerUploadError('');
+    if (!file.type.startsWith('image/')) {
+      setBannerUploadError('Please choose a valid image file (PNG, JPG, WebP).');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setBannerUploadError('Image size must be less than 15MB.');
+      return;
+    }
+
+    setIsUploadingBanner(true);
+    try {
+      const res = await adminService.uploadHeroBanner(file);
+      const url = res.data?.url || res.url;
+      if (url) {
+        setSettingsForm((prev) => ({
+          ...prev,
+          hero_banner_image: url,
+          banner_mode: 'clean_image',
+          hide_banner_text: true,
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to upload hero banner:', err);
+      setBannerUploadError(err.response?.data?.message || 'Failed to upload banner image.');
+    } finally {
+      setIsUploadingBanner(false);
+      if (e.target) e.target.value = '';
+    }
+  };
 
   // Construct a temporary shop object to resolve the live preview theme config
   const previewShop = {
@@ -39,6 +79,8 @@ export default function StorefrontThemeCustomizer({
       header_style: selectedHeaderStyle,
       card_style: selectedCardStyle,
       hero_banner_image: settingsForm.hero_banner_image,
+      banner_mode: settingsForm.banner_mode || (settingsForm.hero_banner_image ? 'clean_image' : 'overlay'),
+      hide_banner_text: Boolean(settingsForm.hide_banner_text),
       hero_title: settingsForm.hero_title,
       hero_subtitle: settingsForm.hero_subtitle,
       announcement: settingsForm.announcement || '🎉 Grand Showcase: Ask floor staff for instant bundle deals!',
@@ -293,60 +335,240 @@ export default function StorefrontThemeCustomizer({
               })}
             </div>
 
-            {/* Custom Hero Titles & Optional Banner Image */}
+            {/* Custom Hero Presentation & Device Image Upload */}
             <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-extrabold text-slate-700 dark:text-zinc-300">
-                    Hero Showcase Headline (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Flagship Audio & Private Concierge"
-                    value={settingsForm.hero_title || ''}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, hero_title: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
+              {/* Banner Picture Source Selector */}
+              <div className="space-y-3 p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
+                      <ImagePlus className="w-4 h-4 text-blue-500" />
+                      <span>Custom Showroom Hero Banner Picture</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                      Upload a clean photograph or promo banner from your device or paste an image URL.
+                    </p>
+                  </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-extrabold text-slate-700 dark:text-zinc-300">
-                    Hero Tagline / Subtitle
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Tap 'Show Me' for immediate floor staff demo"
-                    value={settingsForm.hero_subtitle || ''}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, hero_subtitle: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-700 dark:text-zinc-300 flex items-center justify-between">
-                  <span>Custom Hero Background Wallpaper (Optional Image URL)</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Adds a cinematic backdrop under header</span>
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80"
-                    value={settingsForm.hero_banner_image || ''}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, hero_banner_image: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                  {settingsForm.hero_banner_image && (
+                  {/* Mode switcher tabs: Upload vs URL */}
+                  <div className="flex items-center gap-1 p-1 bg-slate-200/80 dark:bg-zinc-800 rounded-xl self-start sm:self-auto">
                     <button
                       type="button"
-                      onClick={() => setSettingsForm({ ...settingsForm, hero_banner_image: '' })}
-                      className="px-4 py-2 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-2xl border border-rose-200 dark:border-rose-800 transition-colors shrink-0 cursor-pointer"
+                      onClick={() => setBannerInputMode('upload')}
+                      className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                        bannerInputMode === 'upload'
+                          ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-sm'
+                          : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900'
+                      }`}
                     >
-                      Clear
+                      📁 Upload File
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setBannerInputMode('url')}
+                      className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                        bannerInputMode === 'url'
+                          ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-sm'
+                          : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900'
+                      }`}
+                    >
+                      🔗 Image URL
+                    </button>
+                  </div>
                 </div>
+
+                {/* Prominently Display Recommended Banner Size */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 text-slate-800 dark:text-zinc-200">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm shadow-blue-500/20">
+                      📐
+                    </span>
+                    <div>
+                      <span className="text-xs font-black block text-slate-900 dark:text-white">
+                        Recommended Banner Dimensions
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-zinc-400">
+                        Exact aspect ratio for crystal-clear mobile & desktop fit
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                    <span className="px-2.5 py-1 rounded-xl bg-blue-600 text-white text-[11px] font-mono font-black shadow-sm">
+                      1200 × 450 px
+                    </span>
+                    <span className="px-2 py-1 rounded-xl bg-slate-200 dark:bg-zinc-800 text-[10px] font-bold text-slate-700 dark:text-zinc-300 border border-slate-300/60 dark:border-zinc-700">
+                      8:3 Ratio
+                    </span>
+                  </div>
+                </div>
+
+                {/* Banner Input Area */}
+                {bannerInputMode === 'upload' ? (
+                  <div className="space-y-2">
+                    <label className="w-full">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleBannerUpload}
+                        className="hidden"
+                        disabled={isUploadingBanner}
+                      />
+                      <span className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 transition-all active:scale-[0.99]">
+                        {isUploadingBanner ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Uploading Clean Picture...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud className="w-4 h-4" />
+                            <span>{settingsForm.hero_banner_image ? 'Upload New Clean Picture from Device' : 'Select & Upload Picture from Device'}</span>
+                          </>
+                        )}
+                      </span>
+                    </label>
+                    <p className="text-[10px] text-slate-400 text-center">
+                      Supports JPG, PNG, WebP up to 15MB. Best results with 1200×450px banner.
+                    </p>
+                    {bannerUploadError && (
+                      <p className="text-xs font-bold text-rose-500 text-center">
+                        {bannerUploadError}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80"
+                      value={settingsForm.hero_banner_image || ''}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, hero_banner_image: e.target.value })}
+                      className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                {/* Active Image Preview & Clarity Control */}
+                {settingsForm.hero_banner_image && (
+                  <div className="pt-3 border-t border-slate-200/60 dark:border-zinc-800 space-y-3">
+                    <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-16 h-10 rounded-lg bg-cover bg-center border border-slate-200 dark:border-zinc-600 shrink-0" style={{ backgroundImage: `url(${settingsForm.hero_banner_image})` }} />
+                        <div className="min-w-0">
+                          <span className="text-xs font-extrabold text-slate-900 dark:text-white block truncate">
+                            Active Banner Picture
+                          </span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                            ✓ Ready to display
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSettingsForm({ ...settingsForm, hero_banner_image: '' })}
+                        className="px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900 transition-colors shrink-0 cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    {/* Clean Picture vs Text Overlay Selector */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-extrabold text-slate-700 dark:text-zinc-300">
+                        Banner Picture Appearance Mode
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setSettingsForm({
+                            ...settingsForm,
+                            banner_mode: 'clean_image',
+                            hide_banner_text: true,
+                          })}
+                          className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                            settingsForm.banner_mode === 'clean_image' || settingsForm.hide_banner_text
+                              ? 'border-emerald-600 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100 shadow-sm'
+                              : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-black">📸 Clean Picture Only</span>
+                            {(settingsForm.banner_mode === 'clean_image' || settingsForm.hide_banner_text) && (
+                              <span className="text-[10px] font-extrabold text-emerald-600">Active</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">
+                            Shows your picture crystal clear without blur or dark wash. Text overlay is hidden.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSettingsForm({
+                            ...settingsForm,
+                            banner_mode: 'overlay',
+                            hide_banner_text: false,
+                          })}
+                          className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                            settingsForm.banner_mode === 'overlay' && !settingsForm.hide_banner_text
+                              ? 'border-blue-600 bg-blue-50/60 dark:bg-blue-950/20 text-blue-950 dark:text-blue-100 shadow-sm'
+                              : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-black">🎬 With Headline Overlay</span>
+                            {settingsForm.banner_mode === 'overlay' && !settingsForm.hide_banner_text && (
+                              <span className="text-[10px] font-extrabold text-blue-600">Active</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">
+                            Keeps picture clear (no blur) and overlays your custom title and subtitle.
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Headline & Subtitle Inputs (Active when not in Clean Picture Only mode) */}
+              {(!settingsForm.hide_banner_text && settingsForm.banner_mode !== 'clean_image') ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+                  <div className="space-y-1">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-zinc-300">
+                      Hero Showcase Headline
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Flagship Audio & Private Concierge"
+                      value={settingsForm.hero_title === '.' ? '' : (settingsForm.hero_title || '')}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, hero_title: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-zinc-300">
+                      Hero Tagline / Subtitle
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Tap 'Show Me' for immediate floor staff demo"
+                      value={settingsForm.hero_subtitle === '.' ? '' : (settingsForm.hero_subtitle || '')}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, hero_subtitle: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              ) : settingsForm.hero_banner_image ? (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-emerald-700 dark:text-emerald-400 text-xs">
+                  <Sparkles className="w-4 h-4 shrink-0" />
+                  <span>
+                    <strong>Clean Picture Mode Active:</strong> Your picture will be shown in full clarity with zero blur and zero dark overlay.
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -510,32 +732,49 @@ export default function StorefrontThemeCustomizer({
               </div>
 
               {/* 3. SIMULATED HERO BANNER */}
-              {selectedHeaderStyle === 'hero_banner' && (
-                <div className="relative p-3.5 overflow-hidden text-white">
-                  {settingsForm.hero_banner_image ? (
-                    <div
-                      className="absolute inset-0 bg-cover bg-center"
-                      style={{ backgroundImage: `url(${settingsForm.hero_banner_image})` }}
-                    >
-                      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]" />
-                    </div>
-                  ) : (
-                    <div className={`absolute inset-0 bg-gradient-to-r ${currentTheme.headerGradient}`} />
-                  )}
+              {selectedHeaderStyle === 'hero_banner' && (() => {
+                const hasImg = Boolean(settingsForm.hero_banner_image);
+                const isOnlyImg = hasImg && (
+                  settingsForm.hide_banner_text ||
+                  settingsForm.banner_mode === 'clean_image' ||
+                  (settingsForm.hero_title === '.' && (settingsForm.hero_subtitle === '.' || !settingsForm.hero_subtitle)) ||
+                  (!settingsForm.hero_title?.trim() && !settingsForm.hero_subtitle?.trim())
+                );
+                const customTitle = (settingsForm.hero_title && settingsForm.hero_title !== '.') ? settingsForm.hero_title : '';
+                const customSubtitle = (settingsForm.hero_subtitle && settingsForm.hero_subtitle !== '.') ? settingsForm.hero_subtitle : '';
 
-                  <div className="relative z-10 space-y-1">
-                    <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md inline-block">
-                      Floor Concierge Active
-                    </span>
-                    <h4 className="text-xs font-black tracking-tight leading-snug">
-                      {settingsForm.hero_title || 'Flagship Physical Showroom'}
-                    </h4>
-                    <p className="text-[10px] text-white/80 leading-tight">
-                      {settingsForm.hero_subtitle || 'Tap "Show Me" on any item for immediate associate assistance.'}
-                    </p>
+                return (
+                  <div className={`relative ${isOnlyImg ? 'h-36 sm:h-40' : 'p-3.5'} overflow-hidden text-white flex flex-col justify-between`}>
+                    {hasImg ? (
+                      <div
+                        className="absolute inset-0 bg-cover bg-center"
+                        style={{ backgroundImage: `url(${settingsForm.hero_banner_image})` }}
+                      >
+                        {/* ZERO BLUR. Only light scrim if text is present */}
+                        {!isOnlyImg && (
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/35 to-transparent" />
+                        )}
+                      </div>
+                    ) : (
+                      <div className={`absolute inset-0 bg-gradient-to-r ${currentTheme.headerGradient}`} />
+                    )}
+
+                    {isOnlyImg ? null : (
+                      <div className="relative z-10 space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md inline-block">
+                          Floor Concierge Active
+                        </span>
+                        <h4 className="text-xs font-black tracking-tight leading-snug drop-shadow-sm">
+                          {customTitle || 'Flagship Physical Showroom'}
+                        </h4>
+                        <p className="text-[10px] text-white/90 leading-tight drop-shadow-sm">
+                          {customSubtitle || 'Tap "Show Me" on any item for immediate associate assistance.'}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* 4. SIMULATED SEARCH BAR & CHIPS */}
               <div className="p-3 space-y-2.5">

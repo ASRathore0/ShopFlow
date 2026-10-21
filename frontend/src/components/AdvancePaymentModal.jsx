@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   X, QrCode, Smartphone, Copy, Check, ShieldCheck,
-  AlertCircle, CreditCard, ChevronRight, Sparkles, MessageCircle, ExternalLink
+  AlertCircle, CreditCard, ChevronRight, Sparkles, MessageCircle, ExternalLink, Download
 } from 'lucide-react';
 import { getThemeConfig } from '../utils/storefrontThemes';
 import { generateWhatsAppOrderMessage, openWhatsAppUrl } from '../utils/whatsappHelper';
@@ -38,14 +38,26 @@ export default function AdvancePaymentModal({
   const upiName = cps.upi_name || shopName;
   const qrImage = cps.payment_qr_image || null;
 
-  // Standard UPI URI
+// Standard UPI URI without 'tn' to avoid bank keyword filters
   const upiUri = upiId
-    ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiName)}&am=${advanceAmount}&cu=INR&tn=${encodeURIComponent(`Advance for ${product.name}`)}`
+    ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiName)}&am=${advanceAmount}&cu=INR`
+    : '';
+
+  const phonePeUri = upiId
+    ? `phonepe://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiName)}&am=${advanceAmount}&cu=INR`
+    : '';
+
+  const paytmUri = upiId
+    ? `paytmmp://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiName)}&am=${advanceAmount}&cu=INR`
+    : '';
+
+  const gpayUri = upiId
+    ? `tez://upi/pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(upiName)}&am=${advanceAmount}&cu=INR`
     : '';
 
   // Dynamic QR Code fallback via public QR generator API if merchant entered UPI ID without uploading image
   const dynamicQrUrl = upiUri
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(upiUri)}&margin=8`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(upiUri)}&margin=8`
     : null;
 
   const activeQrSrc = qrImage || dynamicQrUrl;
@@ -62,13 +74,25 @@ export default function AdvancePaymentModal({
     if (!upiId) return;
     navigator.clipboard.writeText(upiId);
     setCopiedUpi(true);
-    setTimeout(() => setCopiedUpi(false), 2000);
+    setTimeout(() => setCopiedUpi(false), 2500);
   };
 
-  const handleOpenUpiApp = () => {
-    if (upiUri) {
-      window.location.href = upiUri;
+  const handleOpenUpiApp = (uri) => {
+    const targetUri = uri || upiUri;
+    if (targetUri) {
+      window.location.href = targetUri;
     }
+  };
+
+  const handleDownloadQr = () => {
+    if (!activeQrSrc) return;
+    const a = document.createElement('a');
+    a.href = activeQrSrc;
+    a.download = `UPI_QR_${shopName.replace(/\s+/g, '_')}_₹${advanceAmount}.png`;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleSubmitWhatsApp = (e) => {
@@ -188,17 +212,27 @@ export default function AdvancePaymentModal({
               <span>Scan to Pay Booking Advance ₹{advanceAmount.toFixed(2)}</span>
             </div>
 
-            {/* QR Frame */}
+            {/* QR Frame & Download Action */}
             {activeQrSrc ? (
-              <div className="relative p-2.5 bg-white rounded-2xl border-2 border-dashed border-emerald-500/40 shadow-sm group">
-                <img
-                  src={activeQrSrc}
-                  alt="Store Payment QR"
-                  className="w-48 h-48 object-contain rounded-xl mx-auto"
-                />
-                <span className="absolute bottom-1 right-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white shadow-sm">
-                  BHIM UPI
-                </span>
+              <div className="space-y-2">
+                <div className="relative p-2.5 bg-white rounded-2xl border-2 border-dashed border-emerald-500/40 shadow-sm group">
+                  <img
+                    src={activeQrSrc}
+                    alt="Store Payment QR"
+                    className="w-48 h-48 object-contain rounded-xl mx-auto"
+                  />
+                  <span className="absolute bottom-1 right-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white shadow-sm">
+                    BHIM UPI
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadQr}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 mx-auto border border-slate-200 dark:border-zinc-700 cursor-pointer active:scale-95"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Save QR to Gallery</span>
+                </button>
               </div>
             ) : (
               <div className="w-48 h-48 rounded-2xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 flex flex-col items-center justify-center p-4 text-center">
@@ -208,31 +242,87 @@ export default function AdvancePaymentModal({
               </div>
             )}
 
-            {/* UPI ID Pill & Mobile Quick Pay */}
+            {/* UPI ID Pill with 1-Click Copy */}
             {upiId && (
-              <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700 text-xs font-mono font-bold text-slate-800 dark:text-zinc-200">
-                  <span className="truncate max-w-[180px]">{upiId}</span>
-                  <button
-                    type="button"
-                    onClick={handleCopyUpi}
-                    className="p-1 hover:bg-slate-200 dark:hover:bg-zinc-700 rounded transition-colors text-slate-500 hover:text-slate-800 dark:hover:text-white"
-                    title="Copy UPI ID"
-                  >
-                    {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
+              <div className="w-full space-y-2 pt-1">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                  <div className="flex items-center justify-between w-full sm:w-auto gap-2 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700 text-xs font-mono font-bold text-slate-800 dark:text-zinc-200">
+                    <span className="truncate max-w-[200px]">{upiId}</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyUpi}
+                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all text-[11px] font-sans font-bold flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
+                    >
+                      {copiedUpi ? (
+                        <>
+                          <Check className="w-3 h-3 text-white" />
+                          <span>Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 text-white" />
+                          <span>Copy UPI ID</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
+                {/* Mobile Quick Pay UPI Buttons */}
                 {upiUri && (
-                  <button
-                    type="button"
-                    onClick={handleOpenUpiApp}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Pay in UPI App</span>
-                  </button>
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenUpiApp(phonePeUri)}
+                      className="px-2.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+                    >
+                      PhonePe
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenUpiApp(paytmUri)}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#002e6e] hover:bg-[#003887] text-white text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+                    >
+                      Paytm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenUpiApp(gpayUri)}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#1a73e8] hover:bg-[#1557b0] text-white text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+                    >
+                      GPay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenUpiApp(upiUri)}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all active:scale-95 flex items-center gap-1 shadow-sm"
+                    >
+                      <Smartphone className="w-3 h-3" />
+                      <span>Any UPI</span>
+                    </button>
+                  </div>
                 )}
+
+                {/* Paytm-Protect Security Helper Callout */}
+                <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-800/40 text-left space-y-1.5 w-full">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                    <span>Seeing a Paytm "Payment Alert / UPI Risk Policy"?</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
+                    Paytm restricts direct browser links for personal UPI accounts to protect users. To pay smoothly:
+                  </p>
+                  <div className="p-2 rounded-xl bg-white/80 dark:bg-black/30 border border-amber-200/60 dark:border-amber-800/30 text-[11px] text-slate-800 dark:text-zinc-200 space-y-1 font-medium">
+                    <div className="flex items-start gap-1.5">
+                      <span className="font-bold text-emerald-600 shrink-0">1.</span>
+                      <span>Tap <button type="button" onClick={handleCopyUpi} className="font-bold underline text-emerald-600 dark:text-emerald-400 cursor-pointer">Copy UPI ID</button> above &rarr; Open Paytm / PhonePe &rarr; Choose <strong>"To UPI ID"</strong> and paste.</span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="font-bold text-blue-600 shrink-0">2.</span>
+                      <span>Or tap <button type="button" onClick={handleDownloadQr} className="font-bold underline text-blue-600 dark:text-blue-400 cursor-pointer">Save QR</button> above &rarr; In Paytm scanner, tap <strong>"Scan from Gallery"</strong>.</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -189,6 +189,8 @@ export default function AdminDashboard() {
     hero_title: '',
     hero_subtitle: '',
     hero_banner_image: '',
+    banner_mode: 'clean_image', // 'clean_image' | 'overlay'
+    hide_banner_text: false,
     is_open: true,
     whatsapp_number: '',
     action_button_mode: 'show_me', // 'show_me' | 'whatsapp' | 'both'
@@ -246,6 +248,8 @@ export default function AdminDashboard() {
       hero_title: cps.hero_title || '',
       hero_subtitle: cps.hero_subtitle || '',
       hero_banner_image: cps.hero_banner_image || '',
+      banner_mode: cps.banner_mode || (cps.hero_banner_image ? 'clean_image' : 'overlay'),
+      hide_banner_text: Boolean(cps.hide_banner_text),
       is_open: s.is_open !== false,
       whatsapp_number: cps.whatsapp_number || '',
       action_button_mode: cps.action_button_mode || 'show_me',
@@ -1682,6 +1686,8 @@ export default function AdminDashboard() {
           hero_title: settingsForm.hero_title || '',
           hero_subtitle: settingsForm.hero_subtitle || '',
           hero_banner_image: settingsForm.hero_banner_image || '',
+          banner_mode: settingsForm.banner_mode || 'clean_image',
+          hide_banner_text: Boolean(settingsForm.hide_banner_text),
         },
       };
 
@@ -4569,6 +4575,10 @@ export default function AdminDashboard() {
                                 onChange={(e) => setSettingsForm({ ...settingsForm, advance_payment_note: e.target.value })}
                                 className="w-full bg-slate-50 dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs font-medium focus:ring-2 focus:ring-purple-500 focus:outline-none"
                               />
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/40 text-[11px] text-blue-800 dark:text-blue-300">
+                              💡 <strong>Pro-Tip for Instant 1-Click Payments:</strong> Upload your counter standee QR (PhonePe Business, Paytm Merchant, or BharatPe QR) or enter a registered business UPI ID. This allows customers to pay with 100% success without Paytm personal account warnings!
                             </div>
                           </div>
 

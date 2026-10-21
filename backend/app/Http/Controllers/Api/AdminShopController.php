@@ -128,5 +128,40 @@ class AdminShopController extends Controller
             ],
         ]);
     }
+
+    public function uploadHeroBanner(Request $request)
+    {
+        $shopId = $this->getAdminShopId($request);
+        $shop = Shop::findOrFail($shopId);
+
+        $request->validate([
+            'banner' => 'required|image|mimes:jpeg,png,jpg,webp,gif,svg|max:15360',
+        ]);
+
+        $file = $request->file('banner');
+        $filename = 'banner_' . $shop->id . '_' . time() . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension();
+
+        $destinationPath = public_path('uploads/banners');
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
+        }
+
+        $file->move($destinationPath, $filename);
+        $url = url('uploads/banners/' . $filename);
+
+        $settings = $shop->customer_portal_settings ?: [];
+        $settings['hero_banner_image'] = $url;
+        $shop->update(['customer_portal_settings' => $settings]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Hero banner uploaded successfully',
+            'data' => [
+                'url' => $url,
+                'filename' => $filename,
+                'shop' => $shop,
+            ],
+        ]);
+    }
 }
 
