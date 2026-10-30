@@ -29,6 +29,22 @@ export const superAdminService = {
     const res = await api.put(`/super-admin/shops/${id}/toggle-status`);
     return res.data;
   },
+  toggleShopBilling: async (id) => {
+    const res = await api.put(`/super-admin/shops/${id}/toggle-billing`);
+    return res.data;
+  },
+  getWhatsAppConfig: async (shopId) => {
+    const res = await api.get(`/super-admin/shops/${shopId}/whatsapp-config`);
+    return res.data;
+  },
+  updateWhatsAppConfig: async (shopId, data) => {
+    const res = await api.put(`/super-admin/shops/${shopId}/whatsapp-config`, data);
+    return res.data;
+  },
+  testWhatsAppConfig: async (shopId, data) => {
+    const res = await api.post(`/super-admin/shops/${shopId}/whatsapp-test`, data);
+    return res.data;
+  },
   deleteShop: async (id) => {
     const res = await api.delete(`/super-admin/shops/${id}`);
     return res.data;

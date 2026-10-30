@@ -25,11 +25,20 @@ class Shop extends Model
         'customer_portal_settings',
         'subscription_id',
         'is_active',
+        'billing_enabled',
+        'bill_tagline',
+        'bill_terms',
+        'whatsapp_provider',
+        'whatsapp_config',
+        'auto_send_whatsapp_bill',
     ];
 
     protected $casts = [
         'is_open' => 'boolean',
         'is_active' => 'boolean',
+        'billing_enabled' => 'boolean',
+        'auto_send_whatsapp_bill' => 'boolean',
+        'whatsapp_config' => 'array',
         'customer_portal_settings' => 'array',
     ];
 

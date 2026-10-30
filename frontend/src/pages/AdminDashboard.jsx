@@ -10,7 +10,7 @@ import {
   Sun, Moon, Menu, X, ArrowLeft, LogOut, ExternalLink, ChevronRight, Edit3,
   Trash2, Check, UserCheck, AlertCircle, Eye, CornerDownRight, Tag, ChevronDown, Sparkles,
   UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera,
-  Star, Images, GripVertical, ArrowUpDown, Crop, Palette, CreditCard
+  Star, Images, GripVertical, ArrowUpDown, Crop, Palette, CreditCard, Receipt
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +21,7 @@ import ImageCropperModal from '../components/ImageCropperModal';
 import { removeImageBackground } from '../services/bgRemovalService';
 import StorefrontThemeCustomizer from '../components/StorefrontThemeCustomizer';
 import RequestStatusBadge from '../components/RequestStatusBadge';
+import PosBillingView from '../components/PosBillingView';
 
 export default function AdminDashboard() {
   const { user, quickLoginAs, logout, switchShop } = useAuth();
@@ -185,6 +186,8 @@ export default function AdminDashboard() {
     brand_color: '#2563EB',
     theme_preset: 'midnight_blue',
     header_style: 'hero_banner',
+    bill_tagline: '',
+    bill_terms: '',
     card_style: 'modern',
     hero_title: '',
     hero_subtitle: '',
@@ -240,6 +243,8 @@ export default function AdminDashboard() {
       state: cps.state || ad.state || '',
       postal_code: cps.postal_code || ad.postal_code || '',
       landmark: cps.landmark || ad.landmark || '',
+      bill_tagline: s.bill_tagline || '',
+      bill_terms: s.bill_terms || '',
       opening_hours: s.opening_hours || '9:00 AM - 9:00 PM',
       brand_color: s.brand_color || cps.brand_color || '#2563EB',
       theme_preset: cps.theme_preset || 'midnight_blue',
@@ -1657,6 +1662,8 @@ export default function AdminDashboard() {
         opening_hours: settingsForm.opening_hours,
         brand_color: settingsForm.brand_color,
         is_open: settingsForm.is_open,
+        bill_tagline: settingsForm.bill_tagline,
+        bill_terms: settingsForm.bill_terms,
         customer_portal_settings: {
           tagline: settingsForm.tagline,
           city: settingsForm.city,
@@ -1729,6 +1736,7 @@ export default function AdminDashboard() {
 
   const navItems = [
     { id: 'overview', label: 'Dashboard Overview', icon: BarChart2 },
+    ...(currentShop?.billing_enabled ? [{ id: 'billing', label: 'POS Billing & Memo', icon: Receipt, badge: 'POS' }] : [{ id: 'billing', label: 'POS Billing', icon: Receipt, locked: true }]),
     { id: 'products', label: 'Product Catalog', icon: Package, count: products.length },
     { id: 'inventory', label: 'Inventory & Moves', icon: Layers, count: metrics.low_stock_count > 0 ? metrics.low_stock_count : undefined },
     { id: 'locations', label: 'Store Layout', icon: MapPin, count: locations.length },
@@ -1887,6 +1895,28 @@ export default function AdminDashboard() {
                     />
                     <span className="truncate">{item.label}</span>
                   </div>
+                  {item.badge && (
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider shrink-0 ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                  {item.locked && (
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider shrink-0 ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-amber-500/10 text-amber-500'
+                      }`}
+                    >
+                      Locked
+                    </span>
+                  )}
                   {item.count !== undefined && item.count > 0 && (
                     <span
                       className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold shrink-0 ${
@@ -2120,6 +2150,18 @@ export default function AdminDashboard() {
 
       {/* MAIN ADMIN CONTENT BODY */}
       <main className="flex-1 p-3.5 sm:p-6 lg:p-8 overflow-y-auto space-y-6 max-w-7xl">
+        {/* ======================================================== */}
+        {/* SECTION: POS BILLING & SALES MEMO PAD */}
+        {/* ======================================================== */}
+        {activeSection === 'billing' && (
+          <div className="space-y-6 animate-fade-in">
+            <PosBillingView
+              shop={currentShop}
+              role="admin"
+            />
+          </div>
+        )}
+
         {/* ======================================================== */}
         {/* SECTION 1: OVERVIEW DASHBOARD */}
         {/* ======================================================== */}

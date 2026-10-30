@@ -4,7 +4,8 @@ import {
   ShieldCheck, Store, Users, DollarSign, TrendingUp, CheckCircle2,
   Plus, Search, ArrowRight, BarChart3, AlertCircle, Building, Layers,
   ExternalLink, Filter, X, Sun, Moon, LogOut, Package, RefreshCw,
-  Edit3, Trash2, Zap, KeyRound, Power, Check, MoreVertical, Sparkles, AlertTriangle
+  Edit3, Trash2, Zap, KeyRound, Power, Check, MoreVertical, Sparkles, AlertTriangle,
+  Receipt, MessageSquare
 } from 'lucide-react';
 import { superAdminService } from '../services/superAdminService';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +16,7 @@ import EditShopModal from '../components/EditShopModal';
 import ManagePlanModal from '../components/ManagePlanModal';
 import DeleteShopModal from '../components/DeleteShopModal';
 import ResetOwnerPasswordModal from '../components/ResetOwnerPasswordModal';
+import ManageWhatsAppConfigModal from '../components/ManageWhatsAppConfigModal';
 
 export default function SuperAdminDashboard() {
   const { user, switchShop, logout } = useAuth();
@@ -40,6 +42,7 @@ export default function SuperAdminDashboard() {
   const [planShop, setPlanShop] = useState(null);
   const [deleteShop, setDeleteShop] = useState(null);
   const [resetPassShop, setResetPassShop] = useState(null);
+  const [whatsAppShop, setWhatsAppShop] = useState(null);
 
   // Toast notification
   const [toast, setToast] = useState(null);
@@ -94,6 +97,19 @@ export default function SuperAdminDashboard() {
     } catch (err) {
       console.error(err);
       showToast('Failed to update store status', 'error');
+    }
+  };
+
+  const handleToggleBilling = async (shop) => {
+    try {
+      const res = await superAdminService.toggleShopBilling(shop.id);
+      if (res && res.status === 'success') {
+        showToast(res.message);
+        loadData();
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to toggle billing feature for this store', 'error');
     }
   };
 
@@ -378,6 +394,21 @@ export default function SuperAdminDashboard() {
                         {s.shop_type || 'General'}
                       </span>
 
+                      {/* On-Demand Billing Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleBilling(s)}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+                          s.billing_enabled
+                            ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
+                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 border-slate-200 dark:border-zinc-700'
+                        }`}
+                        title="Click to toggle POS Billing feature on-demand"
+                      >
+                        <Receipt className="w-2.5 h-2.5" />
+                        <span>Billing: {s.billing_enabled ? 'Enabled' : 'Disabled'}</span>
+                      </button>
+
                       {/* Plan with upgrade trigger */}
                       <button
                         type="button"
@@ -420,8 +451,8 @@ export default function SuperAdminDashboard() {
                       </a>
                     </div>
 
-                    {/* Management Toolbar (Edit, Plan, Reset Pass, Delete) */}
-                    <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                    {/* Management Toolbar (Edit, WhatsApp, Plan, Reset Pass, Delete) */}
+                    <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
                       <button
                         type="button"
                         onClick={() => setEditShop(s)}
@@ -430,6 +461,16 @@ export default function SuperAdminDashboard() {
                       >
                         <Edit3 className="w-3.5 h-3.5 text-blue-500" />
                         <span>Edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setWhatsAppShop(s)}
+                        className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold flex flex-col items-center justify-center gap-1 transition-colors"
+                        title="Configure WhatsApp Gateway (Meta / Twilio)"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>WhatsApp</span>
                       </button>
 
                       <button
@@ -479,13 +520,14 @@ export default function SuperAdminDashboard() {
                     <th className="p-4">Subscription Plan</th>
                     <th className="p-4">Catalog / Activity</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4 text-center">Billing / POS Feature</th>
                     <th className="p-4 text-right">Administrative Controls</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
                   {filteredShops.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="p-10 text-center text-slate-400 dark:text-zinc-500">
+                      <td colSpan="7" className="p-10 text-center text-slate-400 dark:text-zinc-500">
                         No stores found matching your query. Click "Onboard Store" to register one.
                       </td>
                     </tr>
@@ -564,6 +606,23 @@ export default function SuperAdminDashboard() {
                             </button>
                           </td>
 
+                          {/* Billing & POS Feature On-Demand Toggle */}
+                          <td className="p-4 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBilling(s)}
+                              className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 ${
+                                s.billing_enabled
+                                  ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/25'
+                                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-400 dark:text-zinc-500 border-slate-200 dark:border-zinc-700'
+                              }`}
+                              title="Click to grant / revoke Billing & POS feature on demand for this shop"
+                            >
+                              <Receipt className="w-3.5 h-3.5" />
+                              <span>{s.billing_enabled ? 'Active' : 'Disabled'}</span>
+                            </button>
+                          </td>
+
                           {/* Action Buttons Toolbar */}
                           <td className="p-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
@@ -588,6 +647,20 @@ export default function SuperAdminDashboard() {
                               >
                                 <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
                               </a>
+
+                              {/* WhatsApp Gateway Config */}
+                              <button
+                                type="button"
+                                onClick={() => setWhatsAppShop(s)}
+                                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
+                                  s.whatsapp_provider && s.whatsapp_provider !== 'none'
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-zinc-700'
+                                }`}
+                                title={`WhatsApp Gateway: ${s.whatsapp_provider ? s.whatsapp_provider.toUpperCase() : 'MANUAL'}`}
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </button>
 
                               {/* Edit Shop Details */}
                               <button
@@ -681,6 +754,17 @@ export default function SuperAdminDashboard() {
         onClose={() => setResetPassShop(null)}
         onSuccess={(msg) => {
           showToast(msg || 'Password updated successfully!');
+        }}
+      />
+
+      {/* WhatsApp Gateway Integration Modal (Meta / Twilio) */}
+      <ManageWhatsAppConfigModal
+        isOpen={Boolean(whatsAppShop)}
+        shop={whatsAppShop}
+        onClose={() => setWhatsAppShop(null)}
+        onSaved={() => {
+          showToast('WhatsApp gateway configuration updated.');
+          loadData();
         }}
       />
 

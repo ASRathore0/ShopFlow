@@ -14,11 +14,23 @@ class Order extends Model
         'customer_session_id',
         'user_id',
         'order_number',
+        'bill_number',
+        'bill_serial_no',
         'type',
         'status',
         'total_amount',
+        'subtotal',
+        'tax_amount',
+        'discount_amount',
+        'payment_method',
+        'payment_status',
+        'received_amount',
+        'change_amount',
+        'whatsapp_sent',
+        'whatsapp_status',
         'customer_name',
         'customer_phone',
+        'customer_address',
         'notes',
         'pickup_deadline',
         'collected_at',
@@ -26,9 +38,20 @@ class Order extends Model
 
     protected $casts = [
         'total_amount' => 'decimal:2',
+        'subtotal' => 'decimal:2',
+        'tax_amount' => 'decimal:2',
+        'discount_amount' => 'decimal:2',
+        'received_amount' => 'decimal:2',
+        'change_amount' => 'decimal:2',
+        'whatsapp_sent' => 'boolean',
         'pickup_deadline' => 'datetime',
         'collected_at' => 'datetime',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function shop()
     {

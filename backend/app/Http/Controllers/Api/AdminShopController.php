@@ -48,10 +48,12 @@ class AdminShopController extends Controller
             'brand_color' => 'nullable|string|max:20',
             'is_open' => 'nullable|boolean',
             'customer_portal_settings' => 'nullable|array',
+            'bill_tagline' => 'nullable|string|max:255',
+            'bill_terms' => 'nullable|string|max:500',
         ]);
 
         $shop->update($request->only([
-            'name', 'description', 'logo_url', 'phone', 'email', 'address', 'opening_hours', 'brand_color', 'is_open', 'customer_portal_settings',
+            'name', 'description', 'logo_url', 'phone', 'email', 'address', 'opening_hours', 'brand_color', 'is_open', 'customer_portal_settings', 'bill_tagline', 'bill_terms',
         ]));
 
         return response()->json([

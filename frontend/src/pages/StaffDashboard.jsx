@@ -12,6 +12,7 @@ import { useTheme } from '../context/ThemeContext';
 import StaffRequestCard from '../components/StaffRequestCard';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import StaffProfileModal from '../components/StaffProfileModal';
+import PosBillingView from '../components/PosBillingView';
 
 export default function StaffDashboard() {
   const { user, quickLoginAs, logout } = useAuth();
@@ -487,6 +488,7 @@ export default function StaffDashboard() {
               { id: 'reservations', label: '🔖 Reservations', count: metrics.reservations_count || 0 },
               { id: 'my_assigned', label: 'Assigned To Me', count: dashboardData?.my_active_requests?.length || 0 },
               { id: 'completed', label: 'Completed Today', count: metrics.completed_today || 0 },
+              ...(dashboardData?.shop?.billing_enabled ? [{ id: 'billing', label: '🧾 POS Billing', count: undefined }] : []),
             ].map((t) => (
               <button
                 key={t.id}
@@ -511,8 +513,13 @@ export default function StaffDashboard() {
           </div>
         </div>
 
-        {/* Queue Cards List */}
-        {loading ? (
+        {/* Queue Cards List or POS Billing View */}
+        {tab === 'billing' ? (
+          <PosBillingView
+            shop={dashboardData?.shop}
+            role="staff"
+          />
+        ) : loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((n) => (
               <div key={n} className="h-44 bg-white dark:bg-[#18181B] rounded-2xl border border-slate-200 dark:border-zinc-800 animate-pulse"></div>

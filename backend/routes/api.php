@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\AdminReportController;
 use App\Http\Controllers\Api\AdminRequestController;
 use App\Http\Controllers\Api\AdminShopController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\PublicShopController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\SuperAdminController;
@@ -112,6 +113,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/status', [StaffController::class, 'updateStatus']);
         Route::put('/profile', [StaffController::class, 'updateProfile']);
         Route::post('/profile/avatar', [StaffController::class, 'uploadAvatar']);
+
+        // Staff Billing POS
+        Route::get('/billing/status', [BillingController::class, 'getBillingStatus']);
+        Route::get('/billing/products', [BillingController::class, 'getPosProducts']);
+        Route::post('/billing/create', [BillingController::class, 'createBill']);
+        Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
+        Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
+        Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
     });
 
     // Shop Admin APIs
@@ -163,6 +172,14 @@ Route::middleware('auth:sanctum')->group(function () {
         // Analytics & Reports
         Route::get('/reports', [AdminReportController::class, 'reports']);
 
+        // POS & Billing System
+        Route::get('/billing/status', [BillingController::class, 'getBillingStatus']);
+        Route::get('/billing/products', [BillingController::class, 'getPosProducts']);
+        Route::post('/billing/create', [BillingController::class, 'createBill']);
+        Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
+        Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
+        Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
+
         // Shop Profile & QR
         Route::get('/shop', [AdminShopController::class, 'show']);
         Route::put('/shop', [AdminShopController::class, 'update']);
@@ -177,9 +194,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/shops', [SuperAdminController::class, 'listShops']);
         Route::post('/shops', [SuperAdminController::class, 'createShop']);
         Route::get('/shops/{id}', [SuperAdminController::class, 'showShop']);
+        Route::put('/shops/{id}/update-whatsapp', [SuperAdminController::class, 'updateWhatsAppConfig']);
+        Route::get('/shops/{id}/whatsapp-config', [SuperAdminController::class, 'getWhatsAppConfig']);
+        Route::put('/shops/{id}/whatsapp-config', [SuperAdminController::class, 'updateWhatsAppConfig']);
+        Route::post('/shops/{id}/whatsapp-test', [SuperAdminController::class, 'testWhatsAppConfig']);
         Route::put('/shops/{id}', [SuperAdminController::class, 'updateShop']);
         Route::put('/shops/{id}/plan', [SuperAdminController::class, 'updatePlan']);
         Route::put('/shops/{id}/toggle-status', [SuperAdminController::class, 'toggleShopStatus']);
+        Route::put('/shops/{id}/toggle-billing', [SuperAdminController::class, 'toggleShopBilling']);
         Route::delete('/shops/{id}', [SuperAdminController::class, 'deleteShop']);
         Route::post('/shops/{id}/reset-owner-password', [SuperAdminController::class, 'resetOwnerPassword']);
         Route::get('/plans', [SuperAdminController::class, 'listPlans']);

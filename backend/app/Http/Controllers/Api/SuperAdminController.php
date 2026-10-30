@@ -191,6 +191,9 @@ class SuperAdminController extends Controller
             'brand_color' => 'nullable|string|max:30',
             'is_active' => 'sometimes|boolean',
             'is_open' => 'sometimes|boolean',
+            'billing_enabled' => 'sometimes|boolean',
+            'bill_tagline' => 'nullable|string|max:255',
+            'bill_terms' => 'nullable|string|max:500',
             'announcement' => 'nullable|string|max:255',
         ]);
 
@@ -265,6 +268,103 @@ class SuperAdminController extends Controller
             'status' => 'success',
             'message' => "Shop '{$shop->name}' has been {$statusStr}.",
             'data' => $shop->fresh()->load('subscription.plan')->loadCount(['products', 'employees', 'customerRequests']),
+        ]);
+    }
+
+    public function toggleShopBilling(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+        $shop->billing_enabled = !$shop->billing_enabled;
+        $shop->save();
+
+        $statusStr = $shop->billing_enabled ? 'enabled' : 'disabled';
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Billing feature for '{$shop->name}' has been {$statusStr}.",
+            'data' => $shop->fresh()->load('subscription.plan')->loadCount(['products', 'employees', 'customerRequests']),
+        ]);
+    }
+
+    public function getWhatsAppConfig(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'shop_id' => $shop->id,
+                'shop_name' => $shop->name,
+                'whatsapp_provider' => $shop->whatsapp_provider ?: 'none',
+                'auto_send_whatsapp_bill' => (bool) ($shop->auto_send_whatsapp_bill ?? true),
+                'whatsapp_config' => $shop->whatsapp_config ?: [
+                    'meta_phone_number_id' => '',
+                    'meta_waba_id' => '',
+                    'meta_access_token' => '',
+                    'meta_template_name' => '',
+                    'twilio_account_sid' => '',
+                    'twilio_auth_token' => '',
+                    'twilio_from_number' => '',
+                ],
+            ],
+        ]);
+    }
+
+    public function updateWhatsAppConfig(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+
+        $request->validate([
+            'whatsapp_provider' => 'required|in:none,meta,twilio',
+            'auto_send_whatsapp_bill' => 'nullable|boolean',
+            'whatsapp_config' => 'nullable|array',
+        ]);
+
+        $shop->whatsapp_provider = $request->whatsapp_provider;
+        $shop->auto_send_whatsapp_bill = $request->boolean('auto_send_whatsapp_bill', true);
+        $shop->whatsapp_config = $request->input('whatsapp_config', []);
+        $shop->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "WhatsApp configuration for '{$shop->name}' updated successfully.",
+            'data' => [
+                'whatsapp_provider' => $shop->whatsapp_provider,
+                'auto_send_whatsapp_bill' => $shop->auto_send_whatsapp_bill,
+                'whatsapp_config' => $shop->whatsapp_config,
+            ],
+        ]);
+    }
+
+    public function testWhatsAppConfig(Request $request, $id, \App\Services\WhatsAppBillService $waService)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+
+        $request->validate([
+            'test_phone' => 'required|string|min:8|max:20',
+            'whatsapp_provider' => 'required|in:meta,twilio',
+            'whatsapp_config' => 'required|array',
+        ]);
+
+        $result = $waService->sendTestMessage(
+            $shop,
+            $request->test_phone,
+            $request->whatsapp_provider,
+            $request->whatsapp_config
+        );
+
+        return response()->json([
+            'status' => $result['success'] ? 'success' : 'error',
+            'data' => $result,
+            'message' => $result['message'] ?? ($result['success'] ? 'Test message dispatched!' : 'Failed to send test message.'),
         ]);
     }
 

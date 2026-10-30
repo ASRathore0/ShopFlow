@@ -21,6 +21,9 @@ export default function EditShopModal({ isOpen, shop, onClose, onSuccess }) {
     brand_color: '#2563EB',
     is_active: true,
     is_open: true,
+    billing_enabled: false,
+    bill_tagline: '',
+    bill_terms: '',
     announcement: '',
   });
 
@@ -37,6 +40,9 @@ export default function EditShopModal({ isOpen, shop, onClose, onSuccess }) {
         brand_color: shop.brand_color || '#2563EB',
         is_active: shop.is_active !== undefined ? Boolean(shop.is_active) : true,
         is_open: shop.is_open !== undefined ? Boolean(shop.is_open) : true,
+        billing_enabled: Boolean(shop.billing_enabled),
+        bill_tagline: shop.bill_tagline || '',
+        bill_terms: shop.bill_terms || '',
         announcement: shop.customer_portal_settings?.announcement || '',
       });
       setError('');
@@ -328,6 +334,65 @@ export default function EditShopModal({ isOpen, shop, onClose, onSuccess }) {
                   }`}
                 />
               </button>
+            </div>
+
+            {/* Billing & POS Feature Permission (Super Admin On-Demand) */}
+            <div className="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900/50 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-extrabold text-xs text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <span>🧾 Billing & POS Module</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-indigo-600 text-white font-black">
+                      ON DEMAND
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-indigo-800/80 dark:text-indigo-300/80">
+                    {formData.billing_enabled ? 'Enabled: Store staff can create and print POS bills' : 'Disabled: Feature locked for this store'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, billing_enabled: !formData.billing_enabled })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    formData.billing_enabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      formData.billing_enabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {formData.billing_enabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-indigo-200/50 dark:border-indigo-900/40">
+                  <div>
+                    <label className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 block mb-0.5">
+                      Bill Tagline (e.g. Deals In : All Type Men's Wear)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.bill_tagline}
+                      onChange={(e) => setFormData({ ...formData, bill_tagline: e.target.value })}
+                      placeholder="Deals In : All Type Men's Wear"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-800 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 block mb-0.5">
+                      Bill Footer Policy / Terms
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.bill_terms}
+                      onChange={(e) => setFormData({ ...formData, bill_terms: e.target.value })}
+                      placeholder="No Return, Only Exchange Within 3 Days Onwards 2 pm"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-800 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </form>
