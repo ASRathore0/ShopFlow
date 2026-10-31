@@ -5,7 +5,7 @@ import {
   Plus, Search, ArrowRight, BarChart3, AlertCircle, Building, Layers,
   ExternalLink, Filter, X, Sun, Moon, LogOut, Package, RefreshCw,
   Edit3, Trash2, Zap, KeyRound, Power, Check, MoreVertical, Sparkles, AlertTriangle,
-  Receipt, MessageSquare
+  Receipt, MessageSquare, Volume2
 } from 'lucide-react';
 import { superAdminService } from '../services/superAdminService';
 import { useAuth } from '../context/AuthContext';
@@ -110,6 +110,19 @@ export default function SuperAdminDashboard() {
     } catch (err) {
       console.error(err);
       showToast('Failed to toggle billing feature for this store', 'error');
+    }
+  };
+
+  const handleToggleSoundbox = async (shop) => {
+    try {
+      const res = await superAdminService.toggleShopSoundbox(shop.id);
+      if (res && res.status === 'success') {
+        showToast(res.message);
+        loadData();
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to toggle Direct Soundbox Sync for this store', 'error');
     }
   };
 
@@ -409,6 +422,21 @@ export default function SuperAdminDashboard() {
                         <span>Billing: {s.billing_enabled ? 'Enabled' : 'Disabled'}</span>
                       </button>
 
+                      {/* On-Demand Soundbox Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSoundbox(s)}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+                          s.soundbox_enabled
+                            ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30'
+                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 border-slate-200 dark:border-zinc-700'
+                        }`}
+                        title="Click to toggle Direct Soundbox Sync feature on-demand"
+                      >
+                        <Volume2 className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" />
+                        <span>Soundbox: {s.soundbox_enabled ? 'Enabled' : 'Disabled'}</span>
+                      </button>
+
                       {/* Plan with upgrade trigger */}
                       <button
                         type="button"
@@ -520,14 +548,15 @@ export default function SuperAdminDashboard() {
                     <th className="p-4">Subscription Plan</th>
                     <th className="p-4">Catalog / Activity</th>
                     <th className="p-4">Status</th>
-                    <th className="p-4 text-center">Billing / POS Feature</th>
+                    <th className="p-4 text-center">POS Billing</th>
+                    <th className="p-4 text-center">Soundbox Sync</th>
                     <th className="p-4 text-right">Administrative Controls</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
                   {filteredShops.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="p-10 text-center text-slate-400 dark:text-zinc-500">
+                      <td colSpan="8" className="p-10 text-center text-slate-400 dark:text-zinc-500">
                         No stores found matching your query. Click "Onboard Store" to register one.
                       </td>
                     </tr>
@@ -620,6 +649,23 @@ export default function SuperAdminDashboard() {
                             >
                               <Receipt className="w-3.5 h-3.5" />
                               <span>{s.billing_enabled ? 'Active' : 'Disabled'}</span>
+                            </button>
+                          </td>
+
+                          {/* Soundbox Sync Feature On-Demand Toggle */}
+                          <td className="p-4 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSoundbox(s)}
+                              className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 ${
+                                s.soundbox_enabled
+                                  ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30 hover:bg-purple-500/25'
+                                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-400 dark:text-zinc-500 border-slate-200 dark:border-zinc-700'
+                              }`}
+                              title="Click to grant / revoke Direct Soundbox Sync feature on demand for this shop"
+                            >
+                              <Volume2 className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                              <span>{s.soundbox_enabled ? 'Active' : 'Disabled'}</span>
                             </button>
                           </td>
 

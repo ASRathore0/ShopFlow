@@ -85,6 +85,7 @@ class BillingController extends Controller
             'status' => 'success',
             'data' => [
                 'billing_enabled' => (bool) $shop->billing_enabled,
+                'soundbox_enabled' => (bool) $shop->soundbox_enabled,
                 'shop' => [
                     'id' => $shop->id,
                     'name' => $shop->name,
@@ -92,6 +93,8 @@ class BillingController extends Controller
                     'phone' => $shop->phone,
                     'email' => $shop->email,
                     'address' => $shop->address,
+                    'billing_enabled' => (bool) $shop->billing_enabled,
+                    'soundbox_enabled' => (bool) $shop->soundbox_enabled,
                     'bill_tagline' => $shop->bill_tagline ?: ($shop->shop_type ? "Deals In : " . ucwords(str_replace('_', ' ', $shop->shop_type)) : 'Retail & Consumer Goods'),
                     'bill_terms' => $shop->bill_terms ?: 'No Return, Only Exchange Within 3 Days Onwards 2 pm',
                     'frontstore_url' => url("/shops/{$shop->slug}"),
@@ -214,6 +217,11 @@ class BillingController extends Controller
 
             $user = $request->user();
 
+            $soundboxDeviceId = $request->soundbox_device_id ?: null;
+            $soundboxAccountName = $request->soundbox_account_name ?: null;
+            $utrNumber = $request->utr_number ? trim($request->utr_number) : null;
+            $syncedAt = ($paymentMethod === 'upi' && ($soundboxDeviceId || $utrNumber)) ? now() : null;
+
             // 1. Create the Order / Bill
             $order = Order::create([
                 'shop_id' => $shop->id,
@@ -235,8 +243,31 @@ class BillingController extends Controller
                 'customer_phone' => $request->customer_phone,
                 'customer_address' => $request->customer_address,
                 'notes' => $request->notes,
+                'soundbox_device_id' => $soundboxDeviceId,
+                'soundbox_account_name' => $soundboxAccountName,
+                'utr_number' => $utrNumber,
+                'soundbox_synced_at' => $syncedAt,
                 'collected_at' => now(),
             ]);
+
+            // If Soundbox transaction or UTR was attached, record in ledger
+            if ($paymentMethod === 'upi' && ($utrNumber || $soundboxDeviceId)) {
+                try {
+                    \App\Models\SoundboxTransaction::create([
+                        'shop_id' => $shop->id,
+                        'soundbox_device_id' => $soundboxDeviceId,
+                        'order_id' => $order->id,
+                        'amount' => $totalAmount,
+                        'utr_number' => $utrNumber ?: ('POS' . date('YmdHis') . rand(100, 999)),
+                        'payer_vpa' => $request->payer_vpa ?: 'walkin@upi',
+                        'provider' => $request->provider ?: 'upi',
+                        'status' => 'matched',
+                        'raw_payload' => ['created_via_pos' => true, 'account_name' => $soundboxAccountName],
+                    ]);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Could not record soundbox transaction: ' . $e->getMessage());
+                }
+            }
 
             // 2. Insert Order Items & adjust inventory
             foreach ($itemsData as $itemData) {

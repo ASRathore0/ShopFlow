@@ -288,6 +288,23 @@ class SuperAdminController extends Controller
         ]);
     }
 
+    public function toggleShopSoundbox(Request $request, $id)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $shop = Shop::findOrFail($id);
+        $shop->soundbox_enabled = !$shop->soundbox_enabled;
+        $shop->save();
+
+        $statusStr = $shop->soundbox_enabled ? 'enabled' : 'disabled';
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Direct Soundbox Sync for '{$shop->name}' has been {$statusStr}.",
+            'data' => $shop->fresh()->load('subscription.plan')->loadCount(['products', 'employees', 'customerRequests']),
+        ]);
+    }
+
     public function getWhatsAppConfig(Request $request, $id)
     {
         $this->ensureSuperAdmin($request);

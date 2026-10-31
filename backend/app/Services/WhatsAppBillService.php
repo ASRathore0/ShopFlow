@@ -120,6 +120,14 @@ class WhatsAppBillService
     }
 
     /**
+     * Alias for sendBill to maintain backwards-compatibility across controllers.
+     */
+    public function sendBillReceipt(Order $order, ?Shop $shop = null): array
+    {
+        return $this->sendBill($order, $shop);
+    }
+
+    /**
      * Send message via Meta WhatsApp Cloud API.
      */
     public function sendViaMeta(array $config, string $phone, string $body, ?Order $order = null, string $fallbackLink = ''): array

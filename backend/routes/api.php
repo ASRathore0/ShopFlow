@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\AdminShopController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\PublicShopController;
+use App\Http\Controllers\Api\SoundboxController;
+use App\Http\Controllers\Api\SoundboxWebhookController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\SuperAdminController;
 use Illuminate\Support\Facades\Route;
@@ -24,12 +26,21 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Authentication Terminals
+Route::get('/login', function () {
+    return response()->json([
+        'status' => 'error',
+        'message' => 'Unauthenticated. Please log in.',
+    ], 401);
+})->name('login');
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/staff/login', [AuthController::class, 'staffLogin']);
 
 // Open Shop Onboarding (Allows any shop owner to onboard without super admin requirement)
 Route::post('/onboard', [AuthController::class, 'publicOnboard']);
 Route::post('/auth/register-shop', [AuthController::class, 'publicOnboard']);
+
+// Soundbox Direct Sync Webhooks (Paytm, PhonePe, GPay, BharatPe, Bank UPI)
+Route::match(['get', 'post'], '/webhooks/soundbox/{provider?}', [SoundboxWebhookController::class, 'handle']);
 
 // Media Proxy (CORS-friendly media streamer for HTML5 Canvas cropping & manipulation)
 Route::get('/media-proxy', function (\Illuminate\Http\Request $request) {
@@ -121,6 +132,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
         Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
+
+        // Staff Soundbox Sync
+        Route::get('/billing/soundbox/devices', [SoundboxController::class, 'getDevices']);
+        Route::post('/billing/soundbox/devices', [SoundboxController::class, 'storeDevice']);
+        Route::put('/billing/soundbox/devices/{id}', [SoundboxController::class, 'updateDevice']);
+        Route::delete('/billing/soundbox/devices/{id}', [SoundboxController::class, 'deleteDevice']);
+        Route::post('/billing/soundbox/simulate', [SoundboxController::class, 'simulatePayment']);
+        Route::get('/billing/soundbox/poll-status', [SoundboxController::class, 'pollStatus']);
+        Route::get('/billing/soundbox/transactions', [SoundboxController::class, 'getTransactions']);
+        Route::get('/billing/soundbox/reconciliation', [SoundboxController::class, 'getReconciliation']);
     });
 
     // Shop Admin APIs
@@ -180,6 +201,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
 
+        // Soundbox Device Management & Direct Sync
+        Route::get('/billing/soundbox/devices', [SoundboxController::class, 'getDevices']);
+        Route::post('/billing/soundbox/devices', [SoundboxController::class, 'storeDevice']);
+        Route::put('/billing/soundbox/devices/{id}', [SoundboxController::class, 'updateDevice']);
+        Route::delete('/billing/soundbox/devices/{id}', [SoundboxController::class, 'deleteDevice']);
+        Route::post('/billing/soundbox/simulate', [SoundboxController::class, 'simulatePayment']);
+        Route::get('/billing/soundbox/poll-status', [SoundboxController::class, 'pollStatus']);
+        Route::get('/billing/soundbox/transactions', [SoundboxController::class, 'getTransactions']);
+        Route::get('/billing/soundbox/reconciliation', [SoundboxController::class, 'getReconciliation']);
+
         // Shop Profile & QR
         Route::get('/shop', [AdminShopController::class, 'show']);
         Route::put('/shop', [AdminShopController::class, 'update']);
@@ -202,6 +233,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/shops/{id}/plan', [SuperAdminController::class, 'updatePlan']);
         Route::put('/shops/{id}/toggle-status', [SuperAdminController::class, 'toggleShopStatus']);
         Route::put('/shops/{id}/toggle-billing', [SuperAdminController::class, 'toggleShopBilling']);
+        Route::put('/shops/{id}/toggle-soundbox', [SuperAdminController::class, 'toggleShopSoundbox']);
         Route::delete('/shops/{id}', [SuperAdminController::class, 'deleteShop']);
         Route::post('/shops/{id}/reset-owner-password', [SuperAdminController::class, 'resetOwnerPassword']);
         Route::get('/plans', [SuperAdminController::class, 'listPlans']);

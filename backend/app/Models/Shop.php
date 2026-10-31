@@ -26,6 +26,7 @@ class Shop extends Model
         'subscription_id',
         'is_active',
         'billing_enabled',
+        'soundbox_enabled',
         'bill_tagline',
         'bill_terms',
         'whatsapp_provider',
@@ -37,6 +38,7 @@ class Shop extends Model
         'is_open' => 'boolean',
         'is_active' => 'boolean',
         'billing_enabled' => 'boolean',
+        'soundbox_enabled' => 'boolean',
         'auto_send_whatsapp_bill' => 'boolean',
         'whatsapp_config' => 'array',
         'customer_portal_settings' => 'array',
@@ -105,5 +107,15 @@ class Shop extends Model
     public function inventory()
     {
         return $this->hasMany(Inventory::class);
+    }
+
+    public function soundboxDevices()
+    {
+        return $this->hasMany(SoundboxDevice::class);
+    }
+
+    public function soundboxTransactions()
+    {
+        return $this->hasMany(SoundboxTransaction::class);
     }
 }

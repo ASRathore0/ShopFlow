@@ -4,10 +4,11 @@ import {
   Share2, Check, RefreshCw, ShoppingCart, User, Phone,
   CreditCard, Banknote, Sparkles, AlertCircle, ArrowRight,
   Calendar, Layers, Filter, FileText, ChevronRight, CheckCircle2,
-  DollarSign, Zap, Tag, Edit2
+  DollarSign, Zap, Tag, Edit2, Volume2, ShieldCheck, Radio
 } from 'lucide-react';
 import { billingService } from '../services/billingService';
 import ShopBillReceipt from './ShopBillReceipt';
+import ManageSoundboxModal, { playSoundboxChime } from './ManageSoundboxModal';
 
 export default function PosBillingView({
   shop,
@@ -16,9 +17,11 @@ export default function PosBillingView({
 }) {
   const [activeSubTab, setActiveSubTab] = useState('pos'); // 'pos' | 'invoices'
   const [posMode, setPosMode] = useState('quick'); // 'quick' (no upload needed) | 'catalog' (search uploaded items)
+  const [mobilePosTab, setMobilePosTab] = useState('entry'); // 'entry' | 'cart' (mobile screen switcher)
 
   const [loading, setLoading] = useState(true);
   const [billingEnabled, setBillingEnabled] = useState(true);
+  const [soundboxEnabled, setSoundboxEnabled] = useState(false);
   const [shopConfig, setShopConfig] = useState(shop || {});
   const [nextSerialNo, setNextSerialNo] = useState(1);
   const [metrics, setMetrics] = useState({
@@ -27,6 +30,16 @@ export default function PosBillingView({
     total_revenue: 0,
     total_bills_count: 0,
   });
+
+  // Soundbox & Multi-Account States
+  const [isSoundboxModalOpen, setIsSoundboxModalOpen] = useState(false);
+  const [soundboxDevices, setSoundboxDevices] = useState([]);
+  const [selectedSoundbox, setSelectedSoundbox] = useState(null);
+  const [soundboxPaymentReceived, setSoundboxPaymentReceived] = useState(false);
+  const [soundboxUtr, setSoundboxUtr] = useState('');
+  const [isSimulatingSoundbox, setIsSimulatingSoundbox] = useState(false);
+  const [reconciliationData, setReconciliationData] = useState(null);
+  const [isLoadingReconciliation, setIsLoadingReconciliation] = useState(false);
 
   // Fast Quick-Item Entry (No Upload Required)
   const [quickName, setQuickName] = useState('');
@@ -84,6 +97,36 @@ export default function PosBillingView({
 
   const quickPricePresets = [199, 299, 499, 699, 799, 999, 1199, 1499, 1999];
 
+  const loadSoundboxDevices = async () => {
+    try {
+      const res = await billingService.getSoundboxDevices(role);
+      const devs = res.data || [];
+      setSoundboxDevices(devs);
+      if (devs.length > 0) {
+        setSelectedSoundbox((prev) => {
+          if (prev && devs.some((d) => d.id === prev.id)) {
+            return devs.find((d) => d.id === prev.id);
+          }
+          return devs.find((d) => d.is_default) || devs[0];
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to load soundbox devices:', err);
+    }
+  };
+
+  const loadReconciliation = async () => {
+    setIsLoadingReconciliation(true);
+    try {
+      const res = await billingService.getSoundboxReconciliation({}, role);
+      setReconciliationData(res.data);
+    } catch (err) {
+      console.warn('Failed to load reconciliation:', err);
+    } finally {
+      setIsLoadingReconciliation(false);
+    }
+  };
+
   // 1. Initial Load: Billing status & products
   const fetchStatusAndProducts = async () => {
     setLoading(true);
@@ -91,9 +134,14 @@ export default function PosBillingView({
       const res = await billingService.getStatus(role);
       if (res && res.data) {
         setBillingEnabled(Boolean(res.data.billing_enabled));
+        const sbEnabled = Boolean(res.data.soundbox_enabled || res.data.shop?.soundbox_enabled);
+        setSoundboxEnabled(sbEnabled);
         setShopConfig(res.data.shop || shop || {});
         setNextSerialNo(res.data.next_serial_no || 1);
         if (res.data.metrics) setMetrics(res.data.metrics);
+        if (sbEnabled) {
+          await loadSoundboxDevices();
+        }
       }
 
       await loadProducts('');
@@ -145,10 +193,13 @@ export default function PosBillingView({
   useEffect(() => {
     if (activeSubTab === 'invoices') {
       loadInvoices();
+      if (soundboxEnabled) {
+        loadReconciliation();
+      }
     }
-  }, [activeSubTab, invoicePaymentFilter]);
+  }, [activeSubTab, invoicePaymentFilter, soundboxEnabled]);
 
-  // Cart Calculations
+  // Cart Calculations (Declared before usage in effects & handlers)
   const subtotal = useMemo(() => {
     return cartItems.reduce((acc, item) => acc + (parseFloat(item.unit_price) * item.quantity), 0);
   }, [cartItems]);
@@ -166,6 +217,59 @@ export default function PosBillingView({
     }
     return 0;
   }, [receivedAmount, totalAmount, paymentMethod]);
+
+  // Real-time Soundbox Radar: Auto-detects payment when customer scans UPI QR
+  useEffect(() => {
+    let interval = null;
+    if (soundboxEnabled && activeSubTab === 'pos' && paymentMethod === 'upi' && totalAmount > 0 && !soundboxPaymentReceived) {
+      interval = setInterval(async () => {
+        try {
+          const res = await billingService.pollSoundboxStatus({
+            amount: totalAmount,
+            soundbox_device_id: selectedSoundbox?.id || null,
+          }, role);
+
+          if (res?.matched && res?.data) {
+            playSoundboxChime();
+            setSoundboxPaymentReceived(true);
+            setSoundboxUtr(res.data.utr_number || '');
+            showToast(`🔊 Payment of ₹${res.data.amount} received on ${res.data.account_name}!`);
+          }
+        } catch (err) {
+          // silently keep listening
+        }
+      }, 2500);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [activeSubTab, paymentMethod, totalAmount, soundboxPaymentReceived, selectedSoundbox, role, soundboxEnabled]);
+
+  // Cashier simulate payment ding (for instant manual test/verification)
+  const handleSimulateInstantDing = async () => {
+    if (totalAmount <= 0) {
+      alert('Total amount must be greater than 0 to test payment.');
+      return;
+    }
+    setIsSimulatingSoundbox(true);
+    try {
+      const res = await billingService.simulatePayment({
+        amount: totalAmount,
+        soundbox_device_id: selectedSoundbox?.id || null,
+        payer_vpa: 'customer@upi',
+      }, role);
+
+      playSoundboxChime();
+      setSoundboxPaymentReceived(true);
+      setSoundboxUtr(res.data?.utr_number || '');
+      showToast(`🔊 Simulated payment of ₹${totalAmount} on ${selectedSoundbox?.name || 'Soundbox'}!`);
+    } catch (err) {
+      alert('Simulation failed: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setIsSimulatingSoundbox(false);
+    }
+  };
 
   // Fast Add (Zero Upload Required)
   const handleFastAddItem = (e) => {
@@ -299,6 +403,9 @@ export default function PosBillingView({
         payment_method: paymentMethod,
         received_amount: paymentMethod === 'cash' ? (parseFloat(receivedAmount) || totalAmount) : totalAmount,
         notes: notes.trim() || null,
+        soundbox_device_id: paymentMethod === 'upi' ? (selectedSoundbox?.id || null) : null,
+        soundbox_account_name: paymentMethod === 'upi' ? (selectedSoundbox?.name || null) : null,
+        utr_number: paymentMethod === 'upi' ? (soundboxUtr.trim() || null) : null,
       };
 
       const res = await billingService.createBill(payload, role);
@@ -311,7 +418,7 @@ export default function PosBillingView({
         setActiveReceiptBill(res.data.bill);
         if (res.data.shop) setShopConfig(res.data.shop);
 
-        // Reset cart
+        // Reset cart & soundbox states
         setCartItems([]);
         setCustomerName('');
         setCustomerPhone('');
@@ -320,6 +427,8 @@ export default function PosBillingView({
         setTaxAmount(0);
         setReceivedAmount('');
         setNotes('');
+        setSoundboxPaymentReceived(false);
+        setSoundboxUtr('');
 
         // Refresh status
         fetchStatusAndProducts();
@@ -422,6 +531,27 @@ export default function PosBillingView({
             </button>
           </div>
 
+          {/* Soundbox Sync Trigger (Optional: Enabled by Super Admin) */}
+          {soundboxEnabled && (
+            <button
+              type="button"
+              onClick={() => setIsSoundboxModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-2xl bg-gradient-to-r from-purple-600/10 to-indigo-600/10 hover:from-purple-600/20 hover:to-indigo-600/20 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-xs"
+              title="Configure Soundbox Devices & Multi-Account UPI"
+            >
+              <Volume2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span className="hidden sm:inline">Soundbox & Accounts</span>
+              <span className="sm:hidden">Soundbox</span>
+              {soundboxDevices.length > 0 ? (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-600 text-white font-black">
+                  {soundboxDevices.length}
+                </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+              )}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={fetchStatusAndProducts}
@@ -435,11 +565,52 @@ export default function PosBillingView({
 
       {/* SUB-VIEW 1: POS BILLING TERMINAL */}
       {activeSubTab === 'pos' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* LEFT COLUMN: Fast Item Punch / Catalog (7 cols) */}
-          <div className="lg:col-span-7 space-y-4">
-            {/* Mode Switcher: Quick Pad (No Upload) vs Catalog */}
-            <div className="flex items-center justify-between p-1.5 rounded-2xl bg-slate-100 dark:bg-zinc-850 border border-slate-200/80 dark:border-zinc-800">
+        <div className="space-y-4">
+          {/* MOBILE FLOW SWITCHER (Visible on screens < lg) */}
+          <div className="lg:hidden flex items-center p-1 bg-slate-100 dark:bg-zinc-800 rounded-2xl border border-slate-200/80 dark:border-zinc-700/80">
+            <button
+              type="button"
+              onClick={() => setMobilePosTab('entry')}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                mobilePosTab === 'entry'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>1. Punch Items</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobilePosTab('cart')}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer relative ${
+                mobilePosTab === 'cart'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>2. Current Bill</span>
+              {cartItems.length > 0 && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  mobilePosTab === 'cart' ? 'bg-white text-blue-600' : 'bg-blue-600 text-white'
+                }`}>
+                  {cartItems.length}
+                </span>
+              )}
+              {totalAmount > 0 && (
+                <span className="text-[11px] font-black opacity-90 hidden xs:inline">
+                  (₹{totalAmount.toFixed(0)})
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* LEFT COLUMN: Fast Item Punch / Catalog (7 cols) */}
+            <div className={`lg:col-span-7 space-y-4 ${mobilePosTab === 'entry' ? 'block' : 'hidden lg:block'}`}>
+              {/* Mode Switcher: Quick Pad (No Upload) vs Catalog */}
+              <div className="flex items-center justify-between p-1.5 rounded-2xl bg-slate-100 dark:bg-zinc-850 border border-slate-200/80 dark:border-zinc-800">
               <button
                 type="button"
                 onClick={() => setPosMode('quick')}
@@ -506,9 +677,10 @@ export default function PosBillingView({
                       <input
                         type="number"
                         min="1"
+                        inputMode="numeric"
                         value={quickQty}
                         onChange={(e) => setQuickQty(e.target.value)}
-                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-white font-bold text-center focus:outline-none"
+                        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-sm sm:text-xs text-slate-900 dark:text-white font-bold text-center focus:outline-none"
                       />
                     </div>
 
@@ -518,18 +690,19 @@ export default function PosBillingView({
                         Rate / Price (₹) *
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-xs text-slate-400">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-sm text-slate-400">
                           ₹
                         </span>
                         <input
                           ref={priceInputRef}
                           type="number"
                           step="any"
+                          inputMode="decimal"
                           required
                           value={quickPrice}
                           onChange={(e) => setQuickPrice(e.target.value)}
                           placeholder="e.g. 799"
-                          className="w-full pl-7 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-sm font-black text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full pl-7 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-base sm:text-sm font-black text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     </div>
@@ -538,7 +711,7 @@ export default function PosBillingView({
                   {/* Add Button */}
                   <button
                     type="submit"
-                    className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-600/25 transition-all cursor-pointer"
+                    className="w-full py-3 sm:py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold text-xs sm:text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-600/25 transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add Item to Bill (or Press Enter)</span>
@@ -547,16 +720,19 @@ export default function PosBillingView({
 
                 {/* 1-Click Fast Item Category Tag Chips */}
                 <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                    Quick Item Tags (1-Tap to autofill):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Quick Item Tags (1-Tap to autofill):
+                    </span>
+                    <span className="text-[9px] text-slate-400 sm:hidden">Swipe →</span>
+                  </div>
+                  <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto pb-1 gap-1.5 no-scrollbar touch-pan-x">
                     {commonItemTags.map((tag) => (
                       <button
                         key={tag}
                         type="button"
                         onClick={() => handleSelectTag(tag)}
-                        className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-blue-50 dark:bg-zinc-800 dark:hover:bg-blue-950/40 text-slate-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 text-xs font-semibold border border-slate-200/60 dark:border-zinc-700/60 transition-all cursor-pointer"
+                        className="px-2.5 py-1.5 sm:py-1 rounded-xl bg-slate-100 hover:bg-blue-50 dark:bg-zinc-800 dark:hover:bg-blue-950/40 text-slate-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 text-xs font-semibold border border-slate-200/60 dark:border-zinc-700/60 transition-all cursor-pointer shrink-0"
                       >
                         + {tag}
                       </button>
@@ -566,16 +742,19 @@ export default function PosBillingView({
 
                 {/* 1-Click Common Price Chips */}
                 <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                    Frequent Price Presets (1-Tap to Add):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Frequent Price Presets (1-Tap to Add):
+                    </span>
+                    <span className="text-[9px] text-slate-400 sm:hidden">Swipe →</span>
+                  </div>
+                  <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto pb-1 gap-1.5 no-scrollbar touch-pan-x">
                     {quickPricePresets.map((p) => (
                       <button
                         key={p}
                         type="button"
                         onClick={() => handleInstantPricePreset(p)}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-xs font-black border border-emerald-300 dark:border-emerald-800 transition-all cursor-pointer shadow-sm"
+                        className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-xs font-black border border-emerald-300 dark:border-emerald-800 transition-all cursor-pointer shadow-xs shrink-0"
                       >
                         ₹{p}
                       </button>
@@ -673,8 +852,23 @@ export default function PosBillingView({
           </div>
 
           {/* RIGHT COLUMN: Current Bill Pad & Instant Print (5 cols) */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="p-5 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-xl space-y-4">
+          <div className={`lg:col-span-5 space-y-4 ${mobilePosTab === 'cart' ? 'block' : 'hidden lg:block'}`}>
+            <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-xl space-y-4">
+              {/* Mobile Back to Add Items header */}
+              <div className="lg:hidden flex items-center justify-between pb-1">
+                <button
+                  type="button"
+                  onClick={() => setMobilePosTab('entry')}
+                  className="py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                  <span>← Add More Items</span>
+                </button>
+                <span className="text-xs font-bold text-slate-500">
+                  {cartItems.length} item{cartItems.length !== 1 ? 's' : ''} on bill
+                </span>
+              </div>
+
               {/* Header Info */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
                 <div className="flex items-center gap-2">
@@ -707,7 +901,8 @@ export default function PosBillingView({
                     className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-white focus:outline-none"
                   />
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="tel"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
                     placeholder="Mobile / WhatsApp"
@@ -795,6 +990,7 @@ export default function PosBillingView({
                     type="number"
                     min="0"
                     step="any"
+                    inputMode="decimal"
                     value={discountAmount}
                     onChange={(e) => setDiscountAmount(e.target.value)}
                     className="w-20 px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-bold text-xs"
@@ -868,6 +1064,7 @@ export default function PosBillingView({
                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
                         <input
                           type="number"
+                          inputMode="decimal"
                           value={receivedAmount}
                           onChange={(e) => setReceivedAmount(e.target.value)}
                           placeholder={totalAmount.toFixed(0)}
@@ -881,6 +1078,199 @@ export default function PosBillingView({
                         <span className="text-sm">₹{changeReturn.toFixed(2)}</span>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Direct Soundbox Sync & Dynamic UPI QR Section (When Soundbox is enabled by Super Admin) */}
+                {paymentMethod === 'upi' && soundboxEnabled && (
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-500/5 via-indigo-500/5 to-blue-500/5 border border-purple-200 dark:border-purple-850 space-y-3 text-xs">
+                    {/* Device Selector Chips */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-black text-purple-900 dark:text-purple-300 uppercase tracking-wider flex items-center gap-1">
+                          <Volume2 className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Select Receiving Soundbox / Account:</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsSoundboxModalOpen(true)}
+                          className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" /> Manage
+                        </button>
+                      </div>
+
+                      {soundboxDevices.length === 0 ? (
+                        <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-center justify-between">
+                          <span>No Soundbox devices added yet.</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsSoundboxModalOpen(true)}
+                            className="font-bold underline text-amber-900 dark:text-amber-200"
+                          >
+                            Add Soundbox
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {soundboxDevices.map((dev) => {
+                            const isSelected = selectedSoundbox?.id === dev.id;
+                            return (
+                              <button
+                                key={dev.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSoundbox(dev);
+                                  setSoundboxPaymentReceived(false);
+                                  setSoundboxUtr('');
+                                }}
+                                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm shadow-purple-600/30'
+                                    : 'bg-white dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:border-purple-300'
+                                }`}
+                              >
+                                <Volume2 className={`w-3 h-3 ${isSelected ? 'text-yellow-300' : 'text-purple-600'}`} />
+                                <span>{dev.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Dynamic QR & Radar Screen */}
+                    <div className="p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-purple-100 dark:border-zinc-800 flex flex-col sm:flex-row items-center gap-3">
+                      {/* Dynamic Amount QR */}
+                      <div className="relative p-1.5 bg-white rounded-xl border border-slate-200 shadow-sm shrink-0">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(
+                            `upi://pay?pa=${selectedSoundbox?.upi_id || 'shop@upi'}&pn=${encodeURIComponent(shopConfig.name || 'Store')}&am=${totalAmount.toFixed(2)}&cu=INR&tn=Bill_${nextSerialNo}`
+                          )}`}
+                          alt="Dynamic Soundbox UPI QR"
+                          className="w-24 h-24 object-contain"
+                        />
+                        <span className="block text-[9px] font-black text-center text-slate-500 mt-0.5">
+                          ₹{totalAmount.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {/* Radar & Status */}
+                      <div className="flex-1 space-y-2 w-full text-center sm:text-left">
+                        {soundboxPaymentReceived ? (
+                          <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 space-y-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-black text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                Payment Received!
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-600 text-white uppercase">
+                                Verified
+                              </span>
+                            </div>
+                            <div className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400">
+                              UTR: {soundboxUtr || 'SBX-VERIFIED'}
+                            </div>
+                            <div className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                              Announced on {selectedSoundbox?.name || 'Soundbox'}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-[11px] text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span>
+                                Waiting for Soundbox...
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleSimulateInstantDing}
+                                disabled={isSimulatingSoundbox || totalAmount <= 0}
+                                className="px-2 py-0.8 rounded-lg bg-white dark:bg-zinc-800 hover:bg-purple-50 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 text-[10px] font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Click to simulate customer voice payment"
+                              >
+                                {isSimulatingSoundbox ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Volume2 className="w-3 h-3 text-purple-600" />}
+                                Test Ding
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-purple-700 dark:text-purple-300">
+                              Customer scans QR to pay ₹{totalAmount.toFixed(2)} on <strong className="text-purple-900 dark:text-white">{selectedSoundbox?.name || 'Primary UPI'}</strong>. Status updates automatically.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Optional Manual UTR override */}
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 whitespace-nowrap">
+                            UTR / Txn Ref:
+                          </label>
+                          <input
+                            type="text"
+                            value={soundboxUtr}
+                            onChange={(e) => {
+                              setSoundboxUtr(e.target.value);
+                              if (e.target.value.trim().length >= 8) {
+                                setSoundboxPaymentReceived(true);
+                              }
+                            }}
+                            placeholder="Auto-filled by Soundbox"
+                            className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 font-mono text-[10px] text-slate-800 dark:text-zinc-200 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Standard UPI Option (When Soundbox is not enabled by Super Admin) */}
+                {paymentMethod === 'upi' && !soundboxEnabled && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-200 dark:border-emerald-800 space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                        <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Scan & Pay via any UPI App</span>
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        ₹{totalAmount.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-emerald-100 dark:border-zinc-800 flex items-center gap-3">
+                      <div className="p-1 bg-white rounded-lg border border-slate-200 shadow-xs shrink-0">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(
+                            `upi://pay?pa=${encodeURIComponent(shopConfig.phone ? `${shopConfig.phone}@upi` : 'shop@upi')}&pn=${encodeURIComponent(shopConfig.name || 'Store')}&am=${totalAmount.toFixed(2)}&cu=INR&tn=Bill_${nextSerialNo}`
+                          )}`}
+                          alt="UPI QR Code"
+                          className="w-20 h-20 object-contain"
+                        />
+                      </div>
+                      <div className="space-y-1 text-[11px] text-slate-600 dark:text-zinc-400 flex-1">
+                        <div className="font-bold text-slate-900 dark:text-white">
+                          {shopConfig.name}
+                        </div>
+                        <div className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400">
+                          VPA: {shopConfig.phone ? `${shopConfig.phone}@upi` : 'shop@upi'}
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          Customer scans and completes payment. Cashier verifies confirmation on customer screen.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Optional UTR / Reference */}
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-500 whitespace-nowrap">
+                        UTR / Txn Ref:
+                      </label>
+                      <input
+                        type="text"
+                        value={soundboxUtr}
+                        onChange={(e) => setSoundboxUtr(e.target.value)}
+                        placeholder="Optional UPI Reference Number"
+                        className="w-full px-2 py-1 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 font-mono text-[10px] text-slate-800 dark:text-zinc-200 focus:outline-none"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -907,11 +1297,116 @@ export default function PosBillingView({
             </div>
           </div>
         </div>
+
+        {/* FLOATING STICKY BOTTOM CHECKOUT BAR ON MOBILE */}
+          {mobilePosTab === 'entry' && cartItems.length > 0 && (
+            <div className="lg:hidden fixed bottom-4 left-3 right-3 z-30 animate-fade-in">
+              <div className="bg-slate-900/95 dark:bg-zinc-900/95 text-white p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 backdrop-blur-xl flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                    <ShoppingCart className="w-3.5 h-3.5 text-blue-400" />
+                    <span>{cartItems.length} item{cartItems.length > 1 ? 's' : ''} added</span>
+                  </div>
+                  <div className="text-base font-black text-white">
+                    ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobilePosTab('cart');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-blue-500/30 flex items-center gap-2 cursor-pointer active:scale-95 transition-all shrink-0"
+                >
+                  <span>Review & Pay</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* SUB-VIEW 2: INVOICES & SALES HISTORY */}
       {activeSubTab === 'invoices' && (
         <div className="space-y-4">
+          {/* Account-Wise Collection & Soundbox Reconciliation (Only when enabled by Super Admin) */}
+          {soundboxEnabled && reconciliationData && (
+            <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white shadow-xl space-y-3.5 border border-purple-900/50">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-yellow-400/20 text-yellow-300 flex items-center justify-center">
+                    <Volume2 className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-yellow-300">
+                      Multi-Account UPI & Soundbox Reconciliation (Today)
+                    </h3>
+                    <p className="text-[11px] text-slate-300">
+                      Clear account-wise breakdown so you know exactly which bank account received what amount
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <button
+                    onClick={loadReconciliation}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs flex items-center gap-1 transition-colors"
+                    title="Refresh Reconciliation"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setIsSoundboxModalOpen(true)}
+                    className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Radio className="w-3.5 h-3.5 text-yellow-300" />
+                    <span>Manage Devices</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Account Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {/* Cash Counter Card */}
+                <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 flex flex-col justify-between">
+                  <div className="text-[10px] uppercase font-bold text-emerald-300 flex items-center gap-1">
+                    <Banknote className="w-3.5 h-3.5 shrink-0" />
+                    <span>Cash Counter</span>
+                  </div>
+                  <div className="my-1.5">
+                    <div className="text-lg font-black text-white">
+                      ₹{parseFloat(reconciliationData.summary?.cash_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-white/60">
+                    {reconciliationData.summary?.cash_bills_count || 0} bills • Physical Cash
+                  </div>
+                </div>
+
+                {/* Each Soundbox Account Card */}
+                {reconciliationData.account_breakdown?.map((acc, idx) => (
+                  <div key={idx} className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 flex flex-col justify-between">
+                    <div className="text-[10px] uppercase font-bold text-yellow-300 flex items-center gap-1 truncate" title={acc.name}>
+                      <Volume2 className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+                      <span className="truncate">{acc.name}</span>
+                    </div>
+                    <div className="my-1.5">
+                      <div className="text-lg font-black text-white">
+                        ₹{parseFloat(acc.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-white/60 truncate">
+                      {acc.bills_count || 0} bills • {acc.provider?.toUpperCase()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Metrics Overview Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
@@ -979,8 +1474,8 @@ export default function PosBillingView({
             </div>
           </div>
 
-          {/* Invoices List Table */}
-          <div className="bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
+          {/* DESKTOP VIEW: Full Table (Hidden on Mobile) */}
+          <div className="hidden md:block bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs min-w-[700px]">
                 <thead className="bg-slate-50 dark:bg-zinc-900/80 text-slate-500 dark:text-zinc-400 border-b border-slate-200 dark:border-zinc-800 font-bold uppercase tracking-wider text-[11px]">
@@ -1038,15 +1533,27 @@ export default function PosBillingView({
                           </div>
                         </td>
                         <td className="p-4">
-                          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
-                            inv.payment_method === 'upi'
-                              ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                              : inv.payment_method === 'card'
-                              ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
-                              : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                          }`}>
-                            {inv.payment_method || 'Cash'}
-                          </span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
+                              inv.payment_method === 'upi'
+                                ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                : inv.payment_method === 'card'
+                                ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
+                                : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                            }`}>
+                              {inv.payment_method || 'Cash'}
+                            </span>
+                            {inv.soundbox_account_name && (
+                              <span className="text-[10px] font-semibold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <span>🔊</span> {inv.soundbox_account_name}
+                              </span>
+                            )}
+                            {inv.utr_number && (
+                              <span className="text-[9px] font-mono text-slate-400">
+                                UTR: {inv.utr_number}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-4 text-right font-black text-slate-900 dark:text-white text-sm">
                           ₹{parseFloat(inv.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -1069,6 +1576,86 @@ export default function PosBillingView({
               </table>
             </div>
           </div>
+
+          {/* MOBILE VIEW: Touch-Friendly Bill Cards (Hidden on Desktop) */}
+          <div className="md:hidden space-y-3">
+            {isLoadingInvoices ? (
+              <div className="p-8 text-center text-slate-400 bg-white dark:bg-[#18181B] rounded-2xl border border-slate-200 dark:border-zinc-800">
+                <RefreshCw className="w-4 h-4 animate-spin inline-block mr-2" />
+                Loading invoices...
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-white dark:bg-[#18181B] rounded-2xl border border-slate-200 dark:border-zinc-800 text-xs font-medium">
+                No billing transactions recorded yet.
+              </div>
+            ) : (
+              invoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="p-3.5 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-sm text-slate-900 dark:text-white">
+                          #{inv.bill_number || inv.bill_serial_no || inv.order_number}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                          inv.payment_method === 'upi'
+                            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                            : inv.payment_method === 'card'
+                            ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
+                            : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                        }`}>
+                          {inv.payment_method || 'Cash'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {new Date(inv.created_at).toLocaleString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">
+                        ₹{parseFloat(inv.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </div>
+                      <span className="text-[10px] text-slate-400">
+                        {inv.items?.length || 0} item(s)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-600 dark:text-zinc-400 flex items-center justify-between border-t border-slate-100 dark:border-zinc-800 pt-2">
+                    <div className="truncate max-w-[190px]">
+                      <span className="font-bold text-slate-800 dark:text-zinc-200">{inv.customer_name || 'Walk-in'}</span>
+                      {inv.customer_phone && <span className="text-[10px] text-slate-400 ml-1">({inv.customer_phone})</span>}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveReceiptBill(inv)}
+                      className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Receipt</span>
+                    </button>
+                  </div>
+
+                  {inv.soundbox_account_name && (
+                    <div className="text-[10px] font-semibold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-2 py-0.5 rounded-lg flex items-center justify-between">
+                      <span>🔊 {inv.soundbox_account_name}</span>
+                      {inv.utr_number && <span className="font-mono text-[9px] text-slate-400">UTR: {inv.utr_number}</span>}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 
@@ -1084,6 +1671,19 @@ export default function PosBillingView({
             />
           </div>
         </div>
+      )}
+
+      {/* DIRECT SOUNDBOX & MULTI-ACCOUNT MANAGEMENT MODAL (Only when enabled by Super Admin) */}
+      {soundboxEnabled && (
+        <ManageSoundboxModal
+          isOpen={isSoundboxModalOpen}
+          onClose={() => setIsSoundboxModalOpen(false)}
+          role={role}
+          onDeviceChanged={() => {
+            loadSoundboxDevices();
+            loadReconciliation();
+          }}
+        />
       )}
     </div>
   );

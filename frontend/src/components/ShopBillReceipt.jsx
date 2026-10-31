@@ -92,32 +92,32 @@ export default function ShopBillReceipt({
     <div className="flex flex-col items-center max-w-full">
       {/* Top Toolbar (Hidden on print) */}
       {showActions && (
-        <div className="w-full max-w-[580px] mb-4 flex items-center justify-between gap-2 print:hidden bg-slate-900/90 text-white p-3 rounded-2xl shadow-xl backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-xs">
-              Bill #{bill.bill_number || bill.bill_serial_no || bill.order_number}
+        <div className="w-full max-w-[580px] mb-3 flex items-center justify-between gap-2 print:hidden bg-slate-900/95 text-white p-2.5 sm:p-3 rounded-2xl shadow-xl backdrop-blur-md sticky top-0 z-30">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-bold text-xs truncate">
+              #{bill.bill_number || bill.bill_serial_no || bill.order_number}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={handleShareWhatsApp}
               disabled={sendingWa}
-              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
               title="Send bill to customer WhatsApp (Meta / Twilio direct API, or 1-click fallback)"
             >
               {sendingWa ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
-              <span>{sendingWa ? 'Sending...' : (waSentNotice || 'WhatsApp')}</span>
+              <span className="hidden xs:inline">{sendingWa ? 'Sending...' : (waSentNotice || 'WhatsApp')}</span>
             </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
               title="Print standard physical bill memo"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print Bill</span>
+              <span>Print</span>
             </button>
             {onClose && (
               <button
@@ -314,7 +314,10 @@ export default function ShopBillReceipt({
             </div>
             {bill.payment_method && (
               <div className="text-[10px] font-semibold text-slate-700">
-                Mode: <span className="uppercase font-bold text-black">{bill.payment_method}</span> ({bill.payment_status || 'Paid'})
+                Mode: <span className="uppercase font-bold text-black">{bill.payment_method}</span>
+                {bill.soundbox_account_name && <span> • <strong>{bill.soundbox_account_name}</strong></span>}
+                {bill.utr_number && <span className="font-mono"> (UTR: {bill.utr_number})</span>}
+                {!bill.soundbox_account_name && !bill.utr_number && ` (${bill.payment_status || 'Paid'})`}
               </div>
             )}
           </div>
