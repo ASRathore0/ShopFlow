@@ -53,11 +53,6 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
     setCurrentImgIndex((prev) => (prev === validImages.length - 1 ? 0 : prev + 1));
   };
 
-  const handleDotClick = (e, idx) => {
-    e.stopPropagation();
-    setCurrentImgIndex(idx);
-  };
-
   const handleTouchStart = (e) => {
     if (!hasMultipleImages) return;
     const touch = e.touches[0];
@@ -188,21 +183,6 @@ export default function ProductCard({ product, onSelect, onRequest, shop, shopLo
             <div className="absolute bottom-2.5 left-2.5 z-10 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-black/60 text-white border border-white/10 backdrop-blur-md flex items-center gap-1 shadow-sm">
               <Images className="w-2.5 h-2.5 text-blue-300" />
               <span>{currentImgIndex + 1}/{validImages.length}</span>
-            </div>
-
-            {/* Image Slider Indicator Dots */}
-            <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-black/40 backdrop-blur-md px-1.5 py-0.5 rounded-full border border-white/10">
-              {validImages.map((_, idx) => (
-                <span
-                  key={idx}
-                  onClick={(e) => handleDotClick(e, idx)}
-                  className={`rounded-full transition-all cursor-pointer ${
-                    currentImgIndex === idx
-                      ? 'w-3 h-1.5 bg-white shadow-sm'
-                      : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/70'
-                  }`}
-                />
-              ))}
             </div>
           </>
         )}
