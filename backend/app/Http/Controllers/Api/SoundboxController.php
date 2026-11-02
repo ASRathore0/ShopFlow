@@ -441,8 +441,25 @@ class SoundboxController extends Controller
     {
         $shop = $this->getActiveShop($request);
 
-        $startDate = $request->input('start_date') ? \Carbon\Carbon::parse($request->input('start_date'))->startOfDay() : now()->startOfDay();
-        $endDate = $request->input('end_date') ? \Carbon\Carbon::parse($request->input('end_date'))->endOfDay() : now()->endOfDay();
+        $period = $request->input('period', 'daily');
+
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $startDate = \Carbon\Carbon::parse($request->input('start_date'))->startOfDay();
+            $endDate = \Carbon\Carbon::parse($request->input('end_date'))->endOfDay();
+        } elseif ($period === 'weekly' || $period === 'week') {
+            $startDate = now()->startOfWeek();
+            $endDate = now()->endOfDay();
+        } elseif ($period === 'monthly' || $period === 'month') {
+            $startDate = now()->startOfMonth();
+            $endDate = now()->endOfDay();
+        } elseif ($period === 'all') {
+            $startDate = \Carbon\Carbon::create(2020, 1, 1)->startOfDay();
+            $endDate = now()->endOfDay();
+        } else {
+            // daily / today
+            $startDate = now()->startOfDay();
+            $endDate = now()->endOfDay();
+        }
 
         // 1. All completed orders for this period
         $orders = Order::where('shop_id', $shop->id)
@@ -516,6 +533,7 @@ class SoundboxController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => [
+                'period' => $period,
                 'date_range' => [
                     'start' => $startDate->toDateString(),
                     'end' => $endDate->toDateString(),

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Receipt, Plus, Minus, Trash2, Search, QrCode, Printer,
   Share2, Check, RefreshCw, ShoppingCart, User, Phone,
-  CreditCard, Banknote, Sparkles, AlertCircle, ArrowRight,
+  CreditCard, Banknote, Sparkles, AlertCircle, AlertTriangle, ArrowRight,
   Calendar, Layers, Filter, FileText, ChevronRight, CheckCircle2,
-  DollarSign, Zap, Tag, Edit2, Volume2, ShieldCheck, Radio
+  DollarSign, Zap, Tag, Edit2, Volume2, ShieldCheck, Radio, Clock
 } from 'lucide-react';
 import { billingService } from '../services/billingService';
 import ShopBillReceipt from './ShopBillReceipt';
@@ -40,6 +40,7 @@ export default function PosBillingView({
   const [isSimulatingSoundbox, setIsSimulatingSoundbox] = useState(false);
   const [reconciliationData, setReconciliationData] = useState(null);
   const [isLoadingReconciliation, setIsLoadingReconciliation] = useState(false);
+  const [overviewPeriod, setOverviewPeriod] = useState('daily'); // 'daily' | 'weekly' | 'monthly' | 'all'
 
   // Fast Quick-Item Entry (No Upload Required)
   const [quickName, setQuickName] = useState('');
@@ -73,6 +74,27 @@ export default function PosBillingView({
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [invoicePaymentFilter, setInvoicePaymentFilter] = useState('all');
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetBilling = async () => {
+    try {
+      setIsResetting(true);
+      const res = await billingService.resetBillingData(role);
+      showToast(res.message || 'Billing data successfully reset! Starting fresh from Bill #1.', 'success');
+      setShowResetModal(false);
+      fetchStatusAndProducts();
+      loadInvoices(overviewPeriod);
+      if (soundboxEnabled) {
+        loadReconciliation(overviewPeriod);
+      }
+    } catch (err) {
+      console.error('Failed to reset billing:', err);
+      showToast(err.response?.data?.message || 'Failed to reset billing data.', 'error');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // Notification / Alert
   const [toastMessage, setToastMessage] = useState(null);
@@ -115,10 +137,10 @@ export default function PosBillingView({
     }
   };
 
-  const loadReconciliation = async () => {
+  const loadReconciliation = async (period = overviewPeriod) => {
     setIsLoadingReconciliation(true);
     try {
-      const res = await billingService.getSoundboxReconciliation({}, role);
+      const res = await billingService.getSoundboxReconciliation({ period }, role);
       setReconciliationData(res.data);
     } catch (err) {
       console.warn('Failed to load reconciliation:', err);
@@ -168,12 +190,29 @@ export default function PosBillingView({
     }
   };
 
-  const loadInvoices = async () => {
+  const loadInvoices = async (period = overviewPeriod) => {
     setIsLoadingInvoices(true);
     try {
       const params = {};
       if (invoiceSearch) params.search = invoiceSearch;
       if (invoicePaymentFilter !== 'all') params.payment_method = invoicePaymentFilter;
+
+      if (!invoiceSearch) {
+        if (period === 'daily') {
+          const todayStr = new Date().toISOString().split('T')[0];
+          params.date_from = todayStr;
+        } else if (period === 'weekly') {
+          const d = new Date();
+          const day = d.getDay();
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+          const monday = new Date(d.setDate(diff));
+          params.date_from = monday.toISOString().split('T')[0];
+        } else if (period === 'monthly') {
+          const d = new Date();
+          const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+          params.date_from = firstDay.toISOString().split('T')[0];
+        }
+      }
 
       const res = await billingService.getInvoices(params, role);
       if (res && res.data) {
@@ -186,18 +225,26 @@ export default function PosBillingView({
     }
   };
 
+  const handlePeriodChange = (period) => {
+    setOverviewPeriod(period);
+    loadInvoices(period);
+    if (soundboxEnabled) {
+      loadReconciliation(period);
+    }
+  };
+
   useEffect(() => {
     fetchStatusAndProducts();
   }, []);
 
   useEffect(() => {
     if (activeSubTab === 'invoices') {
-      loadInvoices();
+      loadInvoices(overviewPeriod);
       if (soundboxEnabled) {
-        loadReconciliation();
+        loadReconciliation(overviewPeriod);
       }
     }
-  }, [activeSubTab, invoicePaymentFilter, soundboxEnabled]);
+  }, [activeSubTab, invoicePaymentFilter, soundboxEnabled, overviewPeriod]);
 
   // Cart Calculations (Declared before usage in effects & handlers)
   const subtotal = useMemo(() => {
@@ -217,6 +264,49 @@ export default function PosBillingView({
     }
     return 0;
   }, [receivedAmount, totalAmount, paymentMethod]);
+
+  // Dynamic Overview Period Metrics (Daily / Weekly / Monthly / All Time)
+  const activePeriodMetrics = useMemo(() => {
+    if (overviewPeriod === 'weekly') {
+      const rev = metrics.week_revenue ?? (reconciliationData?.summary?.total_revenue || 0);
+      const count = metrics.week_bills_count ?? (reconciliationData?.summary?.total_bills || 0);
+      return {
+        label1: "This Week's Sales",
+        value1: rev,
+        label2: "This Week's Bills",
+        value2: count,
+        periodName: "This Week",
+      };
+    } else if (overviewPeriod === 'monthly') {
+      const rev = metrics.month_revenue ?? (reconciliationData?.summary?.total_revenue || 0);
+      const count = metrics.month_bills_count ?? (reconciliationData?.summary?.total_bills || 0);
+      return {
+        label1: "This Month's Sales",
+        value1: rev,
+        label2: "This Month's Bills",
+        value2: count,
+        periodName: "This Month",
+      };
+    } else if (overviewPeriod === 'all') {
+      return {
+        label1: "Total Sales",
+        value1: metrics.total_revenue || (reconciliationData?.summary?.total_revenue || 0),
+        label2: "Total Bills Count",
+        value2: metrics.total_bills_count || (reconciliationData?.summary?.total_bills || 0),
+        periodName: "All-Time",
+      };
+    }
+    // Default: daily / today
+    const rev = metrics.today_revenue ?? (reconciliationData?.summary?.total_revenue || 0);
+    const count = metrics.today_bills_count ?? (reconciliationData?.summary?.total_bills || 0);
+    return {
+      label1: "Today's Sales",
+      value1: rev,
+      label2: "Today's Bills",
+      value2: count,
+      periodName: "Today",
+    };
+  }, [overviewPeriod, metrics, reconciliationData]);
 
   // Real-time Soundbox Radar: Auto-detects payment when customer scans UPI QR
   useEffect(() => {
@@ -1332,6 +1422,77 @@ export default function PosBillingView({
       {/* SUB-VIEW 2: INVOICES & SALES HISTORY */}
       {activeSubTab === 'invoices' && (
         <div className="space-y-4">
+          {/* Overview Period Filter Bar: Daily, Weekly, Monthly, All Time */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#18181B] p-3 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider block">
+                  Overview Period Filter
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Switch between daily, weekly, monthly and all-time collections
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200/80 dark:border-zinc-700/80 overflow-x-auto no-scrollbar">
+              <button
+                type="button"
+                onClick={() => handlePeriodChange('daily')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  overviewPeriod === 'daily'
+                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Daily (Today)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePeriodChange('weekly')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  overviewPeriod === 'weekly'
+                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Weekly (This Week)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePeriodChange('monthly')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  overviewPeriod === 'monthly'
+                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Monthly (This Month)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePeriodChange('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  overviewPeriod === 'all'
+                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>All Time</span>
+              </button>
+            </div>
+          </div>
+
           {/* Account-Wise Collection & Soundbox Reconciliation (Only when enabled by Super Admin) */}
           {soundboxEnabled && reconciliationData && (
             <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white shadow-xl space-y-3.5 border border-purple-900/50">
@@ -1342,25 +1503,26 @@ export default function PosBillingView({
                   </div>
                   <div>
                     <h3 className="text-xs font-black uppercase tracking-wider text-yellow-300">
-                      Multi-Account UPI & Soundbox Reconciliation (Today)
+                      Multi-Account UPI & Soundbox Reconciliation ({activePeriodMetrics.periodName})
                     </h3>
                     <p className="text-[11px] text-slate-300">
-                      Clear account-wise breakdown so you know exactly which bank account received what amount
+                      Clear account-wise breakdown so you know exactly which bank account received what amount ({activePeriodMetrics.periodName})
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 self-start sm:self-auto">
                   <button
-                    onClick={loadReconciliation}
-                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs flex items-center gap-1 transition-colors"
+                    onClick={() => loadReconciliation(overviewPeriod)}
+                    disabled={isLoadingReconciliation}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
                     title="Refresh Reconciliation"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingReconciliation ? 'animate-spin' : ''}`} />
                   </button>
                   <button
                     onClick={() => setIsSoundboxModalOpen(true)}
-                    className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                    className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
                   >
                     <Radio className="w-3.5 h-3.5 text-yellow-300" />
                     <span>Manage Devices</span>
@@ -1407,24 +1569,24 @@ export default function PosBillingView({
             </div>
           )}
 
-          {/* Metrics Overview Cards */}
+          {/* Metrics Overview Cards (Synchronized with selected period) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
-              <span className="text-[11px] font-bold text-slate-400 uppercase">Today's Sales</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase">{activePeriodMetrics.label1}</span>
               <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                ₹{parseFloat(metrics.today_revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                ₹{parseFloat(activePeriodMetrics.value1 || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
-              <span className="text-[11px] font-bold text-slate-400 uppercase">Today's Bills</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase">{activePeriodMetrics.label2}</span>
               <div className="text-xl font-black text-blue-600 dark:text-blue-400 mt-1">
-                {metrics.today_bills_count || 0}
+                {activePeriodMetrics.value2 || 0}
               </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
-              <span className="text-[11px] font-bold text-slate-400 uppercase">Total Billed</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase">Total Billed (All Time)</span>
               <div className="text-xl font-black text-slate-900 dark:text-white mt-1">
                 ₹{parseFloat(metrics.total_revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
@@ -1432,8 +1594,13 @@ export default function PosBillingView({
 
             <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
               <span className="text-[11px] font-bold text-slate-400 uppercase">Total Bills Count</span>
-              <div className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
-                {metrics.total_bills_count || 0}
+              <div className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-1 flex items-baseline gap-1.5">
+                <span>{metrics.total_bills_count || 0}</span>
+                {parseFloat(metrics.avg_bill_value || 0) > 0 && (
+                  <span className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500">
+                    (₹{Math.round(metrics.avg_bill_value)} avg)
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -1669,6 +1836,64 @@ export default function PosBillingView({
               onClose={() => setActiveReceiptBill(null)}
               showActions={true}
             />
+          </div>
+        </div>
+      )}
+
+      {/* RESET BILLING DATA CONFIRMATION MODAL */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#18181B] border border-rose-200 dark:border-rose-900/50 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto border border-rose-200 dark:border-rose-900/30">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                Reset All Billing Records?
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+                This will permanently delete all POS sales bills, invoice records, and soundbox transaction logs for <strong>"{shopConfig.name}"</strong>.
+              </p>
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-left text-xs space-y-1.5 text-rose-900 dark:text-rose-300">
+                <p className="font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-rose-700 dark:text-rose-400">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Fresh Start Guarantee</span>
+                </p>
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-zinc-400">
+                  Your billing serial will restart from <strong>Bill #1</strong>. Catalog products, stock quantities, and reservations remain completely safe.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setShowResetModal(false)}
+                className="w-1/2 py-3 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-2xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={handleResetBilling}
+                className="w-1/2 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isResetting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Resetting...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Yes, Reset All</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

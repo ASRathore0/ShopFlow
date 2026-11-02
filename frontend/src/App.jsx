@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import LandingPage from './pages/LandingPage';
 import CustomerPortal from './pages/CustomerPortal';
 import CustomerRequestTracking from './pages/CustomerRequestTracking';
+import PublicBillView from './pages/PublicBillView';
 import StaffDashboard from './pages/StaffDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
@@ -34,9 +35,16 @@ export default function App() {
                 <Route path="/" element={<LandingPage />} />
               )}
 
-              {/* Customer Mobile Experiences (always available via /shop/:shopSlug) */}
+              {/* Customer Mobile Experiences (available via both /shop/:shopSlug and /shops/:shopSlug) */}
               <Route path="/shop/:shopSlug" element={<CustomerPortal />} />
+              <Route path="/shops/:shopSlug" element={<CustomerPortal />} />
               <Route path="/shop/:shopSlug/request/:requestNumber" element={<CustomerRequestTracking />} />
+              <Route path="/shops/:shopSlug/request/:requestNumber" element={<CustomerRequestTracking />} />
+
+              {/* Digital Customer Bill Copy / Online Receipt Memo */}
+              <Route path="/bill/:identifier" element={<PublicBillView />} />
+              <Route path="/receipt/:identifier" element={<PublicBillView />} />
+              <Route path="/invoice/:identifier" element={<PublicBillView />} />
 
               {/* Staff Portal Experience */}
               <Route

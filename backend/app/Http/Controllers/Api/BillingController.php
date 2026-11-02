@@ -17,6 +17,18 @@ use Illuminate\Support\Str;
 class BillingController extends Controller
 {
     /**
+     * Build reliable storefront URL for this shop.
+     */
+    public static function getStorefrontUrl(Shop $shop): string
+    {
+        $frontendBase = env('FRONTEND_URL') ?: (app()->environment('production') ? 'https://shopsflow.in' : url('/'));
+        if (str_contains($frontendBase, 'localhost:8000')) {
+            $frontendBase = 'http://localhost:5173';
+        }
+        return rtrim($frontendBase, '/') . "/shop/{$shop->slug}";
+    }
+
+    /**
      * Resolve current shop from user (Admin, Staff, or Super Admin).
      */
     protected function getActiveShop(Request $request): Shop
@@ -62,23 +74,29 @@ class BillingController extends Controller
         $shop = $this->getActiveShop($request);
 
         $today = now()->startOfDay();
-        $billsTodayQuery = Order::where('shop_id', $shop->id)
-            ->where('type', 'pos_billing')
-            ->where('created_at', '>=', $today);
+        $startOfWeek = now()->startOfWeek();
+        $startOfMonth = now()->startOfMonth();
 
+        $baseBills = Order::where('shop_id', $shop->id)
+            ->where('type', 'pos_billing');
+
+        $billsTodayQuery = (clone $baseBills)->where('created_at', '>=', $today);
         $todayBillsCount = $billsTodayQuery->count();
-        $todayRevenue = $billsTodayQuery->where('status', '!=', 'cancelled')->sum('total_amount');
+        $todayRevenue = (clone $billsTodayQuery)->where('status', '!=', 'cancelled')->sum('total_amount');
 
-        $totalRevenue = Order::where('shop_id', $shop->id)
-            ->where('type', 'pos_billing')
-            ->where('status', '!=', 'cancelled')
-            ->sum('total_amount');
+        $billsWeekQuery = (clone $baseBills)->where('created_at', '>=', $startOfWeek);
+        $weekBillsCount = $billsWeekQuery->count();
+        $weekRevenue = (clone $billsWeekQuery)->where('status', '!=', 'cancelled')->sum('total_amount');
 
-        $totalBillsCount = Order::where('shop_id', $shop->id)
-            ->where('type', 'pos_billing')
-            ->count();
+        $billsMonthQuery = (clone $baseBills)->where('created_at', '>=', $startOfMonth);
+        $monthBillsCount = $billsMonthQuery->count();
+        $monthRevenue = (clone $billsMonthQuery)->where('status', '!=', 'cancelled')->sum('total_amount');
 
-        $latestSerial = Order::where('shop_id', $shop->id)->max('bill_serial_no') ?: 0;
+        $totalRevenue = (clone $baseBills)->where('status', '!=', 'cancelled')->sum('total_amount');
+        $totalBillsCount = (clone $baseBills)->count();
+        $avgBillValue = $totalBillsCount > 0 ? round($totalRevenue / $totalBillsCount, 2) : 0;
+
+        $latestSerial = Order::where('shop_id', $shop->id)->where('type', 'pos_billing')->max('bill_serial_no') ?: 0;
         $nextSerial = $latestSerial + 1;
 
         return response()->json([
@@ -97,15 +115,20 @@ class BillingController extends Controller
                     'soundbox_enabled' => (bool) $shop->soundbox_enabled,
                     'bill_tagline' => $shop->bill_tagline ?: ($shop->shop_type ? "Deals In : " . ucwords(str_replace('_', ' ', $shop->shop_type)) : 'Retail & Consumer Goods'),
                     'bill_terms' => $shop->bill_terms ?: 'No Return, Only Exchange Within 3 Days Onwards 2 pm',
-                    'frontstore_url' => url("/shops/{$shop->slug}"),
+                    'frontstore_url' => self::getStorefrontUrl($shop),
                     'customer_portal_settings' => $shop->customer_portal_settings,
                 ],
                 'next_serial_no' => $nextSerial,
                 'metrics' => [
                     'today_revenue' => (float) $todayRevenue,
                     'today_bills_count' => (int) $todayBillsCount,
+                    'week_revenue' => (float) $weekRevenue,
+                    'week_bills_count' => (int) $weekBillsCount,
+                    'month_revenue' => (float) $monthRevenue,
+                    'month_bills_count' => (int) $monthBillsCount,
                     'total_revenue' => (float) $totalRevenue,
                     'total_bills_count' => (int) $totalBillsCount,
+                    'avg_bill_value' => (float) $avgBillValue,
                 ],
             ],
         ]);
@@ -175,7 +198,7 @@ class BillingController extends Controller
             if ($request->filled('custom_serial_no')) {
                 $serialNo = (int) $request->custom_serial_no;
             } else {
-                $maxSerial = Order::where('shop_id', $shop->id)->max('bill_serial_no') ?: 0;
+                $maxSerial = Order::where('shop_id', $shop->id)->where('type', 'pos_billing')->max('bill_serial_no') ?: 0;
                 $serialNo = $maxSerial + 1;
             }
 
@@ -342,7 +365,7 @@ class BillingController extends Controller
                         'address' => $shop->address,
                         'bill_tagline' => $shop->bill_tagline ?: ($shop->shop_type ? "Deals In : " . ucwords(str_replace('_', ' ', $shop->shop_type)) : 'Retail & Consumer Goods'),
                         'bill_terms' => $shop->bill_terms ?: 'No Return, Only Exchange Within 3 Days Onwards 2 pm',
-                        'frontstore_url' => url("/shops/{$shop->slug}"),
+                        'frontstore_url' => self::getStorefrontUrl($shop),
                     ],
                 ],
             ], 201);
@@ -397,7 +420,7 @@ class BillingController extends Controller
                 'address' => $shop->address,
                 'bill_tagline' => $shop->bill_tagline ?: ($shop->shop_type ? "Deals In : " . ucwords(str_replace('_', ' ', $shop->shop_type)) : 'Retail & Consumer Goods'),
                 'bill_terms' => $shop->bill_terms ?: 'No Return, Only Exchange Within 3 Days Onwards 2 pm',
-                'frontstore_url' => url("/shops/{$shop->slug}"),
+                'frontstore_url' => self::getStorefrontUrl($shop),
             ],
         ]);
     }
@@ -427,7 +450,7 @@ class BillingController extends Controller
                     'address' => $shop->address,
                     'bill_tagline' => $shop->bill_tagline ?: ($shop->shop_type ? "Deals In : " . ucwords(str_replace('_', ' ', $shop->shop_type)) : 'Retail & Consumer Goods'),
                     'bill_terms' => $shop->bill_terms ?: 'No Return, Only Exchange Within 3 Days Onwards 2 pm',
-                    'frontstore_url' => url("/shops/{$shop->slug}"),
+                    'frontstore_url' => self::getStorefrontUrl($shop),
                 ],
             ],
         ]);
@@ -455,6 +478,114 @@ class BillingController extends Controller
             'data' => $result,
             'message' => $result['message'] ?? 'WhatsApp dispatch processed.',
         ]);
+    }
+
+    /**
+     * Public endpoint: retrieve a digital bill receipt for customer view.
+     * Accessible via order_number (e.g. BILL-S4-0019) or ID.
+     */
+    public function getPublicBill(Request $request, $identifier)
+    {
+        $shopSlug = $request->query('shop');
+        $query = Order::where('type', 'pos_billing')
+            ->with(['items.product', 'items.variant', 'shop']);
+
+        if ($shopSlug) {
+            $shop = Shop::where('slug', $shopSlug)->first();
+            if ($shop) {
+                $query->where('shop_id', $shop->id);
+            }
+        }
+
+        // Try order_number first (most specific & unique)
+        $order = (clone $query)->where('order_number', $identifier)->first();
+
+        // If numeric, try id or bill_serial_no / bill_number
+        if (!$order && is_numeric($identifier)) {
+            $order = (clone $query)->where('id', (int) $identifier)->first();
+            if (!$order) {
+                $order = (clone $query)->where('bill_number', (string) $identifier)->first();
+            }
+            if (!$order) {
+                $order = (clone $query)->where('bill_serial_no', (int) $identifier)->first();
+            }
+        }
+
+        if (!$order) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Bill receipt not found or link has expired.',
+            ], 404);
+        }
+
+        $shop = $order->shop;
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'bill' => $order,
+                'shop' => [
+                    'id' => $shop->id,
+                    'name' => $shop->name,
+                    'slug' => $shop->slug,
+                    'phone' => $shop->phone,
+                    'email' => $shop->email,
+                    'address' => $shop->address,
+                    'bill_tagline' => $shop->bill_tagline ?: ($shop->shop_type ? "Deals In : " . ucwords(str_replace('_', ' ', $shop->shop_type)) : 'Retail & Consumer Goods'),
+                    'bill_terms' => $shop->bill_terms ?: 'No Return, Only Exchange Within 3 Days Onwards 2 pm',
+                    'frontstore_url' => self::getStorefrontUrl($shop),
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Reset all billing data for this shop so admin can start fresh from Bill #1.
+     */
+    public function resetBillingData(Request $request)
+    {
+        $shop = $this->getActiveShop($request);
+        $user = $request->user();
+
+        // Safety check on user role
+        if (!in_array($user->role, ['admin', 'super_admin', 'shop_owner', 'manager'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Unauthorized. Only shop administrators or managers can reset billing data.',
+            ], 403);
+        }
+
+        return DB::transaction(function () use ($shop) {
+            // 1. Fetch all POS billing orders for this shop
+            $posOrders = Order::where('shop_id', $shop->id)
+                ->where('type', 'pos_billing')
+                ->get();
+            $orderIds = $posOrders->pluck('id');
+
+            // 2. Delete all related order items
+            if ($orderIds->isNotEmpty()) {
+                OrderItem::whereIn('order_id', $orderIds)->delete();
+            }
+
+            // 3. Delete soundbox transactions for this shop
+            \App\Models\SoundboxTransaction::where('shop_id', $shop->id)->delete();
+
+            // 4. Delete the POS billing orders
+            Order::where('shop_id', $shop->id)
+                ->where('type', 'pos_billing')
+                ->delete();
+
+            // 5. Ensure any stray bill serial numbers are cleared so next bill starts at #1
+            Order::where('shop_id', $shop->id)
+                ->whereNotNull('bill_serial_no')
+                ->update(['bill_serial_no' => null]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'All billing records and invoice history have been successfully reset. Fresh billing is ready from Bill #1.',
+                'next_serial_no' => 1,
+            ]);
+        });
     }
 }
 

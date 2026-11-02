@@ -104,6 +104,9 @@ Route::get('/requests/{id}/status', function ($id) {
     return response()->json(['status' => 'success', 'data' => $req]);
 });
 
+// Public Customer Bill Receipt View (Direct copy from WhatsApp / QR)
+Route::get('/public/billing/bill/{identifier}', [BillingController::class, 'getPublicBill']);
+
 // Authenticated Routes (Staff, Admin, Super Admin)
 Route::middleware('auth:sanctum')->group(function () {
     // Current user profile, shop switching & authorized shop onboarding
@@ -132,6 +135,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
         Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
+        Route::post('/billing/reset', [BillingController::class, 'resetBillingData']);
 
         // Staff Soundbox Sync
         Route::get('/billing/soundbox/devices', [SoundboxController::class, 'getDevices']);
@@ -200,6 +204,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
         Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
+        Route::post('/billing/reset', [BillingController::class, 'resetBillingData']);
 
         // Soundbox Device Management & Direct Sync
         Route::get('/billing/soundbox/devices', [SoundboxController::class, 'getDevices']);

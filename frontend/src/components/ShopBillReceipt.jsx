@@ -23,8 +23,16 @@ export default function ShopBillReceipt({
   const shopTagline = currentShop.bill_tagline || (currentShop.shop_type ? `Deals In : All Type ${currentShop.shop_type.replace('_', ' ')}` : "Deals In : All Type Men's Wear");
   const shopTerms = currentShop.bill_terms || 'No Return, Only Exchange Within 3 Days Onwards 2 pm';
 
-  // Frontstore URL for QR Code (instead of Instagram QR, as requested)
-  const frontstoreUrl = currentShop.frontstore_url || (typeof window !== 'undefined' ? `${window.location.origin}/shops/${shopSlug}` : `https://shopflow.in/shops/${shopSlug}`);
+  // Frontstore URL for QR Code and live customer discovery
+  const frontstoreUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/shop/${shopSlug}`
+    : (currentShop.frontstore_url || `https://shopsflow.in/shop/${shopSlug}`);
+
+  // Direct Digital Bill Copy URL for customer smartphone receipt memo
+  const billIdentifier = bill.order_number || bill.id || bill.bill_number;
+  const billCopyUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/bill/${billIdentifier}?shop=${shopSlug}`
+    : `https://shopsflow.in/bill/${billIdentifier}?shop=${shopSlug}`;
 
   const items = bill.items || [];
   const minRows = 10;
@@ -59,7 +67,8 @@ export default function ShopBillReceipt({
       `*Items:*\n${itemsText}\n\n` +
       `*Total Amount:* ₹${parseFloat(bill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
       `*Payment:* ${(bill.payment_method || 'Cash').toUpperCase()} (${bill.payment_status || 'Paid'})\n\n` +
-      `🛍️ *Browse our live digital showroom:* ${frontstoreUrl}\n\n` +
+      `📄 *View / Download Your Official Bill Memo:*\n${billCopyUrl}\n\n` +
+      `🛍️ *Browse our live digital showroom:*\n${frontstoreUrl}\n\n` +
       `*Note:* ${shopTerms}\n` +
       `Thank you for shopping with us!`;
 

@@ -37,6 +37,20 @@ export const billingService = {
     return res.data;
   },
 
+  resetBillingData: async (role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.post(`${prefix}/billing/reset`);
+    return res.data;
+  },
+
+  // Public Digital Bill Receipt retrieval for customers
+  getPublicBill: async (identifier, shopSlug = '') => {
+    const res = await api.get(`/public/billing/bill/${identifier}`, {
+      params: shopSlug ? { shop: shopSlug } : {},
+    });
+    return res.data;
+  },
+
   // Direct Soundbox Sync APIs
   getSoundboxDevices: async (role = 'admin') => {
     const prefix = role === 'staff' ? '/staff' : '/admin';

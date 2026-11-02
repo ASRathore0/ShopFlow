@@ -22,6 +22,31 @@ class WhatsAppBillService
     }
 
     /**
+     * Resolve reliable storefront URL for customer portal.
+     */
+    public static function getFrontstoreUrl(Shop $shop): string
+    {
+        $frontendBase = env('FRONTEND_URL') ?: (app()->environment('production') ? 'https://shopsflow.in' : url('/'));
+        if (str_contains($frontendBase, 'localhost:8000')) {
+            $frontendBase = 'http://localhost:5173';
+        }
+        return rtrim($frontendBase, '/') . "/shop/{$shop->slug}";
+    }
+
+    /**
+     * Resolve reliable digital bill view / download copy URL.
+     */
+    public static function getBillCopyUrl(Order $order, Shop $shop): string
+    {
+        $frontendBase = env('FRONTEND_URL') ?: (app()->environment('production') ? 'https://shopsflow.in' : url('/'));
+        if (str_contains($frontendBase, 'localhost:8000')) {
+            $frontendBase = 'http://localhost:5173';
+        }
+        $identifier = $order->order_number ?: $order->id;
+        return rtrim($frontendBase, '/') . "/bill/{$identifier}?shop={$shop->slug}";
+    }
+
+    /**
      * Build the structured text message for the bill.
      */
     public static function formatBillMessage(Order $order, Shop $shop): string
@@ -30,7 +55,8 @@ class WhatsAppBillService
         $srNo = $order->bill_number ?: ($order->bill_serial_no ?: $order->order_number);
         $dateStr = $order->created_at ? $order->created_at->format('d/m/Y h:i A') : date('d/m/Y');
         $customer = $order->customer_name ?: 'Valued Customer';
-        $frontstoreUrl = url("/shops/{$shop->slug}");
+        $frontstoreUrl = self::getFrontstoreUrl($shop);
+        $billCopyUrl = self::getBillCopyUrl($order, $shop);
         $terms = $shop->bill_terms ?: 'No Return, Only Exchange Within 3 Days Onwards 2 pm';
 
         $items = $order->items ?: [];
@@ -68,7 +94,8 @@ class WhatsAppBillService
 
         $msg .= "*GRAND TOTAL: ₹{$total}*\n";
         $msg .= "*Payment:* {$payMode} (" . ucfirst($order->payment_status ?: 'paid') . ")\n\n";
-        $msg .= "🛍️ *Live Digital Catalog:* {$frontstoreUrl}\n";
+        $msg .= "📄 *View / Download Your Official Bill Copy:*\n{$billCopyUrl}\n\n";
+        $msg .= "🛍️ *Browse our live digital showroom:*\n{$frontstoreUrl}\n\n";
         $msg .= "📌 *Policy:* {$terms}\n\n";
         $msg .= "Thank you for shopping with us at *{$shop->name}*! 🙏";
 
