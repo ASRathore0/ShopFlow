@@ -84,32 +84,11 @@ export default function PublicBillView() {
               <p className="text-[11px] text-slate-400 truncate">Official Digital Cash Memo</p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handlePrint}
-              type="button"
-              className="px-3 sm:px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span className="hidden sm:inline">Print / Save as PDF</span>
-              <span className="sm:hidden">Print</span>
-            </button>
-
-            <Link
-              to={storefrontUrl}
-              className="px-3 sm:px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span className="hidden sm:inline">Browse Showroom</span>
-              <span className="sm:hidden">Showroom</span>
-            </Link>
-          </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col items-center justify-center">
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 pb-28 sm:pb-32 flex flex-col items-center justify-center">
         {loading ? (
           <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-zinc-800 flex items-center justify-center text-blue-600">
@@ -150,52 +129,34 @@ export default function PublicBillView() {
               />
             </div>
 
-            {/* Quick Action CTAs Below Bill */}
-            <div className="print:hidden w-full max-w-[580px] p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
-              <div className="text-center">
-                <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 block">
-                  Thank you for shopping at {shopData?.name || 'our store'}!
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Tap below to explore our live digital catalog and request assistance next time you visit.
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Printer className="w-4 h-4 text-blue-600" />
-                  <span>Print / PDF</span>
-                </button>
-                <Link
-                  to={storefrontUrl}
-                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors text-center"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  <span>Browse Catalog</span>
-                </Link>
-              </div>
+            {/* Polite Thank You Card Below Bill (No duplicate buttons) */}
+            <div className="print:hidden w-full max-w-[580px] p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
+              <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 block">
+                Thank you for shopping at {shopData?.name || 'our store'}!
+              </span>
+              <p className="text-[11px] text-slate-400 mt-1">
+                We appreciate your visit. You can print your bill or visit our live showroom using the buttons below.
+              </p>
             </div>
           </div>
         )}
       </main>
 
-      {/* Floating Sticky Mobile Actions Bar (Mobile Only, print:hidden) */}
+      {/* Floating Sticky Actions Bar (Only buttons remaining, print:hidden) */}
       {!loading && billData && (
-        <div className="print:hidden sm:hidden fixed bottom-3 left-3 right-3 z-30">
-          <div className="bg-slate-900/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-slate-700 p-2.5 rounded-2xl shadow-2xl flex items-center gap-2">
+        <div className="print:hidden fixed bottom-3 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md z-30">
+          <div className="bg-slate-900/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-slate-700/80 p-2 sm:p-2.5 rounded-2xl shadow-2xl flex items-center gap-2 sm:gap-2.5">
             <button
               onClick={handlePrint}
-              className="flex-1 py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95"
+              type="button"
+              className="flex-1 py-3 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>Print / Save PDF</span>
             </button>
             <Link
               to={storefrontUrl}
-              className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 text-center"
+              className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 text-center transition-all"
             >
               <ShoppingBag className="w-4 h-4" />
               <span>Showroom →</span>

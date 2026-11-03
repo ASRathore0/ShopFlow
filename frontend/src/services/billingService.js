@@ -76,6 +76,12 @@ export const billingService = {
     return res.data;
   },
 
+  simulatePayment: async (data, role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.post(`${prefix}/billing/soundbox/simulate`, data);
+    return res.data;
+  },
+
   simulateSoundboxPayment: async (data, role = 'admin') => {
     const prefix = role === 'staff' ? '/staff' : '/admin';
     const res = await api.post(`${prefix}/billing/soundbox/simulate`, data);

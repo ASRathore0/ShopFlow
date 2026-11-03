@@ -41,7 +41,8 @@ class SoundboxWebhookController extends Controller
         // 2. Extract Device Identifier, Merchant ID, Secret Token
         $token = $request->query('token') ?: $request->header('X-Soundbox-Secret') ?: ($data['secret_key'] ?? null);
         $merchantId = $data['MID'] ?? $data['mid'] ?? $data['merchantId'] ?? $data['merchant_id'] ?? null;
-        $deviceId = $data['device_id'] ?? $data['deviceId'] ?? $data['terminal_id'] ?? $data['terminalId'] ?? null;
+        $deviceId = $data['device_id'] ?? $data['deviceId'] ?? $data['terminal_id'] ?? $data['terminalId'] ?? $data['TID'] ?? $data['tid'] ?? $data['DID'] ?? $data['did'] ?? null;
+        $payeeVpa = $data['payee_vpa'] ?? $data['payeeVpa'] ?? $data['vpa'] ?? $data['payee'] ?? $data['upi_id'] ?? null;
         $shopIdParam = $request->query('shop_id') ?: ($data['shop_id'] ?? null);
 
         // 3. Find matching SoundboxDevice or Shop
@@ -58,6 +59,10 @@ class SoundboxWebhookController extends Controller
 
         if (!$soundboxDevice && $merchantId) {
             $soundboxDevice = SoundboxDevice::where('merchant_id', $merchantId)->first();
+        }
+
+        if (!$soundboxDevice && $payeeVpa) {
+            $soundboxDevice = SoundboxDevice::where('upi_id', $payeeVpa)->first();
         }
 
         if ($soundboxDevice) {
@@ -92,6 +97,8 @@ class SoundboxWebhookController extends Controller
             $amount = (float) $data['TXNAMOUNT'];
         } elseif (isset($data['txnAmount'])) {
             $amount = (float) $data['txnAmount'];
+        } elseif (isset($data['paymentAmount'])) {
+            $amount = (float) $data['paymentAmount'];
         } elseif (isset($data['amount'])) {
             $rawAmount = (float) $data['amount'];
             // PhonePe sometimes sends amount in paise (e.g. 50000 = Rs 500)
@@ -102,9 +109,31 @@ class SoundboxWebhookController extends Controller
             }
         } elseif (isset($data['paymentInstrument']['amount'])) {
             $amount = round((float) $data['paymentInstrument']['amount'] / 100, 2);
+        } elseif ($request->filled('amount')) {
+            $amount = (float) $request->input('amount');
         }
 
         if ($amount <= 0) {
+            // If accessed directly via browser GET without an amount, return health check / status
+            if ($request->isMethod('get')) {
+                return response()->json([
+                    'status' => 'online',
+                    'message' => "Soundbox webhook listener is online and ready for shop '{$shop->name}'.",
+                    'shop' => [
+                        'id' => $shop->id,
+                        'name' => $shop->name,
+                    ],
+                    'device' => $soundboxDevice ? [
+                        'id' => $soundboxDevice->id,
+                        'name' => $soundboxDevice->name,
+                        'provider' => $soundboxDevice->provider,
+                        'upi_id' => $soundboxDevice->upi_id,
+                        'merchant_id' => $soundboxDevice->merchant_id,
+                    ] : null,
+                    'info' => 'This webhook endpoint receives automated payments from BharatPe, Paytm, and PhonePe. To simulate a payment via browser, append &amount=100 to this URL.',
+                ]);
+            }
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Invalid or missing payment amount in webhook payload',
