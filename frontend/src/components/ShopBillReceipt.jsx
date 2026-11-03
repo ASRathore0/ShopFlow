@@ -146,44 +146,44 @@ export default function ShopBillReceipt({
       <div
         ref={printRef}
         id="printable-shop-bill"
-        className="w-full max-w-[580px] bg-white text-black p-4 sm:p-6 rounded-lg shadow-2xl border-2 border-black font-sans leading-tight print:p-0 print:border-2 print:shadow-none print:w-full print:max-w-none"
+        className="w-full max-w-[580px] bg-white text-black p-3.5 sm:p-6 rounded-lg shadow-2xl border-2 border-black font-sans leading-tight print:p-0 print:border-2 print:shadow-none print:w-full print:max-w-none"
         style={{ color: '#000', backgroundColor: '#fff' }}
       >
         {/* HEADER SECTION */}
-        <div className="flex items-start justify-between gap-2 pb-2">
+        <div className="flex items-start justify-between gap-1.5 sm:gap-2 pb-2">
           {/* Frontstore QR Code with Slug Handle */}
-          <div className="flex flex-col items-center shrink-0 w-24">
+          <div className="flex flex-col items-center shrink-0 w-20 sm:w-24">
             <div className="p-1 border border-black rounded bg-white">
               <QRCodeSVG
                 value={frontstoreUrl}
-                size={74}
+                size={66}
                 level="M"
                 includeMargin={false}
               />
             </div>
-            <span className="text-[9px] font-black tracking-tight text-center mt-1 truncate max-w-[95px] uppercase">
+            <span className="text-[8.5px] sm:text-[9px] font-black tracking-tight text-center mt-1 truncate max-w-[85px] sm:max-w-[95px] uppercase">
               @{shopSlug}
             </span>
-            <span className="text-[7.5px] font-semibold text-center text-slate-700 tracking-tighter">
+            <span className="text-[7px] sm:text-[7.5px] font-semibold text-center text-slate-700 tracking-tighter">
               Scan for Catalog
             </span>
           </div>
 
           {/* Shop Name & Header Title */}
-          <div className="flex-1 text-center px-1">
-            <div className="text-[11px] font-bold tracking-widest uppercase underline underline-offset-2 mb-0.5">
+          <div className="flex-1 text-center px-1 min-w-0">
+            <div className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase underline underline-offset-2 mb-0.5">
               Estimate
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tighter uppercase font-serif text-black leading-none py-0.5">
+            <h1 className="text-xl sm:text-3xl font-black tracking-tighter uppercase font-serif text-black leading-none py-0.5 break-words">
               {shopName}
             </h1>
-            <div className="text-xs sm:text-sm font-bold tracking-tight text-black mt-1">
+            <div className="text-[11px] sm:text-sm font-bold tracking-tight text-black mt-0.5 sm:mt-1">
               {shopTagline}
             </div>
           </div>
 
           {/* Phone Numbers */}
-          <div className="text-right text-[11px] font-bold leading-tight shrink-0 min-w-[100px]">
+          <div className="text-right text-[10px] sm:text-[11px] font-bold leading-tight shrink-0 min-w-[85px] sm:min-w-[100px]">
             <div>Mob.: {shopPhone}</div>
             {currentShop.customer_portal_settings?.whatsapp_number && currentShop.customer_portal_settings?.whatsapp_number !== shopPhone && (
               <div>{currentShop.customer_portal_settings.whatsapp_number}</div>
@@ -192,7 +192,7 @@ export default function ShopBillReceipt({
         </div>
 
         {/* ADDRESS BANNER (Inverted Solid Black Bar) */}
-        <div className="bg-black text-white text-[11px] sm:text-xs font-bold px-2 py-1 text-center uppercase tracking-wide my-1">
+        <div className="bg-black text-white text-[10px] sm:text-xs font-bold px-2 py-1 text-center uppercase tracking-wide my-1 leading-snug">
           Address : {shopAddress}
         </div>
 

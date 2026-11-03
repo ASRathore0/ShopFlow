@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { 
   Printer, ShoppingBag, Store, CheckCircle2, AlertCircle, 
-  ArrowLeft, RefreshCw, Phone, MapPin, Share2, Download
+  ArrowLeft, RefreshCw, Phone, MapPin, Share2, Download,
+  Check, ExternalLink, ShieldCheck, Sparkles, MessageCircle, Clock, Receipt
 } from 'lucide-react';
 import { billingService } from '../services/billingService';
 import ShopBillReceipt from '../components/ShopBillReceipt';
@@ -11,12 +12,12 @@ export default function PublicBillView() {
   const { identifier } = useParams();
   const [searchParams] = useSearchParams();
   const shopSlug = searchParams.get('shop') || '';
-  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [billData, setBillData] = useState(null);
   const [shopData, setShopData] = useState(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     if (!identifier) return;
@@ -55,108 +56,245 @@ export default function PublicBillView() {
     window.print();
   };
 
-  const resolvedShopSlug = shopData?.slug || shopSlug || 'store';
+  const currentShop = shopData || billData?.shop || {};
+  const resolvedShopSlug = currentShop?.slug || shopSlug || 'store';
   const storefrontUrl = `/shop/${resolvedShopSlug}`;
 
+  const formattedDate = billData?.created_at
+    ? new Date(billData.created_at).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '';
+
+  const formattedTime = billData?.created_at
+    ? new Date(billData.created_at).toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
+    : '';
+
+  const handleNativeShare = async () => {
+    const currentUrl = window.location.href;
+    const shareText = `🧾 Bill Memo from ${currentShop.name || 'Store'}\nAmount: ₹${parseFloat(billData?.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\nView your digital receipt:`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Bill Receipt - ${currentShop.name || 'VR Collection'}`,
+          text: shareText,
+          url: currentUrl,
+        });
+        return;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn('Native share error, falling back to copy:', err);
+        }
+      }
+    }
+
+    // Fallback: Copy link
+    try {
+      await navigator.clipboard.writeText(currentUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch (e) {
+      // WhatsApp Web fallback
+      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + ' ' + currentUrl)}`;
+      window.open(waUrl, '_blank');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-[#0c0d12] text-slate-900 dark:text-zinc-100 flex flex-col font-sans transition-colors">
-      {/* Top Navigation Bar (Hidden when printing) */}
-      <header className="print:hidden sticky top-0 z-40 bg-white/90 dark:bg-[#18181B]/90 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800 px-4 py-3 shadow-xs">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-blue-500 selection:text-white relative overflow-x-hidden">
+      {/* Premium Ambient Background Glows */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-96 bg-gradient-to-b from-blue-600/15 via-emerald-600/10 to-transparent blur-3xl pointer-events-none" />
+      <div className="absolute top-32 right-0 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Top Header Bar (Hidden during printing) */}
+      <header className="print:hidden sticky top-0 z-40 bg-slate-900/85 backdrop-blur-xl border-b border-white/10 px-4 py-3 shadow-lg shadow-black/20">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <Link
               to={storefrontUrl}
-              className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-300 transition-colors"
-              title="Back to Storefront"
+              className="p-2 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 text-slate-300 hover:text-white transition-all border border-white/10 shrink-0"
+              title="Return to Showroom"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </Link>
+
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">
-                  {shopData?.name || 'VR COLLECTION'}
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-sm sm:text-base text-white truncate tracking-tight">
+                  {currentShop?.name || 'VR COLLECTION'}
                 </span>
-                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                   Verified Bill
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 truncate">Official Digital Cash Memo</p>
+              <p className="text-[11px] text-slate-400 truncate flex items-center gap-1">
+                <span>Official Digital Tax & Cash Memo</span>
+                {formattedDate && <span>• {formattedDate}</span>}
+              </p>
             </div>
           </div>
+
+          {/* Quick Share Icon Pill */}
+          {!loading && billData && (
+            <button
+              type="button"
+              onClick={handleNativeShare}
+              className="p-2 sm:px-3 sm:py-2 rounded-2xl bg-white/10 hover:bg-white/15 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 transition-all border border-white/15 shadow-sm shrink-0 cursor-pointer"
+              title="Share digital bill"
+            >
+              {copiedLink ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-400" />
+                  <span className="hidden sm:inline text-emerald-300 font-bold">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-4 h-4 text-blue-300" />
+                  <span className="hidden sm:inline">Share</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 pb-28 sm:pb-32 flex flex-col items-center justify-center">
+      <main className="flex-1 max-w-3xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-28 sm:pb-32 flex flex-col items-center">
         {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-zinc-800 flex items-center justify-center text-blue-600">
-              <RefreshCw className="w-6 h-6 animate-spin" />
+          <div className="py-24 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-14 h-14 rounded-3xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shadow-xl shadow-blue-500/10">
+              <RefreshCw className="w-7 h-7 animate-spin" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-800 dark:text-zinc-200">Retrieving Your Bill Memo...</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Securely verifying store transaction details</p>
+              <h2 className="text-base font-bold text-white">Loading Official Bill Memo...</h2>
+              <p className="text-xs text-slate-400 mt-1">Verifying encrypted store receipt parameters</p>
             </div>
           </div>
         ) : error || !billData ? (
-          <div className="p-8 sm:p-10 rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 text-center space-y-4 shadow-sm max-w-md w-full my-10">
-            <div className="w-14 h-14 bg-red-50 dark:bg-red-950/30 text-red-500 rounded-2xl flex items-center justify-center mx-auto">
-              <AlertCircle className="w-7 h-7" />
+          <div className="p-8 sm:p-10 rounded-3xl bg-slate-900/90 border border-white/10 text-center space-y-4 shadow-2xl max-w-md w-full my-12">
+            <div className="w-16 h-16 bg-red-500/10 text-red-400 border border-red-500/20 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-red-500/10">
+              <AlertCircle className="w-8 h-8" />
             </div>
-            <div>
-              <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">Bill Receipt Not Found</h2>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-                {error || "We could not find an active bill receipt with this identifier."}
+            <div className="space-y-1">
+              <h2 className="text-lg font-black text-white">Receipt Not Found</h2>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {error || "We could not find an active bill receipt with this identifier. The link may have expired or been mistyped."}
               </p>
             </div>
             <Link
               to={storefrontUrl}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition-all"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-xl shadow-blue-600/30 transition-all cursor-pointer"
             >
               <Store className="w-4 h-4" />
               <span>Visit Shop Showroom</span>
             </Link>
           </div>
         ) : (
-          <div className="w-full flex flex-col items-center space-y-6">
-            {/* The Authentic Bill Memo Receipt */}
-            <div className="w-full flex justify-center py-2 sm:py-4">
-              <ShopBillReceipt
-                bill={billData}
-                shop={shopData}
-                showActions={false}
-              />
+          <div className="w-full flex flex-col items-center space-y-4 sm:space-y-6">
+            
+            {/* HERO RECEIPT SUMMARY CARD (Mobile-Friendly Capsule) */}
+            <div className="print:hidden w-full max-w-[580px] p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-slate-900/95 via-slate-800/90 to-slate-900/95 border border-white/15 shadow-2xl backdrop-blur-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-44 h-44 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Total Paid Amount
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-400/20 text-emerald-300 border border-emerald-400/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {(billData.payment_method || 'UPI').toUpperCase()} • {(billData.payment_status || 'PAID').toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">
+                    ₹{parseFloat(billData.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                <div className="flex sm:flex-col items-baseline sm:items-end justify-between border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0 text-xs text-slate-300">
+                  <div className="font-extrabold text-white">
+                    Bill #{billData.bill_number || billData.bill_serial_no || '1'}
+                  </div>
+                  <div className="text-[11px] text-slate-400 font-medium">
+                    {formattedDate} {formattedTime && `• ${formattedTime}`}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Polite Thank You Card Below Bill (No duplicate buttons) */}
-            <div className="print:hidden w-full max-w-[580px] p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
-              <span className="text-xs font-bold text-slate-800 dark:text-zinc-200 block">
-                Thank you for shopping at {shopData?.name || 'our store'}!
-              </span>
-              <p className="text-[11px] text-slate-400 mt-1">
-                We appreciate your visit. You can print your bill or visit our live showroom using the buttons below.
-              </p>
+            {/* THE AUTHENTIC PAPER BILL MEMO */}
+            <div className="w-full flex justify-center">
+              <div className="w-full max-w-[580px] rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/40 border border-white/15 overflow-hidden bg-white">
+                <ShopBillReceipt
+                  bill={billData}
+                  shop={currentShop}
+                  showActions={false}
+                />
+              </div>
             </div>
+
+            {/* SHOWROOM & STORE DISCOVERY CARD */}
+            <div className="print:hidden w-full max-w-[580px] p-4 sm:p-5 rounded-3xl bg-slate-900/90 border border-white/15 shadow-xl backdrop-blur-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-blue-400 shrink-0" />
+                  <span className="font-bold text-sm text-white">
+                    {currentShop.name || 'VR COLLECTION'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">
+                  {currentShop.bill_tagline || 'Premium In-Store Catalog & Digital Retail'}
+                </p>
+                {currentShop.phone && (
+                  <p className="text-[11px] text-slate-400 flex items-center gap-1.5 pt-0.5">
+                    <Phone className="w-3 h-3 text-slate-400" />
+                    <span>Customer Care: <strong>{currentShop.phone}</strong></span>
+                  </p>
+                )}
+              </div>
+
+              <Link
+                to={storefrontUrl}
+                className="py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/15 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-2 border border-white/15 shadow-md transition-all shrink-0 cursor-pointer"
+              >
+                <ShoppingBag className="w-4 h-4 text-emerald-400" />
+                <span>Explore Live Catalog</span>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+              </Link>
+            </div>
+
+            {/* Legal / Policy Note */}
+            <p className="print:hidden text-[10px] text-slate-400 text-center max-w-md px-4 leading-relaxed">
+              Official digital cash memo registered under {currentShop.name || 'our store'}. All terms, warranties, and return policies stated on the receipt are binding.
+            </p>
           </div>
         )}
       </main>
 
-      {/* Floating Sticky Actions Bar (Only buttons remaining, print:hidden) */}
+      {/* Floating Sticky Actions Bar (Mobile-First Thumb-Zone, print:hidden) */}
       {!loading && billData && (
-        <div className="print:hidden fixed bottom-3 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md z-30">
-          <div className="bg-slate-900/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-slate-700/80 p-2 sm:p-2.5 rounded-2xl shadow-2xl flex items-center gap-2 sm:gap-2.5">
+        <div className="print:hidden fixed bottom-3 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md z-40">
+          <div className="bg-slate-950/90 backdrop-blur-2xl border border-white/20 p-2 sm:p-2.5 rounded-3xl shadow-2xl shadow-black/80 flex items-center gap-2 sm:gap-2.5">
             <button
               onClick={handlePrint}
               type="button"
-              className="flex-1 py-3 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+              className="flex-1 py-3.5 px-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl shadow-blue-600/30 transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>Print / Save PDF</span>
             </button>
             <Link
               to={storefrontUrl}
-              className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 text-center transition-all"
+              className="flex-1 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/30 active:scale-95 text-center transition-all cursor-pointer"
             >
               <ShoppingBag className="w-4 h-4" />
               <span>Showroom →</span>
@@ -166,10 +304,9 @@ export default function PublicBillView() {
       )}
 
       {/* Footer */}
-      <footer className="print:hidden border-t border-slate-200 dark:border-zinc-800 py-6 text-center text-xs text-slate-400">
+      <footer className="print:hidden border-t border-white/10 py-6 text-center text-xs text-slate-400 mt-auto">
         <p>Verified Official Digital Bill Memo • Powered by ShopFlow Physical Retail</p>
       </footer>
     </div>
   );
 }
-
