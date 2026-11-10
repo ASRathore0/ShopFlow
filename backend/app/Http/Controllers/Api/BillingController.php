@@ -187,7 +187,7 @@ class BillingController extends Controller
             'items.*.unit_price' => 'required|numeric|min:0',
             'discount_amount' => 'nullable|numeric|min:0',
             'tax_amount' => 'nullable|numeric|min:0',
-            'payment_method' => 'nullable|string|in:cash,upi,card,split',
+            'payment_method' => 'nullable|string|in:cash,upi,card,split,partial',
             'received_amount' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string|max:500',
             'custom_serial_no' => 'nullable|integer',
@@ -238,12 +238,17 @@ class BillingController extends Controller
             $change = max(0, round($received - $totalAmount, 2));
             $paymentMethod = $request->payment_method ?: 'cash';
 
+            $splitCash = (float) ($request->split_cash_amount ?: 0);
+            $splitUpi = (float) ($request->split_upi_amount ?: 0);
+            $splitCard = (float) ($request->split_card_amount ?: 0);
+            $isSplit = in_array($paymentMethod, ['partial', 'split']);
+
             $user = $request->user();
 
             $soundboxDeviceId = $request->soundbox_device_id ?: null;
             $soundboxAccountName = $request->soundbox_account_name ?: null;
             $utrNumber = $request->utr_number ? trim($request->utr_number) : null;
-            $syncedAt = ($paymentMethod === 'upi' && ($soundboxDeviceId || $utrNumber)) ? now() : null;
+            $syncedAt = (($paymentMethod === 'upi' || ($isSplit && $splitUpi > 0)) && ($soundboxDeviceId || $utrNumber)) ? now() : null;
 
             // 1. Create the Order / Bill
             $order = Order::create([
@@ -259,6 +264,14 @@ class BillingController extends Controller
                 'tax_amount' => $tax,
                 'discount_amount' => $discount,
                 'payment_method' => $paymentMethod,
+                'split_cash_amount' => $isSplit ? $splitCash : null,
+                'split_upi_amount' => $isSplit ? $splitUpi : null,
+                'split_card_amount' => $isSplit ? $splitCard : null,
+                'payment_details' => $isSplit ? [
+                    'cash' => $splitCash,
+                    'upi' => $splitUpi,
+                    'card' => $splitCard,
+                ] : null,
                 'payment_status' => 'paid',
                 'received_amount' => $received,
                 'change_amount' => $change,
@@ -274,18 +287,20 @@ class BillingController extends Controller
             ]);
 
             // If Soundbox transaction or UTR was attached, record in ledger
-            if ($paymentMethod === 'upi' && ($utrNumber || $soundboxDeviceId)) {
+            $isUpiInvolved = ($paymentMethod === 'upi') || ($isSplit && $splitUpi > 0);
+            if ($isUpiInvolved && ($utrNumber || $soundboxDeviceId)) {
                 try {
+                    $upiAmount = $isSplit ? $splitUpi : $totalAmount;
                     \App\Models\SoundboxTransaction::create([
                         'shop_id' => $shop->id,
                         'soundbox_device_id' => $soundboxDeviceId,
                         'order_id' => $order->id,
-                        'amount' => $totalAmount,
+                        'amount' => $upiAmount,
                         'utr_number' => $utrNumber ?: ('POS' . date('YmdHis') . rand(100, 999)),
                         'payer_vpa' => $request->payer_vpa ?: 'walkin@upi',
                         'provider' => $request->provider ?: 'upi',
                         'status' => 'matched',
-                        'raw_payload' => ['created_via_pos' => true, 'account_name' => $soundboxAccountName],
+                        'raw_payload' => ['created_via_pos' => true, 'account_name' => $soundboxAccountName, 'split_payment' => $isSplit],
                     ]);
                 } catch (\Throwable $e) {
                     \Illuminate\Support\Facades\Log::warning('Could not record soundbox transaction: ' . $e->getMessage());
@@ -394,8 +409,12 @@ class BillingController extends Controller
             });
         }
 
-        if ($request->filled('payment_method')) {
-            $query->where('payment_method', $request->payment_method);
+        if ($request->filled('payment_method') && $request->payment_method !== 'all') {
+            if ($request->payment_method === 'partial' || $request->payment_method === 'split') {
+                $query->whereIn('payment_method', ['partial', 'split']);
+            } else {
+                $query->where('payment_method', $request->payment_method);
+            }
         }
 
         if ($request->filled('date_from')) {
@@ -454,6 +473,172 @@ class BillingController extends Controller
                 ],
             ],
         ]);
+    }
+
+    /**
+     * Update an existing POS billing invoice and adjust items.
+     */
+    public function updateBill(Request $request, $id)
+    {
+        $shop = $this->getActiveShop($request);
+        $this->ensureBillingEnabled($shop);
+
+        $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.item_name' => 'required|string',
+            'items.*.quantity' => 'required|numeric|min:1',
+            'items.*.unit_price' => 'required|numeric|min:0',
+        ]);
+
+        return DB::transaction(function () use ($request, $shop, $id) {
+            $order = Order::where('shop_id', $shop->id)
+                ->where('type', 'pos_billing')
+                ->findOrFail($id);
+
+            // 1. Revert previous inventory deductions if any
+            $previousItems = OrderItem::where('order_id', $order->id)->get();
+            foreach ($previousItems as $prevItem) {
+                if (!empty($prevItem->product_id)) {
+                    $inv = Inventory::where('shop_id', $shop->id)
+                        ->where('product_id', $prevItem->product_id)
+                        ->when($prevItem->product_variant_id, function ($q, $varId) {
+                            $q->where('product_variant_id', $varId);
+                        })
+                        ->first();
+
+                    if ($inv) {
+                        $inv->available_quantity += $prevItem->quantity;
+                        $inv->status = $inv->available_quantity <= $inv->reorder_level ? 'low_stock' : 'in_stock';
+                        $inv->save();
+                    }
+                }
+            }
+
+            // 2. Remove old line items
+            OrderItem::where('order_id', $order->id)->delete();
+
+            // 3. Compute revised amounts & new line items
+            $subtotal = 0;
+            $itemsData = [];
+
+            foreach ($request->items as $itemInput) {
+                $qty = (int) $itemInput['quantity'];
+                $rate = (float) $itemInput['unit_price'];
+                $lineTotal = round($qty * $rate, 2);
+                $subtotal += $lineTotal;
+
+                $itemsData[] = [
+                    'product_id' => $itemInput['product_id'] ?? null,
+                    'product_variant_id' => $itemInput['product_variant_id'] ?? null,
+                    'item_name' => $itemInput['item_name'],
+                    'variant_name' => $itemInput['variant_name'] ?? null,
+                    'quantity' => $qty,
+                    'unit_price' => $rate,
+                    'total_price' => $lineTotal,
+                ];
+            }
+
+            $discount = (float) ($request->discount_amount ?: 0);
+            $tax = (float) ($request->tax_amount ?: 0);
+            $totalAmount = max(0, round($subtotal - $discount + $tax, 2));
+
+            $received = (float) ($request->received_amount ?: $totalAmount);
+            $change = max(0, round($received - $totalAmount, 2));
+            $paymentMethod = $request->payment_method ?: $order->payment_method;
+
+            $splitCash = (float) ($request->split_cash_amount ?: 0);
+            $splitUpi = (float) ($request->split_upi_amount ?: 0);
+            $splitCard = (float) ($request->split_card_amount ?: 0);
+            $isSplit = in_array($paymentMethod, ['partial', 'split']);
+
+            // 4. Update the order record
+            $order->subtotal = $subtotal;
+            $order->discount_amount = $discount;
+            $order->tax_amount = $tax;
+            $order->total_amount = $totalAmount;
+            $order->received_amount = $received;
+            $order->change_amount = $change;
+            $order->payment_method = $paymentMethod;
+            $order->split_cash_amount = $isSplit ? $splitCash : null;
+            $order->split_upi_amount = $isSplit ? $splitUpi : null;
+            $order->split_card_amount = $isSplit ? $splitCard : null;
+            $order->payment_details = $isSplit ? [
+                'cash' => $splitCash,
+                'upi' => $splitUpi,
+                'card' => $splitCard,
+            ] : null;
+            $order->customer_name = $request->customer_name ?: 'Walk-in Customer';
+            $order->customer_phone = $request->customer_phone;
+            $order->customer_address = $request->customer_address;
+            $order->notes = $request->notes;
+            $order->save();
+
+            // 5. Re-insert items and update inventory
+            $user = $request->user();
+            foreach ($itemsData as $itemData) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'product_id' => $itemData['product_id'] ?? null,
+                    'product_variant_id' => $itemData['product_variant_id'] ?? null,
+                    'item_name' => $itemData['item_name'],
+                    'variant_name' => $itemData['variant_name'] ?? null,
+                    'quantity' => $itemData['quantity'],
+                    'unit_price' => $itemData['unit_price'],
+                    'total_price' => $itemData['total_price'],
+                ]);
+
+                if (!empty($itemData['product_id'])) {
+                    $inv = Inventory::where('shop_id', $shop->id)
+                        ->where('product_id', $itemData['product_id'])
+                        ->when($itemData['product_variant_id'], function ($q, $varId) {
+                            $q->where('product_variant_id', $varId);
+                        })
+                        ->first();
+
+                    if ($inv) {
+                        $inv->available_quantity = max(0, $inv->available_quantity - $itemData['quantity']);
+                        if ($inv->available_quantity == 0) {
+                            $inv->status = 'out_of_stock';
+                        } elseif ($inv->available_quantity <= $inv->reorder_level) {
+                            $inv->status = 'low_stock';
+                        }
+                        $inv->save();
+
+                        InventoryMovement::create([
+                            'shop_id' => $shop->id,
+                            'product_id' => $itemData['product_id'],
+                            'product_variant_id' => $itemData['product_variant_id'],
+                            'user_id' => $user ? $user->id : null,
+                            'type' => 'stock_out',
+                            'quantity' => $itemData['quantity'],
+                            'from_location_id' => $inv->location_id,
+                            'reason' => "POS Edit: Bill #{$order->bill_number}",
+                        ]);
+                    }
+                }
+            }
+
+            $order->load(['items.product', 'items.variant', 'user']);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Bill #{$order->bill_number} has been updated successfully!",
+                'data' => [
+                    'bill' => $order,
+                    'shop' => [
+                        'id' => $shop->id,
+                        'name' => $shop->name,
+                        'slug' => $shop->slug,
+                        'phone' => $shop->phone,
+                        'email' => $shop->email,
+                        'address' => $shop->address,
+                        'bill_tagline' => $shop->bill_tagline ?: ($shop->shop_type ? "Deals In : " . ucwords(str_replace('_', ' ', $shop->shop_type)) : 'Retail & Consumer Goods'),
+                        'bill_terms' => $shop->bill_terms ?: 'No Return, Only Exchange Within 3 Days Onwards 2 pm',
+                        'frontstore_url' => self::getStorefrontUrl($shop),
+                    ],
+                ],
+            ]);
+        });
     }
 
     /**
@@ -536,6 +721,127 @@ class BillingController extends Controller
                     'frontstore_url' => self::getStorefrontUrl($shop),
                 ],
             ],
+        ]);
+    }
+
+    /**
+     * Fast customer lookup by mobile/WhatsApp or name for POS auto-suggestion.
+     */
+    public function searchCustomers(Request $request)
+    {
+        $shop = $this->getActiveShop($request);
+        $this->ensureBillingEnabled($shop);
+
+        $query = trim($request->get('query', $request->get('phone', '')));
+        $digitsOnly = preg_replace('/[^0-9]/', '', $query);
+
+        if (strlen($query) < 2 && strlen($digitsOnly) < 2) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [],
+            ]);
+        }
+
+        $customerMap = [];
+
+        // 1. Search past Orders in this shop
+        $ordersQuery = Order::where('shop_id', $shop->id)
+            ->whereNotNull('customer_phone')
+            ->where('customer_phone', '!=', '');
+
+        $ordersQuery->where(function ($q) use ($digitsOnly, $query) {
+            if (strlen($digitsOnly) >= 2) {
+                $q->where('customer_phone', 'LIKE', "%{$digitsOnly}%");
+            }
+            if (strlen($query) >= 2) {
+                $q->orWhere('customer_name', 'LIKE', "%{$query}%");
+            }
+        });
+
+        $orders = $ordersQuery->orderByDesc('id')
+            ->limit(100)
+            ->get(['id', 'customer_phone', 'customer_name', 'customer_address', 'total_amount', 'created_at']);
+
+        foreach ($orders as $order) {
+            $phone = trim($order->customer_phone);
+            if (!$phone) continue;
+
+            $name = trim($order->customer_name ?: '');
+            $isGenericName = empty($name) || strtolower($name) === 'walk-in customer';
+
+            if (!isset($customerMap[$phone])) {
+                $customerMap[$phone] = [
+                    'customer_phone' => $phone,
+                    'customer_name' => $isGenericName ? '' : $name,
+                    'customer_address' => $order->customer_address ?: '',
+                    'visit_count' => 1,
+                    'total_spent' => (float) $order->total_amount,
+                    'last_visit' => $order->created_at ? $order->created_at->toIso8601String() : null,
+                    'last_visit_formatted' => $order->created_at ? $order->created_at->format('d M Y') : null,
+                    'last_visit_relative' => $order->created_at ? $order->created_at->diffForHumans() : null,
+                ];
+            } else {
+                $customerMap[$phone]['visit_count'] += 1;
+                $customerMap[$phone]['total_spent'] += (float) $order->total_amount;
+                if (empty($customerMap[$phone]['customer_name']) && !$isGenericName) {
+                    $customerMap[$phone]['customer_name'] = $name;
+                }
+                if (empty($customerMap[$phone]['customer_address']) && !empty($order->customer_address)) {
+                    $customerMap[$phone]['customer_address'] = $order->customer_address;
+                }
+            }
+        }
+
+        // 2. Also search Customer Sessions (e.g., in-store digital kiosk or QR visits)
+        if (count($customerMap) < 8) {
+            $sessionQuery = \App\Models\CustomerSession::where('shop_id', $shop->id)
+                ->whereNotNull('phone')
+                ->where('phone', '!=', '');
+
+            $sessionQuery->where(function ($q) use ($digitsOnly, $query) {
+                if (strlen($digitsOnly) >= 2) {
+                    $q->where('phone', 'LIKE', "%{$digitsOnly}%");
+                }
+                if (strlen($query) >= 2) {
+                    $q->orWhere('name', 'LIKE', "%{$query}%");
+                }
+            });
+
+            $sessions = $sessionQuery->orderByDesc('id')->limit(25)->get();
+
+            foreach ($sessions as $session) {
+                $phone = trim($session->phone);
+                if (!$phone) continue;
+
+                if (!isset($customerMap[$phone])) {
+                    $customerMap[$phone] = [
+                        'customer_phone' => $phone,
+                        'customer_name' => trim($session->name ?: ''),
+                        'customer_address' => '',
+                        'visit_count' => 1,
+                        'total_spent' => 0,
+                        'last_visit' => $session->created_at ? $session->created_at->toIso8601String() : null,
+                        'last_visit_formatted' => $session->created_at ? $session->created_at->format('d M Y') : null,
+                        'last_visit_relative' => $session->created_at ? $session->created_at->diffForHumans() : null,
+                    ];
+                } elseif (empty($customerMap[$phone]['customer_name']) && !empty($session->name)) {
+                    $customerMap[$phone]['customer_name'] = trim($session->name);
+                }
+            }
+        }
+
+        // Sort: highest visit count first, then latest visit
+        $results = array_values($customerMap);
+        usort($results, function ($a, $b) {
+            if ($b['visit_count'] !== $a['visit_count']) {
+                return $b['visit_count'] - $a['visit_count'];
+            }
+            return strcmp($b['last_visit'] ?? '', $a['last_visit'] ?? '');
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => array_slice($results, 0, 8),
         ]);
     }
 

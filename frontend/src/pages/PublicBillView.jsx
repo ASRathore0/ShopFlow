@@ -212,7 +212,9 @@ export default function PublicBillView() {
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-400/20 text-emerald-300 border border-emerald-400/30">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      {(billData.payment_method || 'UPI').toUpperCase()} • {(billData.payment_status || 'PAID').toUpperCase()}
+                      {billData.payment_method === 'partial' || billData.payment_method === 'split'
+                        ? `PARTIAL (₹${parseFloat(billData.split_cash_amount || 0).toFixed(0)} CASH + ₹${parseFloat(billData.split_upi_amount || 0).toFixed(0)} UPI)`
+                        : (billData.payment_method || 'UPI').toUpperCase()} • {(billData.payment_status || 'PAID').toUpperCase()}
                     </span>
                   </div>
                   <div className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">

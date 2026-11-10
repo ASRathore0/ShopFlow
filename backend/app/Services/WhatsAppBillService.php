@@ -74,7 +74,13 @@ class WhatsAppBillService
 
         $subtotal = number_format((float) ($order->subtotal ?: $order->total_amount), 2);
         $total = number_format((float) $order->total_amount, 2);
-        $payMode = strtoupper($order->payment_method ?: 'Cash');
+        if (in_array($order->payment_method, ['partial', 'split'])) {
+            $c = number_format((float) ($order->split_cash_amount ?: 0), 0);
+            $u = number_format((float) ($order->split_upi_amount ?: 0), 0);
+            $payMode = "PARTIAL (Cash: ₹{$c} + UPI: ₹{$u})";
+        } else {
+            $payMode = strtoupper($order->payment_method ?: 'Cash');
+        }
 
         $msg = "🧾 *BILL MEMO - {$shopName}*\n";
         $msg .= "━━━━━━━━━━━━━━━━━━━━\n";
@@ -87,9 +93,11 @@ class WhatsAppBillService
         $msg .= "━━━━━━━━━━━━━━━━━━━━\n";
 
         if ((float) ($order->discount_amount ?: 0) > 0) {
-            $discount = number_format((float) $order->discount_amount, 2);
+            $discountAmt = (float) $order->discount_amount;
+            $subtotalVal = (float) ($order->subtotal ?: ((float) $order->total_amount + $discountAmt));
+            $pct = $subtotalVal > 0 ? round(($discountAmt / $subtotalVal) * 100, 1) : 0;
             $msg .= "*Subtotal:* ₹{$subtotal}\n";
-            $msg .= "*Discount:* - ₹{$discount}\n";
+            $msg .= "*Discount:* - {$pct}%\n";
         }
 
         $msg .= "*GRAND TOTAL: ₹{$total}*\n";

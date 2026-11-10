@@ -131,9 +131,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // Staff Billing POS
         Route::get('/billing/status', [BillingController::class, 'getBillingStatus']);
         Route::get('/billing/products', [BillingController::class, 'getPosProducts']);
+        Route::get('/billing/customers/search', [BillingController::class, 'searchCustomers']);
         Route::post('/billing/create', [BillingController::class, 'createBill']);
         Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
         Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
+        Route::put('/billing/invoices/{id}', [BillingController::class, 'updateBill']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
         Route::post('/billing/reset', [BillingController::class, 'resetBillingData']);
 
@@ -200,9 +202,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // POS & Billing System
         Route::get('/billing/status', [BillingController::class, 'getBillingStatus']);
         Route::get('/billing/products', [BillingController::class, 'getPosProducts']);
+        Route::get('/billing/customers/search', [BillingController::class, 'searchCustomers']);
         Route::post('/billing/create', [BillingController::class, 'createBill']);
         Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
         Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
+        Route::put('/billing/invoices/{id}', [BillingController::class, 'updateBill']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
         Route::post('/billing/reset', [BillingController::class, 'resetBillingData']);
 

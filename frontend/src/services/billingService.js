@@ -13,9 +13,21 @@ export const billingService = {
     return res.data;
   },
 
+  searchCustomers: async (query = '', role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.get(`${prefix}/billing/customers/search`, { params: { query } });
+    return res.data;
+  },
+
   createBill: async (billData, role = 'admin') => {
     const prefix = role === 'staff' ? '/staff' : '/admin';
     const res = await api.post(`${prefix}/billing/create`, billData);
+    return res.data;
+  },
+
+  updateBill: async (id, billData, role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.put(`${prefix}/billing/invoices/${id}`, billData);
     return res.data;
   },
 

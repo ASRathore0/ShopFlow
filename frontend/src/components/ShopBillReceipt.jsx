@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Printer, Share2, X, Download, CheckCircle2, MessageSquare, Loader2, ExternalLink } from 'lucide-react';
+import { Printer, Share2, X, Download, CheckCircle2, MessageSquare, Loader2, ExternalLink, Edit2 } from 'lucide-react';
 import { billingService } from '../services/billingService';
 
 export default function ShopBillReceipt({
@@ -8,6 +8,7 @@ export default function ShopBillReceipt({
   shop,
   onClose,
   showActions = true,
+  onEdit,
 }) {
   const printRef = useRef(null);
   const [sendingWa, setSendingWa] = useState(false);
@@ -22,6 +23,12 @@ export default function ShopBillReceipt({
   const shopAddress = currentShop.address || 'Shop No.-04, Amritpuram, Jagat Farm, Greater Noida U.P. Near Raja Dhaba Wali Gali';
   const shopTagline = currentShop.bill_tagline || (currentShop.shop_type ? `Deals In : All Type ${currentShop.shop_type.replace('_', ' ')}` : "Deals In : All Type Men's Wear");
   const shopTerms = currentShop.bill_terms || 'No Return, Only Exchange Within 3 Days Onwards 2 pm';
+
+  // Normalize phone numbers to prevent duplicate phone lines
+  const normalizePhone = (num) => (num ? String(num).replace(/[\s\-\(\)\+]/g, '') : '');
+  const cleanShopPhone = shopPhone || '';
+  const rawWaPhone = currentShop.customer_portal_settings?.whatsapp_number || '';
+  const showSecondaryPhone = rawWaPhone && normalizePhone(rawWaPhone) !== normalizePhone(cleanShopPhone);
 
   // Frontstore URL for QR Code and live customer discovery
   const frontstoreUrl = typeof window !== 'undefined'
@@ -66,7 +73,7 @@ export default function ShopBillReceipt({
       `*Customer:* ${bill.customer_name || 'Valued Customer'}\n\n` +
       `*Items:*\n${itemsText}\n\n` +
       `*Total Amount:* ₹${parseFloat(bill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-      `*Payment:* ${(bill.payment_method || 'Cash').toUpperCase()} (${bill.payment_status || 'Paid'})\n\n` +
+      `*Payment:* ${bill.payment_method === 'partial' || bill.payment_method === 'split' ? `PARTIAL (Cash: ₹${parseFloat(bill.split_cash_amount || 0).toFixed(0)} + UPI: ₹${parseFloat(bill.split_upi_amount || 0).toFixed(0)})` : (bill.payment_method || 'Cash').toUpperCase()} (${bill.payment_status || 'Paid'})\n\n` +
       `📄 *View / Download Your Official Bill Memo:*\n${billCopyUrl}\n\n` +
       `🛍️ *Browse our live digital showroom:*\n${frontstoreUrl}\n\n` +
       `*Note:* ${shopTerms}\n` +
@@ -119,6 +126,17 @@ export default function ShopBillReceipt({
               {sendingWa ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
               <span className="hidden xs:inline">{sendingWa ? 'Sending...' : (waSentNotice || 'WhatsApp')}</span>
             </button>
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => onEdit(bill)}
+                className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                title="Edit this bill / resume items on POS pad"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-slate-950" />
+                <span>Edit</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handlePrint}
@@ -150,49 +168,64 @@ export default function ShopBillReceipt({
         style={{ color: '#000', backgroundColor: '#fff' }}
       >
         {/* HEADER SECTION */}
-        <div className="flex items-start justify-between gap-1.5 sm:gap-2 pb-2">
+        {/* Mobile Top Meta: Estimate & Phone cleanly spread on top to prevent crunching the shop title */}
+        <div className="flex sm:hidden items-center justify-between pb-1.5 mb-1.5 border-b border-black/20 text-[10px] font-bold">
+          <span className="uppercase tracking-widest underline underline-offset-2">
+            Estimate
+          </span>
+          <span className="font-mono">
+            Mob.: {cleanShopPhone}
+            {showSecondaryPhone && (
+              <span className="ml-1.5 font-normal text-slate-700">/ {rawWaPhone}</span>
+            )}
+          </span>
+        </div>
+
+        {/* Main Brand & QR Row */}
+        <div className="flex items-center sm:items-start justify-between gap-2 pb-1 sm:pb-2">
           {/* Frontstore QR Code with Slug Handle */}
-          <div className="flex flex-col items-center shrink-0 w-20 sm:w-24">
-            <div className="p-1 border border-black rounded bg-white">
+          <div className="flex flex-col items-center shrink-0 w-16 sm:w-24">
+            <div className="p-0.5 sm:p-1 border border-black rounded bg-white">
               <QRCodeSVG
                 value={frontstoreUrl}
-                size={66}
+                size={54}
+                className="w-12 h-12 sm:w-16 sm:h-16"
                 level="M"
                 includeMargin={false}
               />
             </div>
-            <span className="text-[8.5px] sm:text-[9px] font-black tracking-tight text-center mt-1 truncate max-w-[85px] sm:max-w-[95px] uppercase">
+            <span className="text-[7.5px] sm:text-[9px] font-black tracking-tight text-center mt-0.5 sm:mt-1 truncate max-w-[70px] sm:max-w-[95px] uppercase">
               @{shopSlug}
             </span>
-            <span className="text-[7px] sm:text-[7.5px] font-semibold text-center text-slate-700 tracking-tighter">
+            <span className="text-[6.5px] sm:text-[7.5px] font-semibold text-center text-slate-700 tracking-tighter">
               Scan for Catalog
             </span>
           </div>
 
           {/* Shop Name & Header Title */}
-          <div className="flex-1 text-center px-1 min-w-0">
-            <div className="text-[10px] sm:text-[11px] font-bold tracking-widest uppercase underline underline-offset-2 mb-0.5">
+          <div className="flex-1 text-center px-1 sm:px-2 min-w-0">
+            <div className="hidden sm:block text-[10px] sm:text-[11px] font-bold tracking-widest uppercase underline underline-offset-2 mb-0.5">
               Estimate
             </div>
-            <h1 className="text-xl sm:text-3xl font-black tracking-tighter uppercase font-serif text-black leading-none py-0.5 break-words">
+            <h1 className="text-lg sm:text-3xl font-black tracking-tight uppercase font-serif text-black leading-tight sm:leading-none py-0.5 break-normal">
               {shopName}
             </h1>
-            <div className="text-[11px] sm:text-sm font-bold tracking-tight text-black mt-0.5 sm:mt-1">
+            <div className="text-[10px] sm:text-sm font-bold tracking-tight text-black mt-0.5 sm:mt-1">
               {shopTagline}
             </div>
           </div>
 
-          {/* Phone Numbers */}
-          <div className="text-right text-[10px] sm:text-[11px] font-bold leading-tight shrink-0 min-w-[85px] sm:min-w-[100px]">
-            <div>Mob.: {shopPhone}</div>
-            {currentShop.customer_portal_settings?.whatsapp_number && currentShop.customer_portal_settings?.whatsapp_number !== shopPhone && (
-              <div>{currentShop.customer_portal_settings.whatsapp_number}</div>
+          {/* Phone Numbers (Desktop & Print Only - Mobile uses the clean top row) */}
+          <div className="hidden sm:block text-right text-[10px] sm:text-[11px] font-bold leading-tight shrink-0 min-w-[85px] sm:min-w-[100px]">
+            <div>Mob.: {cleanShopPhone}</div>
+            {showSecondaryPhone && (
+              <div>{rawWaPhone}</div>
             )}
           </div>
         </div>
 
         {/* ADDRESS BANNER (Inverted Solid Black Bar) */}
-        <div className="bg-black text-white text-[10px] sm:text-xs font-bold px-2 py-1 text-center uppercase tracking-wide my-1 leading-snug">
+        <div className="bg-black text-white text-[9.5px] sm:text-xs font-bold px-2 py-1 text-center uppercase tracking-wide my-1 leading-snug">
           Address : {shopAddress}
         </div>
 
@@ -285,16 +318,25 @@ export default function ShopBillReceipt({
                 </tr>
               ))}
 
-              {/* Discount / Tax rows if applied */}
-              {parseFloat(bill.discount_amount || 0) > 0 && (
-                <tr className="border-t-2 border-black text-xs">
-                  <td colSpan="3" className="border-r-2 border-black"></td>
-                  <td className="border-r-2 border-black text-right px-2 py-0.5 font-bold">Discount:</td>
-                  <td className="text-right px-2 py-0.5 font-bold text-red-600">
-                    - {parseFloat(bill.discount_amount).toFixed(2)}
-                  </td>
-                </tr>
-              )}
+              {/* Discount / Tax rows if applied (displayed as percentage) */}
+              {parseFloat(bill.discount_amount || 0) > 0 && (() => {
+                const discountVal = parseFloat(bill.discount_amount || 0);
+                const subtotalVal = parseFloat(bill.subtotal || 0) || (parseFloat(bill.total_amount || 0) + discountVal);
+                const pct = bill.discount_percent !== undefined && bill.discount_percent !== null && parseFloat(bill.discount_percent) > 0
+                  ? parseFloat(bill.discount_percent)
+                  : (subtotalVal > 0 ? (discountVal / subtotalVal) * 100 : 0);
+                const formattedPct = Number.isInteger(pct) ? `${pct}%` : `${Number(pct.toFixed(2))}%`;
+
+                return (
+                  <tr className="border-t-2 border-black text-xs">
+                    <td colSpan="3" className="border-r-2 border-black"></td>
+                    <td className="border-r-2 border-black text-right px-2 py-0.5 font-bold">Discount:</td>
+                    <td className="text-right px-2 py-0.5 font-bold text-red-600">
+                      - {formattedPct}
+                    </td>
+                  </tr>
+                );
+              })()}
 
               {/* GRAND TOTAL ROW */}
               <tr className="border-t-2 border-black font-black text-xs sm:text-sm">
@@ -322,8 +364,17 @@ export default function ShopBillReceipt({
               {shopTerms}
             </div>
             {bill.payment_method && (
-              <div className="text-[10px] font-semibold text-slate-700">
-                Mode: <span className="uppercase font-bold text-black">{bill.payment_method}</span>
+              <div className="text-[10px] font-semibold text-slate-700 leading-snug">
+                Mode:{' '}
+                <span className="uppercase font-bold text-black">
+                  {bill.payment_method === 'partial' || bill.payment_method === 'split' ? (
+                    <>
+                      PARTIAL (Cash: ₹{parseFloat(bill.split_cash_amount || 0).toFixed(0)} + UPI: ₹{parseFloat(bill.split_upi_amount || 0).toFixed(0)})
+                    </>
+                  ) : (
+                    bill.payment_method
+                  )}
+                </span>
                 {bill.soundbox_account_name && <span> • <strong>{bill.soundbox_account_name}</strong></span>}
                 {bill.utr_number && <span className="font-mono"> (UTR: {bill.utr_number})</span>}
                 {!bill.soundbox_account_name && !bill.utr_number && ` (${bill.payment_status || 'Paid'})`}

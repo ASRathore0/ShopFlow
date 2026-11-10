@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Receipt, Plus, Minus, Trash2, Search, QrCode, Printer,
   Share2, Check, RefreshCw, ShoppingCart, User, Phone,
   CreditCard, Banknote, Sparkles, AlertCircle, AlertTriangle, ArrowRight,
   Calendar, Layers, Filter, FileText, ChevronRight, CheckCircle2,
-  DollarSign, Zap, Tag, Edit2, Volume2, ShieldCheck, Radio, Clock
+  DollarSign, Zap, Tag, Edit2, Volume2, ShieldCheck, Radio, Clock, X, UserCheck
 } from 'lucide-react';
 import { billingService } from '../services/billingService';
 import ShopBillReceipt from './ShopBillReceipt';
@@ -59,9 +60,23 @@ export default function PosBillingView({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [editingBill, setEditingBill] = useState(null);
+
+  // Customer Autocomplete & History
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [selectedCustomerProfile, setSelectedCustomerProfile] = useState(null);
+  const customerSearchTimeoutRef = useRef(null);
+  const customerBoxRef = useRef(null);
+
   const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountType, setDiscountType] = useState('amount'); // 'amount' (default) | 'percent'
+  const [discountPercentInput, setDiscountPercentInput] = useState('');
   const [taxAmount, setTaxAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' | 'upi' | 'card'
+  const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' | 'upi' | 'card' | 'partial'
+  const [splitCashAmount, setSplitCashAmount] = useState('');
+  const [splitUpiAmount, setSplitUpiAmount] = useState('');
   const [receivedAmount, setReceivedAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -102,6 +117,183 @@ export default function PosBillingView({
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Lock background scrolling when any modal is open
+  useEffect(() => {
+    if (activeReceiptBill || isSoundboxModalOpen || showResetModal) {
+      const originalBodyOverflow = document.body.style.overflow;
+      const mainEl = document.querySelector('main');
+      const originalMainOverflow = mainEl ? mainEl.style.overflow : '';
+
+      document.body.style.overflow = 'hidden';
+      if (mainEl) mainEl.style.overflow = 'hidden';
+
+      return () => {
+        document.body.style.overflow = originalBodyOverflow;
+        if (mainEl) mainEl.style.overflow = originalMainOverflow;
+      };
+    }
+  }, [activeReceiptBill, isSoundboxModalOpen, showResetModal]);
+
+  // Handle mobile / WhatsApp phone input change with live customer lookup
+  const handleCustomerPhoneChange = (val) => {
+    setCustomerPhone(val);
+
+    if (customerSearchTimeoutRef.current) {
+      clearTimeout(customerSearchTimeoutRef.current);
+    }
+
+    const trimmed = val.trim();
+    const digitsOnly = trimmed.replace(/\D/g, '');
+
+    // If cashier clears the phone, clear selected profile
+    if (!trimmed) {
+      setSelectedCustomerProfile(null);
+      setCustomerSuggestions([]);
+      setShowCustomerSuggestions(false);
+      setIsSearchingCustomer(false);
+      return;
+    }
+
+    // Trigger lookup when at least 3 digits/chars typed
+    if (digitsOnly.length >= 3 || trimmed.length >= 3) {
+      setIsSearchingCustomer(true);
+      customerSearchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const res = await billingService.searchCustomers(trimmed, role);
+          if (res && res.data) {
+            setCustomerSuggestions(res.data);
+            setShowCustomerSuggestions(res.data.length > 0);
+
+            // Auto-match if exact 10 digits and top match matches exactly
+            if (digitsOnly.length >= 10 && res.data.length > 0) {
+              const exactMatch = res.data.find(
+                (c) => c.customer_phone.replace(/\D/g, '') === digitsOnly
+              ) || res.data[0];
+
+              if (exactMatch && exactMatch.customer_name) {
+                // If customerName is empty or walk-in, auto-suggest/fill
+                if (!customerName || customerName.trim().toLowerCase() === 'walk-in customer') {
+                  setCustomerName(exactMatch.customer_name);
+                }
+                if (exactMatch.customer_address && !customerAddress) {
+                  setCustomerAddress(exactMatch.customer_address);
+                }
+                setSelectedCustomerProfile(exactMatch);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Customer search error:', err);
+        } finally {
+          setIsSearchingCustomer(false);
+        }
+      }, 250);
+    } else {
+      setCustomerSuggestions([]);
+      setShowCustomerSuggestions(false);
+      setIsSearchingCustomer(false);
+    }
+  };
+
+  const handleSelectCustomer = (customer) => {
+    setCustomerPhone(customer.customer_phone || '');
+    if (customer.customer_name && customer.customer_name.toLowerCase() !== 'walk-in customer') {
+      setCustomerName(customer.customer_name);
+    }
+    if (customer.customer_address) {
+      setCustomerAddress(customer.customer_address);
+    }
+    setSelectedCustomerProfile(customer);
+    setShowCustomerSuggestions(false);
+  };
+
+  // Close customer suggestions dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (customerBoxRef.current && !customerBoxRef.current.contains(e.target)) {
+        setShowCustomerSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Resume / Edit an existing bill on the POS pad
+  const handleStartEditBill = (billToEdit) => {
+    if (!billToEdit) return;
+
+    // Map existing bill items to cart format
+    const mappedItems = (billToEdit.items || []).map((it, idx) => ({
+      key: `item-edit-${it.id || idx}-${Date.now()}`,
+      product_id: it.product_id || null,
+      product_variant_id: it.product_variant_id || null,
+      item_name: it.item_name || 'Item',
+      variant_name: it.variant_name || null,
+      quantity: it.quantity || 1,
+      unit_price: parseFloat(it.unit_price) || 0,
+      total_price: parseFloat(it.total_price) || ((it.quantity || 1) * (parseFloat(it.unit_price) || 0)),
+    }));
+
+    setCartItems(mappedItems);
+    setCustomerName(
+      billToEdit.customer_name && billToEdit.customer_name.toLowerCase() !== 'walk-in customer'
+        ? billToEdit.customer_name
+        : ''
+    );
+    setCustomerPhone(billToEdit.customer_phone || '');
+    setCustomerAddress(billToEdit.customer_address || '');
+    const disc = parseFloat(billToEdit.discount_amount) || 0;
+    setDiscountAmount(disc);
+    const subTot = parseFloat(billToEdit.subtotal) || 0;
+    if (disc > 0 && subTot > 0) {
+      const p = (disc / subTot) * 100;
+      setDiscountPercentInput(Number.isInteger(p) ? String(p) : Number(p.toFixed(2)).toString());
+      setDiscountType('percent');
+    } else {
+      setDiscountPercentInput('');
+    }
+    setTaxAmount(parseFloat(billToEdit.tax_amount) || 0);
+    const mode = billToEdit.payment_method || 'cash';
+    setPaymentMethod(mode);
+    if (mode === 'partial' || mode === 'split') {
+      setSplitCashAmount(billToEdit.split_cash_amount ? String(billToEdit.split_cash_amount) : '');
+      setSplitUpiAmount(billToEdit.split_upi_amount ? String(billToEdit.split_upi_amount) : '');
+    } else {
+      setSplitCashAmount('');
+      setSplitUpiAmount('');
+    }
+    setReceivedAmount(billToEdit.received_amount ? String(billToEdit.received_amount) : '');
+    setNotes(billToEdit.notes || '');
+
+    setEditingBill(billToEdit);
+    setActiveReceiptBill(null); // Close the receipt modal
+    setActiveSubTab('pos');     // Navigate to POS entry screen
+    setMobilePosTab('cart');    // Open bill pad on mobile screens
+
+    showToast(`✏️ Editing Bill #${billToEdit.bill_number || billToEdit.id}. Adjust items or details and tap Update Bill.`, 'info');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingBill(null);
+    setCartItems([]);
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerAddress('');
+    setSelectedCustomerProfile(null);
+    setDiscountAmount(0);
+    setDiscountType('amount');
+    setDiscountPercentInput('');
+    setPaymentMethod('cash');
+    setSplitCashAmount('');
+    setSplitUpiAmount('');
+    setTaxAmount(0);
+    setReceivedAmount('');
+    setNotes('');
+    showToast('Cancelled editing. Ready for fresh bill.', 'info');
   };
 
   // Preset categories according to retail shop type
@@ -265,6 +457,20 @@ export default function PosBillingView({
     return 0;
   }, [receivedAmount, totalAmount, paymentMethod]);
 
+  const splitCashNum = parseFloat(splitCashAmount) || 0;
+  const splitUpiNum = parseFloat(splitUpiAmount) || 0;
+  const splitSum = useMemo(() => {
+    return Math.round((splitCashNum + splitUpiNum) * 100) / 100;
+  }, [splitCashNum, splitUpiNum]);
+
+  const splitDifference = useMemo(() => {
+    return Math.round((totalAmount - splitSum) * 100) / 100;
+  }, [totalAmount, splitSum]);
+
+  const upiDueAmount = useMemo(() => {
+    return paymentMethod === 'partial' ? splitUpiNum : totalAmount;
+  }, [paymentMethod, splitUpiNum, totalAmount]);
+
   // Dynamic Overview Period Metrics (Daily / Weekly / Monthly / All Time)
   const activePeriodMetrics = useMemo(() => {
     if (overviewPeriod === 'weekly') {
@@ -311,11 +517,14 @@ export default function PosBillingView({
   // Real-time Soundbox Radar: Auto-detects payment when customer scans UPI QR
   useEffect(() => {
     let interval = null;
-    if (soundboxEnabled && activeSubTab === 'pos' && paymentMethod === 'upi' && totalAmount > 0 && !soundboxPaymentReceived) {
+    const upiPortion = paymentMethod === 'partial' ? (parseFloat(splitUpiAmount) || 0) : totalAmount;
+    const isListeningUpi = paymentMethod === 'upi' || (paymentMethod === 'partial' && upiPortion > 0);
+
+    if (soundboxEnabled && activeSubTab === 'pos' && isListeningUpi && upiPortion > 0 && !soundboxPaymentReceived) {
       interval = setInterval(async () => {
         try {
           const res = await billingService.pollSoundboxStatus({
-            amount: totalAmount,
+            amount: upiPortion,
             soundbox_device_id: selectedSoundbox?.id || null,
           }, role);
 
@@ -334,18 +543,19 @@ export default function PosBillingView({
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [activeSubTab, paymentMethod, totalAmount, soundboxPaymentReceived, selectedSoundbox, role, soundboxEnabled]);
+  }, [activeSubTab, paymentMethod, totalAmount, splitUpiAmount, soundboxPaymentReceived, selectedSoundbox, role, soundboxEnabled]);
 
   // Cashier simulate payment ding (for instant manual test/verification)
   const handleSimulateInstantDing = async () => {
-    if (totalAmount <= 0) {
-      alert('Total amount must be greater than 0 to test payment.');
+    const upiPortion = paymentMethod === 'partial' ? (parseFloat(splitUpiAmount) || 0) : totalAmount;
+    if (upiPortion <= 0) {
+      alert('UPI amount must be greater than 0 to test payment.');
       return;
     }
     setIsSimulatingSoundbox(true);
     try {
       const res = await billingService.simulatePayment({
-        amount: totalAmount,
+        amount: upiPortion,
         soundbox_device_id: selectedSoundbox?.id || null,
         payer_vpa: 'customer@upi',
       }, role);
@@ -353,7 +563,7 @@ export default function PosBillingView({
       playSoundboxChime();
       setSoundboxPaymentReceived(true);
       setSoundboxUtr(res.data?.utr_number || '');
-      showToast(`🔊 Simulated payment of ₹${totalAmount} on ${selectedSoundbox?.name || 'Soundbox'}!`);
+      showToast(`🔊 Simulated payment of ₹${upiPortion} on ${selectedSoundbox?.name || 'Soundbox'}!`);
     } catch (err) {
       alert('Simulation failed: ' + (err.response?.data?.message || err.message));
     } finally {
@@ -474,8 +684,21 @@ export default function PosBillingView({
       return;
     }
 
+    if (paymentMethod === 'partial') {
+      const c = parseFloat(splitCashAmount) || 0;
+      const u = parseFloat(splitUpiAmount) || 0;
+      const sum = c + u;
+      if (Math.abs(totalAmount - sum) > 0.5) {
+        alert(`Partial payment total must equal Grand Total (₹${totalAmount.toFixed(2)}). Current allocated is ₹${sum.toFixed(2)} (Cash: ₹${c} + UPI: ₹${u}). Please adjust the amounts.`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
+      const splitCashVal = paymentMethod === 'partial' ? (parseFloat(splitCashAmount) || 0) : null;
+      const splitUpiVal = paymentMethod === 'partial' ? (parseFloat(splitUpiAmount) || 0) : null;
+
       const payload = {
         customer_name: customerName.trim() || 'Walk-in Customer',
         customer_phone: customerPhone.trim() || null,
@@ -491,20 +714,29 @@ export default function PosBillingView({
         discount_amount: parseFloat(discountAmount) || 0,
         tax_amount: parseFloat(taxAmount) || 0,
         payment_method: paymentMethod,
+        split_cash_amount: splitCashVal,
+        split_upi_amount: splitUpiVal,
         received_amount: paymentMethod === 'cash' ? (parseFloat(receivedAmount) || totalAmount) : totalAmount,
         notes: notes.trim() || null,
-        soundbox_device_id: paymentMethod === 'upi' ? (selectedSoundbox?.id || null) : null,
-        soundbox_account_name: paymentMethod === 'upi' ? (selectedSoundbox?.name || null) : null,
-        utr_number: paymentMethod === 'upi' ? (soundboxUtr.trim() || null) : null,
+        soundbox_device_id: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0)) ? (selectedSoundbox?.id || null) : null,
+        soundbox_account_name: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0)) ? (selectedSoundbox?.name || null) : null,
+        utr_number: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0)) ? (soundboxUtr.trim() || null) : null,
       };
 
-      const res = await billingService.createBill(payload, role);
+      let res;
+      if (editingBill) {
+        res = await billingService.updateBill(editingBill.id, payload, role);
+      } else {
+        res = await billingService.createBill(payload, role);
+      }
+
       if (res && res.data) {
-        let msg = res.message || 'Bill created successfully!';
+        let msg = res.message || (editingBill ? `Bill #${res.data.bill.bill_number} updated!` : 'Bill created successfully!');
         if (res.data.whatsapp?.success) {
           msg = `🧾 Bill #${res.data.bill.bill_number} generated & sent to customer WhatsApp!`;
         }
         showToast(msg);
+        setEditingBill(null);
         setActiveReceiptBill(res.data.bill);
         if (res.data.shop) setShopConfig(res.data.shop);
 
@@ -513,7 +745,15 @@ export default function PosBillingView({
         setCustomerName('');
         setCustomerPhone('');
         setCustomerAddress('');
+        setSelectedCustomerProfile(null);
+        setCustomerSuggestions([]);
+        setShowCustomerSuggestions(false);
         setDiscountAmount(0);
+        setDiscountType('amount');
+        setDiscountPercentInput('');
+        setPaymentMethod('cash');
+        setSplitCashAmount('');
+        setSplitUpiAmount('');
         setTaxAmount(0);
         setReceivedAmount('');
         setNotes('');
@@ -964,41 +1204,162 @@ export default function PosBillingView({
                 <div className="flex items-center gap-2">
                   <ShoppingCart className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   <span className="font-black text-sm text-slate-900 dark:text-white">
-                    Bill Pad #{nextSerialNo}
+                    {editingBill ? `Editing Bill #${editingBill.bill_number || editingBill.id}` : `Bill Pad #${nextSerialNo}`}
                   </span>
+                  {editingBill && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider">
+                      Edit Mode
+                    </span>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setCartItems([])}
-                  disabled={cartItems.length === 0}
-                  className="text-[11px] font-bold text-red-500 hover:underline disabled:opacity-30 cursor-pointer"
-                >
-                  Clear All
-                </button>
+                {editingBill ? (
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                  >
+                    Cancel Edit
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setCartItems([])}
+                    disabled={cartItems.length === 0}
+                    className="text-[11px] font-bold text-red-500 hover:underline disabled:opacity-30 cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                )}
               </div>
 
-              {/* Customer Info (Optional) */}
-              <div className="space-y-2 bg-slate-50 dark:bg-zinc-900/60 p-3 rounded-2xl border border-slate-100 dark:border-zinc-800">
-                <div className="text-[11px] font-bold text-slate-700 dark:text-zinc-300">
-                  Customer Details (Optional)
+              {/* Customer Info (Optional) with Fast Autocomplete & Returning Customer Memory */}
+              <div
+                ref={customerBoxRef}
+                className="relative space-y-2 bg-slate-50 dark:bg-zinc-900/60 p-3 rounded-2xl border border-slate-100 dark:border-zinc-800"
+              >
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-zinc-300">
+                  <div className="flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Customer Details (Optional)</span>
+                  </div>
+                  {selectedCustomerProfile && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                      <Sparkles className="w-2.5 h-2.5 text-emerald-500" />
+                      Returning Customer ({selectedCustomerProfile.visit_count} {selectedCustomerProfile.visit_count === 1 ? 'visit' : 'visits'})
+                    </span>
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="Customer Name"
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-white focus:outline-none"
-                  />
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="Mobile / WhatsApp"
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-white focus:outline-none"
-                  />
+
+                {/* Mobile / WhatsApp FIRST, then Customer Name SECOND */}
+                <div className="grid grid-cols-2 gap-2 relative">
+                  {/* 1. Mobile / WhatsApp FIRST */}
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      value={customerPhone}
+                      onChange={(e) => handleCustomerPhoneChange(e.target.value)}
+                      onFocus={() => {
+                        if (customerSuggestions.length > 0) setShowCustomerSuggestions(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setShowCustomerSuggestions(false);
+                      }}
+                      placeholder="Mobile / WhatsApp"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium transition-all"
+                    />
+                    {isSearchingCustomer && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <RefreshCw className="w-3 h-3 text-blue-500 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Customer Name SECOND */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Customer Name"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
                 </div>
+
+                {/* Suggestions Popover: Appears as mobile no is typed */}
+                {showCustomerSuggestions && customerSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-2xl shadow-2xl overflow-hidden divide-y divide-slate-100 dark:divide-zinc-800 max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="px-3 py-1.5 bg-slate-100/80 dark:bg-zinc-800 flex items-center justify-between text-[10px] font-black text-slate-500 dark:text-zinc-400 uppercase tracking-wider">
+                      <div className="flex items-center gap-1.5">
+                        <UserCheck className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                        <span>Previous Customers ({customerSuggestions.length})</span>
+                      </div>
+                      <span className="text-[9px] text-blue-600 dark:text-blue-400 font-bold">Tap to Auto-fill</span>
+                    </div>
+
+                    {customerSuggestions.map((cust, idx) => (
+                      <button
+                        key={cust.customer_phone || idx}
+                        type="button"
+                        onClick={() => handleSelectCustomer(cust)}
+                        className="w-full px-3 py-2 text-left hover:bg-blue-50/70 dark:hover:bg-zinc-800/80 flex items-center justify-between gap-2.5 transition-colors cursor-pointer group"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate">
+                              {cust.customer_name || 'Walk-in Customer'}
+                            </span>
+                            <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-400 shrink-0">
+                              {cust.visit_count} {cust.visit_count === 1 ? 'visit' : 'visits'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-zinc-400 flex items-center gap-2 mt-0.5">
+                            <span className="font-mono font-medium">{cust.customer_phone}</span>
+                            {cust.last_visit_formatted && (
+                              <span className="text-[10px] text-slate-400">
+                                • {cust.last_visit_formatted}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          {cust.total_spent > 0 && (
+                            <div className="text-[11px] font-black text-slate-800 dark:text-zinc-200">
+                              ₹{parseFloat(cust.total_spent).toFixed(0)}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold group-hover:underline">
+                            Select ↵
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Returning Customer Memory Pill when matched/selected */}
+                {selectedCustomerProfile && (
+                  <div className="pt-0.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-zinc-300 bg-white/90 dark:bg-zinc-800/90 px-2.5 py-1.5 rounded-xl border border-emerald-200/60 dark:border-emerald-800/40">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="truncate">
+                        <strong>{selectedCustomerProfile.customer_name || 'Customer'}</strong>
+                        {selectedCustomerProfile.last_visit_relative && ` • Visited ${selectedCustomerProfile.last_visit_relative}`}
+                        {selectedCustomerProfile.total_spent > 0 && ` • ₹${parseFloat(selectedCustomerProfile.total_spent).toFixed(0)} total spent`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCustomerProfile(null)}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 ml-1 p-0.5 rounded cursor-pointer"
+                      title="Clear memory badge"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Items on Bill List */}
@@ -1075,16 +1436,90 @@ export default function PosBillingView({
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-600 dark:text-zinc-400">Discount (₹)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    inputMode="decimal"
-                    value={discountAmount}
-                    onChange={(e) => setDiscountAmount(e.target.value)}
-                    className="w-20 px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-bold text-xs"
-                  />
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400">
+                    <span>Discount</span>
+                    <div className="inline-flex rounded-lg bg-slate-200/80 dark:bg-zinc-800 p-0.5 text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDiscountType('amount');
+                        }}
+                        className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${discountType === 'amount' ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
+                        title="Enter discount in value (₹)"
+                      >
+                        ₹
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDiscountType('percent');
+                          if (subtotal > 0 && parseFloat(discountAmount) > 0) {
+                            const p = (parseFloat(discountAmount) / subtotal) * 100;
+                            setDiscountPercentInput(Number.isInteger(p) ? String(p) : p.toFixed(1));
+                          }
+                        }}
+                        className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${discountType === 'percent' ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
+                        title="Enter discount in percentage (%)"
+                      >
+                        %
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {discountType === 'percent' ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="any"
+                          inputMode="decimal"
+                          value={discountPercentInput}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDiscountPercentInput(val);
+                            const p = parseFloat(val) || 0;
+                            const amt = Math.max(0, (subtotal * p) / 100);
+                            setDiscountAmount(amt > 0 ? Number(amt.toFixed(2)) : 0);
+                          }}
+                          placeholder="0"
+                          className="w-16 px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-bold text-xs"
+                        />
+                        <span className="font-bold text-xs text-slate-500">%</span>
+                        {parseFloat(discountAmount) > 0 && (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            (-₹{parseFloat(discountAmount).toFixed(2)})
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="font-bold text-xs text-slate-500">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          inputMode="decimal"
+                          value={discountAmount}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDiscountAmount(val);
+                            if (subtotal > 0) {
+                              const p = (parseFloat(val || 0) / subtotal) * 100;
+                              setDiscountPercentInput(p > 0 ? (Number.isInteger(p) ? String(p) : p.toFixed(1)) : '');
+                            }
+                          }}
+                          className="w-20 px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-bold text-xs"
+                        />
+                        {subtotal > 0 && parseFloat(discountAmount) > 0 && (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            (-{Number(((parseFloat(discountAmount) / subtotal) * 100).toFixed(1))}%)
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 flex justify-between items-baseline">
@@ -1102,7 +1537,7 @@ export default function PosBillingView({
                 <div className="text-xs font-bold text-slate-700 dark:text-zinc-300">
                   Payment Mode
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('cash')}
@@ -1141,6 +1576,26 @@ export default function PosBillingView({
                     <CreditCard className="w-4 h-4" />
                     <span>Card</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentMethod('partial');
+                      if (!splitCashAmount && !splitUpiAmount && totalAmount > 0) {
+                        const half = Math.round((totalAmount / 2) * 100) / 100;
+                        setSplitCashAmount(String(half));
+                        setSplitUpiAmount(String(Math.round((totalAmount - half) * 100) / 100));
+                      }
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                      paymentMethod === 'partial'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/20'
+                        : 'bg-slate-50 dark:bg-zinc-850 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span>Partial / Split</span>
+                  </button>
                 </div>
 
                 {/* Cash Change Calculator */}
@@ -1171,8 +1626,128 @@ export default function PosBillingView({
                   </div>
                 )}
 
+                {/* Partial / Split Payment Breakdown Box */}
+                {paymentMethod === 'partial' && (
+                  <div className="p-3.5 rounded-2xl bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/60 space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-purple-950 dark:text-purple-200 flex items-center gap-1.5 text-xs">
+                        <Layers className="w-3.5 h-3.5 text-purple-600" />
+                        Split Payment Breakdown
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const half = Math.round((totalAmount / 2) * 100) / 100;
+                            setSplitCashAmount(String(half));
+                            setSplitUpiAmount(String(Math.round((totalAmount - half) * 100) / 100));
+                          }}
+                          className="px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-purple-200 dark:border-purple-700 text-[10px] font-bold text-purple-700 dark:text-purple-300 hover:bg-purple-50 cursor-pointer shadow-2xs"
+                        >
+                          50 / 50 Split
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSplitCashAmount('');
+                            setSplitUpiAmount('');
+                          }}
+                          className="px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer shadow-2xs"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {/* Cash input */}
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-purple-100 dark:border-zinc-800 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                          <Banknote className="w-3 h-3 text-blue-600" />
+                          <span>Cash Paid</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">₹</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={splitCashAmount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSplitCashAmount(val);
+                              const num = parseFloat(val);
+                              if (!isNaN(num) && num >= 0 && num <= totalAmount) {
+                                const rem = Math.round((totalAmount - num) * 100) / 100;
+                                setSplitUpiAmount(rem > 0 ? String(rem) : '0');
+                              }
+                            }}
+                            placeholder="0.00"
+                            className="w-full pl-6 pr-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-black text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* UPI input */}
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-purple-100 dark:border-zinc-800 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                          <QrCode className="w-3 h-3 text-emerald-600" />
+                          <span>UPI / QR Paid</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">₹</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={splitUpiAmount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSplitUpiAmount(val);
+                              const num = parseFloat(val);
+                              if (!isNaN(num) && num >= 0 && num <= totalAmount) {
+                                const rem = Math.round((totalAmount - num) * 100) / 100;
+                                setSplitCashAmount(rem > 0 ? String(rem) : '0');
+                              }
+                            }}
+                            placeholder="0.00"
+                            className="w-full pl-6 pr-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-black text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Split balance status indicator */}
+                    <div className="pt-0.5">
+                      {Math.abs(splitDifference) < 0.01 && splitSum > 0 ? (
+                        <div className="flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Exact Total Matched:</span>
+                          </span>
+                          <span>₹{totalAmount.toFixed(2)} (Cash ₹{splitCashNum} + UPI ₹{splitUpiNum})</span>
+                        </div>
+                      ) : splitDifference > 0 ? (
+                        <div className="flex items-center justify-between text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800">
+                          <span className="flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Unassigned Balance:</span>
+                          </span>
+                          <span>₹{splitDifference.toFixed(2)} remaining</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-[11px] font-bold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800">
+                          <span className="flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Exceeds Grand Total:</span>
+                          </span>
+                          <span>₹{Math.abs(splitDifference).toFixed(2)} over</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Direct Soundbox Sync & Dynamic UPI QR Section (When Soundbox is enabled by Super Admin) */}
-                {paymentMethod === 'upi' && soundboxEnabled && (
+                {(paymentMethod === 'upi' || (paymentMethod === 'partial' && upiDueAmount > 0)) && soundboxEnabled && (
                   <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-500/5 via-indigo-500/5 to-blue-500/5 border border-purple-200 dark:border-purple-850 space-y-3 text-xs">
                     {/* Device Selector Chips */}
                     <div>
@@ -1235,13 +1810,13 @@ export default function PosBillingView({
                       <div className="relative p-1.5 bg-white rounded-xl border border-slate-200 shadow-sm shrink-0">
                         <img
                           src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(
-                            `upi://pay?pa=${selectedSoundbox?.upi_id || 'shop@upi'}&pn=${encodeURIComponent(shopConfig.name || 'Store')}&am=${totalAmount.toFixed(2)}&cu=INR&tn=Bill_${nextSerialNo}`
+                            `upi://pay?pa=${selectedSoundbox?.upi_id || 'shop@upi'}&pn=${encodeURIComponent(shopConfig.name || 'Store')}&am=${upiDueAmount.toFixed(2)}&cu=INR&tn=Bill_${nextSerialNo}`
                           )}`}
                           alt="Dynamic Soundbox UPI QR"
                           className="w-24 h-24 object-contain"
                         />
                         <span className="block text-[9px] font-black text-center text-slate-500 mt-0.5">
-                          ₹{totalAmount.toFixed(2)}
+                          ₹{upiDueAmount.toFixed(2)}
                         </span>
                       </div>
 
@@ -1275,7 +1850,7 @@ export default function PosBillingView({
                               <button
                                 type="button"
                                 onClick={handleSimulateInstantDing}
-                                disabled={isSimulatingSoundbox || totalAmount <= 0}
+                                disabled={isSimulatingSoundbox || upiDueAmount <= 0}
                                 className="px-2 py-0.8 rounded-lg bg-white dark:bg-zinc-800 hover:bg-purple-50 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 text-[10px] font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
                                 title="Click to simulate customer voice payment"
                               >
@@ -1284,7 +1859,7 @@ export default function PosBillingView({
                               </button>
                             </div>
                             <p className="text-[10px] text-purple-700 dark:text-purple-300">
-                              Customer scans QR to pay ₹{totalAmount.toFixed(2)} on <strong className="text-purple-900 dark:text-white">{selectedSoundbox?.name || 'Primary UPI'}</strong>. Status updates automatically.
+                              Customer scans QR to pay ₹{upiDueAmount.toFixed(2)} {paymentMethod === 'partial' ? '(UPI Portion)' : ''} on <strong className="text-purple-900 dark:text-white">{selectedSoundbox?.name || 'Primary UPI'}</strong>. Status updates automatically.
                             </p>
                           </div>
                         )}
@@ -1313,7 +1888,7 @@ export default function PosBillingView({
                 )}
 
                 {/* Standard UPI Option (When Soundbox is not enabled by Super Admin) */}
-                {paymentMethod === 'upi' && !soundboxEnabled && (
+                {(paymentMethod === 'upi' || (paymentMethod === 'partial' && upiDueAmount > 0)) && !soundboxEnabled && (
                   <div className="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-200 dark:border-emerald-800 space-y-2.5 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1">
@@ -1321,7 +1896,7 @@ export default function PosBillingView({
                         <span>Scan & Pay via any UPI App</span>
                       </span>
                       <span className="text-[10px] font-bold text-slate-500">
-                        ₹{totalAmount.toFixed(2)}
+                        ₹{upiDueAmount.toFixed(2)} {paymentMethod === 'partial' ? '(UPI Portion)' : ''}
                       </span>
                     </div>
 
@@ -1329,7 +1904,7 @@ export default function PosBillingView({
                       <div className="p-1 bg-white rounded-lg border border-slate-200 shadow-xs shrink-0">
                         <img
                           src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(
-                            `upi://pay?pa=${encodeURIComponent(shopConfig.phone ? `${shopConfig.phone}@upi` : 'shop@upi')}&pn=${encodeURIComponent(shopConfig.name || 'Store')}&am=${totalAmount.toFixed(2)}&cu=INR&tn=Bill_${nextSerialNo}`
+                            `upi://pay?pa=${encodeURIComponent(shopConfig.phone ? `${shopConfig.phone}@upi` : 'shop@upi')}&pn=${encodeURIComponent(shopConfig.name || 'Store')}&am=${upiDueAmount.toFixed(2)}&cu=INR&tn=Bill_${nextSerialNo}`
                           )}`}
                           alt="UPI QR Code"
                           className="w-20 h-20 object-contain"
@@ -1365,22 +1940,26 @@ export default function PosBillingView({
                 )}
               </div>
 
-              {/* Action Button: Generate & Print Bill */}
+              {/* Action Button: Generate / Update Bill */}
               <button
                 type="button"
                 onClick={handleGenerateBill}
                 disabled={isSubmitting || cartItems.length === 0}
-                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer active:scale-[0.98]"
+                className={`w-full py-3.5 px-4 rounded-2xl ${
+                  editingBill
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black shadow-amber-500/25'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black shadow-blue-500/25'
+                } disabled:opacity-50 text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-[0.98]`}
               >
                 {isSubmitting ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Processing Bill...</span>
+                    <span>{editingBill ? 'Updating Bill...' : 'Processing Bill...'}</span>
                   </>
                 ) : (
                   <>
-                    <Printer className="w-4 h-4" />
-                    <span>Generate & Print Bill</span>
+                    {editingBill ? <Edit2 className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
+                    <span>{editingBill ? `Update & Save Bill #${editingBill.bill_number || editingBill.id}` : 'Generate & Print Bill'}</span>
                   </>
                 )}
               </button>
@@ -1534,9 +2113,16 @@ export default function PosBillingView({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {/* Cash Counter Card */}
                 <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 flex flex-col justify-between">
-                  <div className="text-[10px] uppercase font-bold text-emerald-300 flex items-center gap-1">
-                    <Banknote className="w-3.5 h-3.5 shrink-0" />
-                    <span>Cash Counter</span>
+                  <div className="text-[10px] uppercase font-bold text-emerald-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Banknote className="w-3.5 h-3.5 shrink-0" />
+                      <span>Cash Counter</span>
+                    </span>
+                    {parseFloat(reconciliationData.summary?.split_cash_total || 0) > 0 && (
+                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
+                        +₹{parseFloat(reconciliationData.summary?.split_cash_total || 0).toFixed(0)} split
+                      </span>
+                    )}
                   </div>
                   <div className="my-1.5">
                     <div className="text-lg font-black text-white">
@@ -1544,16 +2130,29 @@ export default function PosBillingView({
                     </div>
                   </div>
                   <div className="text-[10px] text-white/60">
-                    {reconciliationData.summary?.cash_bills_count || 0} bills • Physical Cash
+                    {parseFloat(reconciliationData.summary?.split_cash_total || 0) > 0 ? (
+                      <span>
+                        {reconciliationData.summary?.cash_bills_count || 0} cash + {reconciliationData.summary?.partial_bills_count || 0} split • Physical
+                      </span>
+                    ) : (
+                      <span>{reconciliationData.summary?.cash_bills_count || 0} bills • Physical Cash</span>
+                    )}
                   </div>
                 </div>
 
                 {/* Each Soundbox Account Card */}
                 {reconciliationData.account_breakdown?.map((acc, idx) => (
                   <div key={idx} className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 flex flex-col justify-between">
-                    <div className="text-[10px] uppercase font-bold text-yellow-300 flex items-center gap-1 truncate" title={acc.name}>
-                      <Volume2 className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
-                      <span className="truncate">{acc.name}</span>
+                    <div className="text-[10px] uppercase font-bold text-yellow-300 flex items-center justify-between gap-1">
+                      <span className="flex items-center gap-1 truncate" title={acc.name}>
+                        <Volume2 className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+                        <span className="truncate">{acc.name}</span>
+                      </span>
+                      {acc.split_amount > 0 && (
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-200 border border-yellow-400/30 shrink-0">
+                          +₹{parseFloat(acc.split_amount || 0).toFixed(0)} split
+                        </span>
+                      )}
                     </div>
                     <div className="my-1.5">
                       <div className="text-lg font-black text-white">
@@ -1561,10 +2160,37 @@ export default function PosBillingView({
                       </div>
                     </div>
                     <div className="text-[10px] text-white/60 truncate">
-                      {acc.bills_count || 0} bills • {acc.provider?.toUpperCase()}
+                      {acc.split_amount > 0 ? (
+                        <span>{acc.pure_bills_count || 0} upi + {acc.split_bills_count || 0} split • {acc.provider?.toUpperCase()}</span>
+                      ) : (
+                        <span>{acc.bills_count || 0} bills • {acc.provider?.toUpperCase()}</span>
+                      )}
                     </div>
                   </div>
                 ))}
+
+                {/* Partial / Split Payments Card (Always visible if any partial payments exist in the active period) */}
+                {parseFloat(reconciliationData.summary?.partial_total || 0) > 0 && (
+                  <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-purple-400/30 flex flex-col justify-between">
+                    <div className="text-[10px] uppercase font-bold text-purple-300 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Layers className="w-3.5 h-3.5 shrink-0" />
+                        <span>Partial / Split</span>
+                      </span>
+                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/40">
+                        {reconciliationData.summary?.partial_bills_count || 0} bills
+                      </span>
+                    </div>
+                    <div className="my-1.5">
+                      <div className="text-lg font-black text-white">
+                        ₹{parseFloat(reconciliationData.summary?.partial_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-purple-200/90 font-medium truncate">
+                      ₹{parseFloat(reconciliationData.summary?.partial_cash || 0).toFixed(0)} Cash + ₹{parseFloat(reconciliationData.summary?.partial_upi || 0).toFixed(0)} UPI
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1585,12 +2211,12 @@ export default function PosBillingView({
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
+            {/* <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
               <span className="text-[11px] font-bold text-slate-400 uppercase">Total Billed (All Time)</span>
               <div className="text-xl font-black text-slate-900 dark:text-white mt-1">
                 ₹{parseFloat(metrics.total_revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
-            </div>
+            </div> */}
 
             <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
               <span className="text-[11px] font-bold text-slate-400 uppercase">Total Bills Count</span>
@@ -1629,6 +2255,7 @@ export default function PosBillingView({
                 <option value="cash">Cash Only</option>
                 <option value="upi">UPI Only</option>
                 <option value="card">Card Only</option>
+                <option value="partial">Partial / Split</option>
               </select>
 
               <button
@@ -1706,10 +2333,17 @@ export default function PosBillingView({
                                 ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
                                 : inv.payment_method === 'card'
                                 ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
+                                : inv.payment_method === 'partial' || inv.payment_method === 'split'
+                                ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
                                 : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
                             }`}>
-                              {inv.payment_method || 'Cash'}
+                              {inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial / Split' : (inv.payment_method || 'Cash')}
                             </span>
+                            {(inv.payment_method === 'partial' || inv.payment_method === 'split') && (
+                              <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-400">
+                                Cash: ₹{inv.split_cash_amount || 0} + UPI: ₹{inv.split_upi_amount || 0}
+                              </span>
+                            )}
                             {inv.soundbox_account_name && (
                               <span className="text-[10px] font-semibold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
                                 <span>🔊</span> {inv.soundbox_account_name}
@@ -1772,11 +2406,18 @@ export default function PosBillingView({
                             ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
                             : inv.payment_method === 'card'
                             ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
+                            : inv.payment_method === 'partial' || inv.payment_method === 'split'
+                            ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
                             : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
                         }`}>
-                          {inv.payment_method || 'Cash'}
+                          {inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial' : (inv.payment_method || 'Cash')}
                         </span>
                       </div>
+                      {(inv.payment_method === 'partial' || inv.payment_method === 'split') && (
+                        <div className="text-[10px] font-semibold text-purple-700 dark:text-purple-300 mt-0.5">
+                          Cash: ₹{inv.split_cash_amount || 0} • UPI: ₹{inv.split_upi_amount || 0}
+                        </div>
+                      )}
                       <div className="text-[10px] text-slate-400 mt-0.5">
                         {new Date(inv.created_at).toLocaleString('en-IN', {
                           day: '2-digit',
@@ -1827,22 +2468,35 @@ export default function PosBillingView({
       )}
 
       {/* PRINTABLE BILL RECEIPT MODAL */}
-      {activeReceiptBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in">
-          <div className="my-auto py-4">
+      {activeReceiptBill && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-4 pt-3 sm:pt-4 pb-12 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-fade-in !m-0 !mt-0"
+          style={{ margin: 0, marginTop: 0 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setActiveReceiptBill(null);
+            }
+          }}
+        >
+          <div className="w-full max-w-[580px] my-0 py-0" onClick={(e) => e.stopPropagation()}>
             <ShopBillReceipt
               bill={activeReceiptBill}
               shop={shopConfig}
               onClose={() => setActiveReceiptBill(null)}
               showActions={true}
+              onEdit={handleStartEditBill}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* RESET BILLING DATA CONFIRMATION MODAL */}
-      {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in">
+      {showResetModal && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in !m-0 !mt-0"
+          style={{ margin: 0, marginTop: 0 }}
+        >
           <div className="bg-white dark:bg-[#18181B] border border-rose-200 dark:border-rose-900/50 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
             <div className="w-14 h-14 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto border border-rose-200 dark:border-rose-900/30">
               <AlertTriangle className="w-7 h-7" />
@@ -1895,7 +2549,8 @@ export default function PosBillingView({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* DIRECT SOUNDBOX & MULTI-ACCOUNT MANAGEMENT MODAL (Only when enabled by Super Admin) */}
