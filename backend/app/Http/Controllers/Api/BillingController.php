@@ -893,5 +893,58 @@ class BillingController extends Controller
             ]);
         });
     }
+
+    /**
+     * Update customizable quick item tags for POS autofill.
+     */
+    public function updateQuickTags(Request $request)
+    {
+        $shop = $this->getActiveShop($request);
+        $request->validate([
+            'tags' => 'required|array',
+            'tags.*' => 'nullable|string|max:50',
+        ]);
+
+        $settings = $shop->customer_portal_settings ?: [];
+        $tags = array_values(array_unique(array_filter(array_map('trim', $request->tags))));
+        $settings['quick_item_tags'] = $tags;
+        $shop->customer_portal_settings = $settings;
+        $shop->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Quick item tags updated successfully',
+            'data' => [
+                'quick_item_tags' => $tags,
+            ],
+        ]);
+    }
+
+    /**
+     * Update customizable quick price presets for POS.
+     */
+    public function updatePricePresets(Request $request)
+    {
+        $shop = $this->getActiveShop($request);
+        $request->validate([
+            'presets' => 'required|array',
+            'presets.*' => 'required|numeric|min:1',
+        ]);
+
+        $settings = $shop->customer_portal_settings ?: [];
+        $presets = array_values(array_unique(array_filter(array_map('floatval', $request->presets))));
+        sort($presets);
+        $settings['quick_price_presets'] = $presets;
+        $shop->customer_portal_settings = $settings;
+        $shop->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Quick price presets updated successfully',
+            'data' => [
+                'quick_price_presets' => $presets,
+            ],
+        ]);
+    }
 }
 

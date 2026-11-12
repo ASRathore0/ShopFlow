@@ -138,6 +138,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/billing/invoices/{id}', [BillingController::class, 'updateBill']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
         Route::post('/billing/reset', [BillingController::class, 'resetBillingData']);
+        Route::post('/billing/quick-tags', [BillingController::class, 'updateQuickTags']);
+        Route::post('/billing/price-presets', [BillingController::class, 'updatePricePresets']);
 
         // Staff Soundbox Sync
         Route::get('/billing/soundbox/devices', [SoundboxController::class, 'getDevices']);
@@ -209,6 +211,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/billing/invoices/{id}', [BillingController::class, 'updateBill']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
         Route::post('/billing/reset', [BillingController::class, 'resetBillingData']);
+        Route::post('/billing/quick-tags', [BillingController::class, 'updateQuickTags']);
+        Route::post('/billing/price-presets', [BillingController::class, 'updatePricePresets']);
 
         // Soundbox Device Management & Direct Sync
         Route::get('/billing/soundbox/devices', [SoundboxController::class, 'getDevices']);

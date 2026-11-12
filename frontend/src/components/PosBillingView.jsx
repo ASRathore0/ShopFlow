@@ -296,8 +296,8 @@ export default function PosBillingView({
     showToast('Cancelled editing. Ready for fresh bill.', 'info');
   };
 
-  // Preset categories according to retail shop type
-  const commonItemTags = useMemo(() => {
+  // Preset default categories according to retail shop type
+  const defaultItemTags = useMemo(() => {
     const type = shopConfig.shop_type || 'clothing';
     if (type.includes('cloth') || type.includes('wear') || type.includes('fashion')) {
       return ['Shirt', 'T-Shirt', 'Jeans', 'Trousers', 'Kurta', 'Lower / Track', 'Formal Suit', 'Jacket', 'Accessories', 'Alteration'];
@@ -309,7 +309,171 @@ export default function PosBillingView({
     return ['General Item', 'Item A', 'Item B', 'Accessories', 'Service Charge'];
   }, [shopConfig.shop_type]);
 
-  const quickPricePresets = [199, 299, 499, 699, 799, 999, 1199, 1499, 1999];
+  // Customizable Quick Item Tags state with localStorage & shop settings caching
+  const [customItemTags, setCustomItemTags] = useState(() => {
+    if (shop?.customer_portal_settings?.quick_item_tags && Array.isArray(shop.customer_portal_settings.quick_item_tags) && shop.customer_portal_settings.quick_item_tags.length > 0) {
+      return shop.customer_portal_settings.quick_item_tags;
+    }
+    try {
+      const saved = localStorage.getItem(`pos_quick_tags_${shop?.id || 'default'}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  const [isManagingTags, setIsManagingTags] = useState(false);
+  const [editingTagIndex, setEditingTagIndex] = useState(null);
+  const [editingTagText, setEditingTagText] = useState('');
+  const [newTagInput, setNewTagInput] = useState('');
+  const [isAddingTag, setIsAddingTag] = useState(false);
+
+  // Active tags in use
+  const activeItemTags = customItemTags || defaultItemTags;
+
+  const persistQuickTags = async (newTags) => {
+    setCustomItemTags(newTags);
+    try {
+      localStorage.setItem(`pos_quick_tags_${shopConfig?.id || shop?.id || 'default'}`, JSON.stringify(newTags));
+    } catch (e) {}
+
+    try {
+      await billingService.updateQuickTags(newTags, role);
+    } catch (err) {
+      console.warn('Failed to sync quick tags to server:', err);
+    }
+  };
+
+  const handleModifyTag = (index, newName) => {
+    const trimmed = (newName || '').trim();
+    if (!trimmed) {
+      showToast('Tag name cannot be empty', 'error');
+      return;
+    }
+    const updated = [...activeItemTags];
+    updated[index] = trimmed;
+    persistQuickTags(updated);
+    setEditingTagIndex(null);
+    setEditingTagText('');
+    showToast(`Updated tag to "${trimmed}"`, 'success');
+  };
+
+  const handleDeleteTag = (index, e) => {
+    if (e) e.stopPropagation();
+    const removedName = activeItemTags[index];
+    const updated = activeItemTags.filter((_, idx) => idx !== index);
+    persistQuickTags(updated);
+    showToast(`Deleted tag "${removedName}"`, 'info');
+  };
+
+  const handleAddCustomTag = (e) => {
+    if (e) e.preventDefault();
+    const trimmed = newTagInput.trim();
+    if (!trimmed) return;
+    if (activeItemTags.some(t => t.toLowerCase() === trimmed.toLowerCase())) {
+      showToast(`Tag "${trimmed}" already exists`, 'info');
+      setNewTagInput('');
+      return;
+    }
+    const updated = [...activeItemTags, trimmed];
+    persistQuickTags(updated);
+    setNewTagInput('');
+    setIsAddingTag(false);
+    showToast(`Added new tag "${trimmed}"`, 'success');
+  };
+
+  const handleResetDefaultTags = () => {
+    persistQuickTags(defaultItemTags);
+    showToast('Reset quick item tags to default categories', 'info');
+  };
+
+  // Customizable Frequent Price Presets state with localStorage & shop settings caching
+  const defaultPricePresets = [199, 299, 499, 699, 799, 999, 1199, 1499, 1999];
+
+  const [customPricePresets, setCustomPricePresets] = useState(() => {
+    if (shop?.customer_portal_settings?.quick_price_presets && Array.isArray(shop.customer_portal_settings.quick_price_presets) && shop.customer_portal_settings.quick_price_presets.length > 0) {
+      return shop.customer_portal_settings.quick_price_presets;
+    }
+    try {
+      const saved = localStorage.getItem(`pos_price_presets_${shop?.id || 'default'}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  const [isManagingPrices, setIsManagingPrices] = useState(false);
+  const [editingPriceIndex, setEditingPriceIndex] = useState(null);
+  const [editingPriceText, setEditingPriceText] = useState('');
+  const [newPriceInput, setNewPriceInput] = useState('');
+  const [isAddingPrice, setIsAddingPrice] = useState(false);
+
+  const activePricePresets = customPricePresets || defaultPricePresets;
+
+  const persistPricePresets = async (newPresets) => {
+    setCustomPricePresets(newPresets);
+    try {
+      localStorage.setItem(`pos_price_presets_${shopConfig?.id || shop?.id || 'default'}`, JSON.stringify(newPresets));
+    } catch (e) {}
+
+    try {
+      await billingService.updatePricePresets(newPresets, role);
+    } catch (err) {
+      console.warn('Failed to sync price presets to server:', err);
+    }
+  };
+
+  const handleModifyPrice = (index, newPriceStr) => {
+    const val = parseFloat(newPriceStr);
+    if (isNaN(val) || val <= 0) {
+      showToast('Please enter a valid price amount', 'error');
+      return;
+    }
+    const updated = [...activePricePresets];
+    updated[index] = val;
+    updated.sort((a, b) => a - b);
+    persistPricePresets(updated);
+    setEditingPriceIndex(null);
+    setEditingPriceText('');
+    showToast(`Updated price preset to ₹${val}`, 'success');
+  };
+
+  const handleDeletePrice = (index, e) => {
+    if (e) e.stopPropagation();
+    const removedVal = activePricePresets[index];
+    const updated = activePricePresets.filter((_, idx) => idx !== index);
+    persistPricePresets(updated);
+    showToast(`Deleted price preset ₹${removedVal}`, 'info');
+  };
+
+  const handleAddCustomPrice = (e) => {
+    if (e) e.preventDefault();
+    const val = parseFloat(newPriceInput);
+    if (isNaN(val) || val <= 0) {
+      showToast('Please enter a valid price amount', 'error');
+      return;
+    }
+    if (activePricePresets.includes(val)) {
+      showToast(`Price ₹${val} already exists`, 'info');
+      setNewPriceInput('');
+      return;
+    }
+    const updated = [...activePricePresets, val];
+    updated.sort((a, b) => a - b);
+    persistPricePresets(updated);
+    setNewPriceInput('');
+    setIsAddingPrice(false);
+    showToast(`Added price preset ₹${val}`, 'success');
+  };
+
+  const handleResetDefaultPrices = () => {
+    persistPricePresets(defaultPricePresets);
+    showToast('Reset price presets to default values', 'info');
+  };
 
   const loadSoundboxDevices = async () => {
     try {
@@ -351,6 +515,12 @@ export default function PosBillingView({
         const sbEnabled = Boolean(res.data.soundbox_enabled || res.data.shop?.soundbox_enabled);
         setSoundboxEnabled(sbEnabled);
         setShopConfig(res.data.shop || shop || {});
+        if (Array.isArray(res.data.shop?.customer_portal_settings?.quick_item_tags) && res.data.shop.customer_portal_settings.quick_item_tags.length > 0) {
+          setCustomItemTags(res.data.shop.customer_portal_settings.quick_item_tags);
+        }
+        if (Array.isArray(res.data.shop?.customer_portal_settings?.quick_price_presets) && res.data.shop.customer_portal_settings.quick_price_presets.length > 0) {
+          setCustomPricePresets(res.data.shop.customer_portal_settings.quick_price_presets);
+        }
         setNextSerialNo(res.data.next_serial_no || 1);
         if (res.data.metrics) setMetrics(res.data.metrics);
         if (sbEnabled) {
@@ -815,9 +985,9 @@ export default function PosBillingView({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-zinc-800">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20">
+            {/* <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20">
               <Receipt className="w-5 h-5" />
-            </div>
+            </div> */}
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -828,7 +998,7 @@ export default function PosBillingView({
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-zinc-400">
-                {shopConfig.name} • Instant billing without pre-uploading items, or scan catalog
+                Instant billing without pre-uploading items, or scan catalog
               </p>
             </div>
           </div>
@@ -846,7 +1016,7 @@ export default function PosBillingView({
                   : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              New Bill (POS)
+              New
             </button>
             <button
               type="button"
@@ -857,7 +1027,7 @@ export default function PosBillingView({
                   : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              Bills History
+              History
             </button>
           </div>
 
@@ -951,7 +1121,7 @@ export default function PosBillingView({
                 }`}
               >
                 <Zap className="w-3.5 h-3.5" />
-                <span>⚡ Instant Price Punch (No Upload Needed)</span>
+                <span>Instant Price Punch</span>
               </button>
 
               <button
@@ -964,7 +1134,7 @@ export default function PosBillingView({
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>Uploaded Catalog / Barcode</span>
+                <span>Uploaded Catalog</span>
               </button>
             </div>
 
@@ -1048,47 +1218,423 @@ export default function PosBillingView({
                   </button>
                 </form>
 
-                {/* 1-Click Fast Item Category Tag Chips */}
+                {/* 1-Click Fast Item Category Tag Chips (With Custom Modify, Delete & Add) */}
                 <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                      Quick Item Tags (1-Tap to autofill):
-                    </span>
-                    <span className="text-[9px] text-slate-400 sm:hidden">Swipe →</span>
-                  </div>
-                  <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto pb-1 gap-1.5 no-scrollbar touch-pan-x">
-                    {commonItemTags.map((tag) => (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider truncate">
+                        Quick Item Tags (1-Tap to autofill):
+                      </span>
+                      {isManagingTags && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
+                          Edit Mode
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
-                        key={tag}
                         type="button"
-                        onClick={() => handleSelectTag(tag)}
-                        className="px-2.5 py-1.5 sm:py-1 rounded-xl bg-slate-100 hover:bg-blue-50 dark:bg-zinc-800 dark:hover:bg-blue-950/40 text-slate-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 text-xs font-semibold border border-slate-200/60 dark:border-zinc-700/60 transition-all cursor-pointer shrink-0"
+                        onClick={() => {
+                          setIsManagingTags(!isManagingTags);
+                          setEditingTagIndex(null);
+                          setIsAddingTag(false);
+                        }}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                          isManagingTags
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300'
+                        }`}
+                        title="Modify, rename, delete or add custom quick tags"
                       >
-                        + {tag}
+                        {isManagingTags ? (
+                          <>
+                            <Check className="w-3 h-3 text-white" />
+                            <span>Done</span>
+                          </>
+                        ) : (
+                          <>
+                            <Edit2 className="w-3 h-3 text-blue-500" />
+                            <span>Modify</span>
+                          </>
+                        )}
                       </button>
-                    ))}
+
+                      {isManagingTags && (
+                        <button
+                          type="button"
+                          onClick={handleResetDefaultTags}
+                          className="px-1.5 py-0.5 rounded-lg text-[10px] font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                          title="Restore default tags for this shop type"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick Helper Tip in Edit Mode */}
+                  {isManagingTags && (
+                    <div className="text-[10px] text-amber-800 dark:text-amber-300/90 bg-amber-500/10 p-2 rounded-xl border border-amber-400/30 flex items-center justify-between gap-2">
+                      <span>
+                        💡 Tap <strong>✏️</strong> to rename any tag, <strong>🗑️</strong> to delete, or add your own tags.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingTag(true)}
+                        className="px-2 py-0.5 rounded-lg bg-blue-600 text-white font-bold text-[10px] shrink-0 hover:bg-blue-500 cursor-pointer flex items-center gap-0.5 shadow-xs"
+                      >
+                        <Plus className="w-3 h-3" /> Add Tag
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Tags List */}
+                  <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto pb-1 gap-1.5 no-scrollbar touch-pan-x items-center">
+                    {activeItemTags.map((tag, idx) => {
+                      const isEditing = editingTagIndex === idx;
+
+                      if (isEditing) {
+                        return (
+                          <div key={idx} className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border-2 border-blue-500 shadow-sm shrink-0">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editingTagText}
+                              onChange={(e) => setEditingTagText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleModifyTag(idx, editingTagText);
+                                } else if (e.key === 'Escape') {
+                                  setEditingTagIndex(null);
+                                }
+                              }}
+                              className="px-2 py-0.5 text-xs font-bold text-slate-900 dark:text-white bg-transparent outline-none w-24 sm:w-28"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleModifyTag(idx, editingTagText)}
+                              className="p-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white cursor-pointer"
+                              title="Save"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingTagIndex(null)}
+                              className="p-1 rounded-lg bg-slate-100 dark:bg-zinc-700 text-slate-500 hover:text-slate-800 dark:text-zinc-300 cursor-pointer"
+                              title="Cancel"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`flex items-center rounded-xl border transition-all shrink-0 ${
+                            isManagingTags
+                              ? 'bg-amber-50/70 dark:bg-zinc-800/90 border-amber-300/80 dark:border-zinc-700 pl-2.5 pr-1 py-0.5 gap-1'
+                              : 'bg-slate-100 hover:bg-blue-50 dark:bg-zinc-800 dark:hover:bg-blue-950/40 border-slate-200/60 dark:border-zinc-700/60 hover:border-blue-300'
+                          }`}
+                        >
+                          {isManagingTags ? (
+                            <>
+                              <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200">
+                                {tag}
+                              </span>
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingTagIndex(idx);
+                                    setEditingTagText(tag);
+                                  }}
+                                  className="p-1 rounded-lg hover:bg-blue-100 dark:hover:bg-zinc-700 text-slate-500 hover:text-blue-600 dark:text-zinc-300 transition-colors cursor-pointer"
+                                  title={`Modify / Rename "${tag}"`}
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteTag(idx, e)}
+                                  className="p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                  title={`Delete "${tag}"`}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSelectTag(tag)}
+                              className="px-2.5 py-1.5 sm:py-1 text-slate-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 text-xs font-semibold cursor-pointer"
+                            >
+                              + {tag}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Inline Add Tag input in Edit Mode */}
+                    {isManagingTags && (
+                      isAddingTag ? (
+                        <form onSubmit={handleAddCustomTag} className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border-2 border-emerald-500 shadow-sm shrink-0">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={newTagInput}
+                            onChange={(e) => setNewTagInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setIsAddingTag(false);
+                            }}
+                            placeholder="Tag name..."
+                            className="px-2 py-0.5 text-xs font-bold text-slate-900 dark:text-white bg-transparent outline-none w-24 sm:w-28"
+                          />
+                          <button
+                            type="submit"
+                            className="p-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                            title="Add Tag"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingTag(false)}
+                            className="p-1 rounded-lg bg-slate-100 dark:bg-zinc-700 text-slate-500 hover:text-slate-800 dark:text-zinc-300 cursor-pointer"
+                            title="Cancel"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </form>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingTag(true)}
+                          className="px-2.5 py-1 rounded-xl border border-dashed border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>New Tag</span>
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
 
-                {/* 1-Click Common Price Chips */}
+                {/* 1-Click Common Price Chips (With Custom Modify, Delete & Add) */}
                 <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                      Frequent Price Presets (1-Tap to Add):
-                    </span>
-                    <span className="text-[9px] text-slate-400 sm:hidden">Swipe →</span>
-                  </div>
-                  <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto pb-1 gap-1.5 no-scrollbar touch-pan-x">
-                    {quickPricePresets.map((p) => (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider truncate">
+                        Frequent Price Presets (1-Tap to Add):
+                      </span>
+                      {isManagingPrices && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                          Edit Mode
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
-                        key={p}
                         type="button"
-                        onClick={() => handleInstantPricePreset(p)}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-xs font-black border border-emerald-300 dark:border-emerald-800 transition-all cursor-pointer shadow-xs shrink-0"
+                        onClick={() => {
+                          setIsManagingPrices(!isManagingPrices);
+                          setEditingPriceIndex(null);
+                          setIsAddingPrice(false);
+                        }}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                          isManagingPrices
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300'
+                        }`}
+                        title="Modify, rename, delete or add custom price presets"
                       >
-                        ₹{p}
+                        {isManagingPrices ? (
+                          <>
+                            <Check className="w-3 h-3 text-white" />
+                            <span>Done</span>
+                          </>
+                        ) : (
+                          <>
+                            <Edit2 className="w-3 h-3 text-emerald-600" />
+                            <span>Modify</span>
+                          </>
+                        )}
                       </button>
-                    ))}
+
+                      {isManagingPrices && (
+                        <button
+                          type="button"
+                          onClick={handleResetDefaultPrices}
+                          className="px-1.5 py-0.5 rounded-lg text-[10px] font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                          title="Restore default price presets"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick Helper Tip in Edit Mode */}
+                  {isManagingPrices && (
+                    <div className="text-[10px] text-emerald-800 dark:text-emerald-300/90 bg-emerald-500/10 p-2 rounded-xl border border-emerald-400/30 flex items-center justify-between gap-2">
+                      <span>
+                        💡 Tap <strong>✏️</strong> to change price, <strong>🗑️</strong> to delete, or add new price buttons.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingPrice(true)}
+                        className="px-2 py-0.5 rounded-lg bg-emerald-600 text-white font-bold text-[10px] shrink-0 hover:bg-emerald-500 cursor-pointer flex items-center gap-0.5 shadow-xs"
+                      >
+                        <Plus className="w-3 h-3" /> Add Price
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Price Presets List */}
+                  <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto pb-1 gap-1.5 no-scrollbar touch-pan-x items-center">
+                    {activePricePresets.map((p, idx) => {
+                      const isEditing = editingPriceIndex === idx;
+
+                      if (isEditing) {
+                        return (
+                          <div key={idx} className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border-2 border-emerald-500 shadow-sm shrink-0">
+                            <span className="text-xs font-black text-slate-400 pl-1">₹</span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              autoFocus
+                              value={editingPriceText}
+                              onChange={(e) => setEditingPriceText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleModifyPrice(idx, editingPriceText);
+                                } else if (e.key === 'Escape') {
+                                  setEditingPriceIndex(null);
+                                }
+                              }}
+                              className="px-1 py-0.5 text-xs font-black text-slate-900 dark:text-white bg-transparent outline-none w-20"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleModifyPrice(idx, editingPriceText)}
+                              className="p-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                              title="Save"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingPriceIndex(null)}
+                              className="p-1 rounded-lg bg-slate-100 dark:bg-zinc-700 text-slate-500 hover:text-slate-800 dark:text-zinc-300 cursor-pointer"
+                              title="Cancel"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`flex items-center rounded-xl border transition-all shrink-0 ${
+                            isManagingPrices
+                              ? 'bg-emerald-50/70 dark:bg-zinc-800/90 border-emerald-300/80 dark:border-zinc-700 pl-2.5 pr-1 py-0.5 gap-1'
+                              : 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 shadow-xs'
+                          }`}
+                        >
+                          {isManagingPrices ? (
+                            <>
+                              <span className="text-xs font-black text-emerald-800 dark:text-emerald-300">
+                                ₹{p}
+                              </span>
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPriceIndex(idx);
+                                    setEditingPriceText(String(p));
+                                  }}
+                                  className="p-1 rounded-lg hover:bg-emerald-200/60 dark:hover:bg-zinc-700 text-slate-500 hover:text-emerald-700 dark:text-zinc-300 transition-colors cursor-pointer"
+                                  title={`Modify price ₹${p}`}
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeletePrice(idx, e)}
+                                  className="p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                  title={`Delete price ₹${p}`}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleInstantPricePreset(p)}
+                              className="px-3 py-1.5 text-emerald-700 dark:text-emerald-400 text-xs font-black cursor-pointer"
+                            >
+                              ₹{p}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Inline Add Price input in Edit Mode */}
+                    {isManagingPrices && (
+                      isAddingPrice ? (
+                        <form onSubmit={handleAddCustomPrice} className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border-2 border-emerald-500 shadow-sm shrink-0">
+                          <span className="text-xs font-black text-slate-400 pl-1">₹</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            autoFocus
+                            value={newPriceInput}
+                            onChange={(e) => setNewPriceInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setIsAddingPrice(false);
+                            }}
+                            placeholder="Amount..."
+                            className="px-1 py-0.5 text-xs font-black text-slate-900 dark:text-white bg-transparent outline-none w-20"
+                          />
+                          <button
+                            type="submit"
+                            className="p-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                            title="Add Price"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingPrice(false)}
+                            className="p-1 rounded-lg bg-slate-100 dark:bg-zinc-700 text-slate-500 hover:text-slate-800 dark:text-zinc-300 cursor-pointer"
+                            title="Cancel"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </form>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingPrice(true)}
+                          className="px-2.5 py-1 rounded-xl border border-dashed border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>New Price</span>
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               </div>

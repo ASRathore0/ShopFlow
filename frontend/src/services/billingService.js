@@ -117,4 +117,16 @@ export const billingService = {
     const res = await api.get(`${prefix}/billing/soundbox/reconciliation`, { params });
     return res.data;
   },
+
+  updateQuickTags: async (tags, role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.post(`${prefix}/billing/quick-tags`, { tags });
+    return res.data;
+  },
+
+  updatePricePresets: async (presets, role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.post(`${prefix}/billing/price-presets`, { presets });
+    return res.data;
+  },
 };
