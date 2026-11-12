@@ -375,6 +375,7 @@ export default function AdminDashboard() {
   }, [activeSection, user?.current_shop_id]);
 
   const prevAdminReqIdsRef = React.useRef(null);
+  const isAdminPollingRef = React.useRef(false);
   const playAdminChime = (isReservation = false) => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -414,11 +415,17 @@ export default function AdminDashboard() {
     }
   };
 
-  // Real-time automatic background polling every 6 seconds for live requests queue & stats
+  // Real-time automatic background polling every 10 seconds for live requests queue & stats
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (activeSection === 'queue') {
-        adminService.getRequests().then((res) => {
+    const interval = setInterval(async () => {
+      // Pause polling if user switched tab or minimized browser to prevent server overload / 504 Gateway Timeouts
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (isAdminPollingRef.current) return;
+      isAdminPollingRef.current = true;
+
+      try {
+        if (activeSection === 'queue') {
+          const res = await adminService.getRequests();
           const newReqs = res.data?.data || [];
           if (prevAdminReqIdsRef.current) {
             const fresh = newReqs.filter((r) => !prevAdminReqIdsRef.current.has(r.id));
@@ -434,15 +441,20 @@ export default function AdminDashboard() {
           }
           prevAdminReqIdsRef.current = new Set(newReqs.map((r) => r.id));
           setRequestsList(newReqs);
-        }).catch(() => { });
-      }
-      if (activeSection === 'overview' || activeSection === 'queue') {
-        adminService.getDashboard().then((res) => {
+        } else if (activeSection === 'overview') {
+          const res = await adminService.getDashboard();
           if (res?.data) setDashboardData(res.data);
-        }).catch(() => { });
+        }
+      } catch (e) {
+        // silently ignore background polling errors
+      } finally {
+        isAdminPollingRef.current = false;
       }
-    }, 6000);
-    return () => clearInterval(interval);
+    }, 10000);
+    return () => {
+      clearInterval(interval);
+      isAdminPollingRef.current = false;
+    };
   }, [activeSection]);
 
   // Handle switching active shop

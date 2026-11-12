@@ -30,8 +30,12 @@ export default function CustomerRequestTracking({ defaultShopSlug }) {
   const isStaffOrAdmin = isAuthenticated && user && ['staff', 'cashier', 'shop_owner', 'manager', 'super_admin'].includes(user.role);
   const returnDestination = !user ? '/' : user.role === 'super_admin' ? '/super-admin' : ['shop_owner', 'manager'].includes(user.role) ? '/admin' : '/staff';
   const returnLabel = !user ? 'Home' : user.role === 'super_admin' ? 'Super Admin' : ['shop_owner', 'manager'].includes(user.role) ? 'Owner Admin' : 'Staff Portal';
+  const isFetchingRef = useRef(false);
 
   const fetchStatus = async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       setRefreshing(true);
       const res = await shopService.trackRequest(requestNumber);
@@ -43,15 +47,21 @@ export default function CustomerRequestTracking({ defaultShopSlug }) {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      isFetchingRef.current = false;
     }
   };
 
   useEffect(() => {
     fetchStatus();
-    // Auto-refresh every 3 seconds for live physical assistance tracking
-    const interval = setInterval(fetchStatus, 3000);
+    // Auto-refresh every 6 seconds for live assistance tracking (stops if completed or cancelled)
+    const interval = setInterval(() => {
+      if (request && ['completed', 'cancelled'].includes(request.status)) {
+        return;
+      }
+      fetchStatus();
+    }, 6000);
     return () => clearInterval(interval);
-  }, [requestNumber]);
+  }, [requestNumber, request?.status]);
 
   if (loading) {
     return (

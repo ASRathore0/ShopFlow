@@ -685,13 +685,28 @@ export default function PosBillingView({
   }, [overviewPeriod, metrics, reconciliationData]);
 
   // Real-time Soundbox Radar: Auto-detects payment when customer scans UPI QR
+  const isPollingRef = useRef(false);
+  const pollAttemptsRef = useRef(0);
+
   useEffect(() => {
     let interval = null;
     const upiPortion = paymentMethod === 'partial' ? (parseFloat(splitUpiAmount) || 0) : totalAmount;
     const isListeningUpi = paymentMethod === 'upi' || (paymentMethod === 'partial' && upiPortion > 0);
 
+    // Reset attempts on amount / payment method change
+    pollAttemptsRef.current = 0;
+
     if (soundboxEnabled && activeSubTab === 'pos' && isListeningUpi && upiPortion > 0 && !soundboxPaymentReceived) {
       interval = setInterval(async () => {
+        // Optimization: Pause polling if user switched tab or minimized browser to prevent server overload
+        if (typeof document !== 'undefined' && document.hidden) return;
+        // Optimization: Skip if a request is already in-flight (avoids queue pile-up on slow network)
+        if (isPollingRef.current) return;
+        // Optimization: Stop after ~10 mins (130 checks) of inactivity to prevent endless worker consumption
+        if (pollAttemptsRef.current > 130) return;
+
+        pollAttemptsRef.current += 1;
+        isPollingRef.current = true;
         try {
           const res = await billingService.pollSoundboxStatus({
             amount: upiPortion,
@@ -706,12 +721,15 @@ export default function PosBillingView({
           }
         } catch (err) {
           // silently keep listening
+        } finally {
+          isPollingRef.current = false;
         }
-      }, 2500);
+      }, 4500);
     }
 
     return () => {
       if (interval) clearInterval(interval);
+      isPollingRef.current = false;
     };
   }, [activeSubTab, paymentMethod, totalAmount, splitUpiAmount, soundboxPaymentReceived, selectedSoundbox, role, soundboxEnabled]);
 
@@ -1121,7 +1139,7 @@ export default function PosBillingView({
                 }`}
               >
                 <Zap className="w-3.5 h-3.5" />
-                <span>Instant Price Punch</span>
+                <span>Instant Bill</span>
               </button>
 
               <button

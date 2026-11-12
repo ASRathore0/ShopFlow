@@ -351,7 +351,7 @@ class SoundboxController extends Controller
             });
         }
 
-        $transaction = $query->latest('id')->first();
+        $transaction = $query->with('soundboxDevice')->latest('id')->first();
 
         if ($transaction) {
             $device = $transaction->soundboxDevice;

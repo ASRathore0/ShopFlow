@@ -30,6 +30,7 @@ export default function StaffDashboard() {
 
   const prevRequestIdsRef = useRef(new Set());
   const isInitialLoadRef = useRef(true);
+  const isPollingStaffRef = useRef(false);
 
   // Play audio chime when new requests or reservations arrive
   const playAlertChime = (isReservation = false) => {
@@ -75,7 +76,45 @@ export default function StaffDashboard() {
     }
   };
 
-  const loadData = async () => {
+  const processIncomingRequests = (newReqs) => {
+    // Detect newly arrived requests / reservations
+    const currentIds = new Set(newReqs.map((r) => r.id));
+    if (!isInitialLoadRef.current) {
+      const brandNew = newReqs.filter((r) => !prevRequestIdsRef.current.has(r.id));
+      if (brandNew.length > 0) {
+        const hasReservation = brandNew.some((r) => r.request_type === 'reservation');
+        const targetItem = brandNew[0];
+        const pName = targetItem.items?.[0]?.product?.name || 'In-Store Product';
+        const cust = targetItem.customer_session?.customer_code || 'Showroom Customer';
+
+        if (hasReservation) {
+          playAlertChime(true);
+          setToastNotice({
+            title: '🔖 New In-Store Reservation!',
+            message: `${pName} reserved by ${cust}. Hold for pickup.`,
+            type: 'reservation',
+          });
+        } else {
+          playAlertChime(false);
+          setToastNotice({
+            title: '⚡ New Customer Request!',
+            message: `${pName} requested by ${cust} on showroom floor.`,
+            type: 'request',
+          });
+        }
+
+        setTimeout(() => {
+          setToastNotice(null);
+        }, 5000);
+      }
+    } else {
+      isInitialLoadRef.current = false;
+    }
+    prevRequestIdsRef.current = currentIds;
+  };
+
+  const loadData = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     setRefreshing(true);
     try {
       const [dashRes, reqsRes] = await Promise.all([
@@ -91,41 +130,7 @@ export default function StaffDashboard() {
       if (reqsRes && reqsRes.data) {
         const newReqs = reqsRes.data.data || [];
         setRequests(newReqs);
-
-        // Detect newly arrived requests / reservations
-        const currentIds = new Set(newReqs.map((r) => r.id));
-        if (!isInitialLoadRef.current) {
-          const brandNew = newReqs.filter((r) => !prevRequestIdsRef.current.has(r.id));
-          if (brandNew.length > 0) {
-            const hasReservation = brandNew.some((r) => r.request_type === 'reservation');
-            const targetItem = brandNew[0];
-            const pName = targetItem.items?.[0]?.product?.name || 'In-Store Product';
-            const cust = targetItem.customer_session?.customer_code || 'Showroom Customer';
-
-            if (hasReservation) {
-              playAlertChime(true);
-              setToastNotice({
-                title: '🔖 New In-Store Reservation!',
-                message: `${pName} reserved by ${cust}. Hold for pickup.`,
-                type: 'reservation',
-              });
-            } else {
-              playAlertChime(false);
-              setToastNotice({
-                title: '⚡ New Customer Request!',
-                message: `${pName} requested by ${cust} on showroom floor.`,
-                type: 'request',
-              });
-            }
-
-            setTimeout(() => {
-              setToastNotice(null);
-            }, 5000);
-          }
-        } else {
-          isInitialLoadRef.current = false;
-        }
-        prevRequestIdsRef.current = currentIds;
+        processIncomingRequests(newReqs);
       }
     } catch (err) {
       console.error('Failed to load staff data', err);
@@ -135,10 +140,28 @@ export default function StaffDashboard() {
     }
   };
 
+  const pollRequestsOnly = async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (isPollingStaffRef.current) return;
+    isPollingStaffRef.current = true;
+    try {
+      const reqsRes = await staffService.getRequests({ tab: tab });
+      if (reqsRes && reqsRes.data) {
+        const newReqs = reqsRes.data.data || [];
+        setRequests(newReqs);
+        processIncomingRequests(newReqs);
+      }
+    } catch (err) {
+      // ignore transient poll error
+    } finally {
+      isPollingStaffRef.current = false;
+    }
+  };
+
   useEffect(() => {
-    loadData();
-    // Refresh queue every 3 seconds for physical showroom live updates
-    const interval = setInterval(loadData, 3000);
+    loadData(true);
+    // Lightweight polling every 8s (only requests list, skipping heavy dashboard metrics)
+    const interval = setInterval(pollRequestsOnly, 8000);
     return () => clearInterval(interval);
   }, [tab]);
 
