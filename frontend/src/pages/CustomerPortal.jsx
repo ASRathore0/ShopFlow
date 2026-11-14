@@ -142,7 +142,7 @@ export default function CustomerPortal({ defaultShopSlug }) {
     async function loadShopData() {
       setLoading(true);
       try {
-        const res = await shopService.getShop(shopSlug);
+        const res = await shopService.getShop(shopSlug, { session_token: sessionToken });
         if (res && res.data) {
           setShop(res.data.shop);
           if (res.data.total_products_count !== undefined) {

@@ -34,9 +34,27 @@ class PublicShopController extends Controller
         ]);
     }
 
-    public function showShop($slug)
+    public function showShop(Request $request, $slug)
     {
         $shop = Shop::where('slug', $slug)->where('is_active', true)->firstOrFail();
+
+        // Auto-record showroom visitor / QR scan session
+        $sessionToken = $request->input('session_token') ?: $request->header('X-Customer-Session');
+        if ($sessionToken) {
+            try {
+                $session = CustomerSession::firstOrCreate(
+                    ['shop_id' => $shop->id, 'session_token' => $sessionToken],
+                    [
+                        'customer_code' => 'CUS-' . strtoupper(\Illuminate\Support\Str::random(4)),
+                        'device_info' => substr($request->userAgent() ?? '', 0, 250),
+                        'last_active_at' => now(),
+                    ]
+                );
+                $session->touch();
+            } catch (\Throwable $e) {
+                // Ignore transient race condition on duplicate session
+            }
+        }
 
         $categories = Category::where('shop_id', $shop->id)
             ->where('is_active', true)

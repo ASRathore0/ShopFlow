@@ -10,7 +10,7 @@ import {
   Sun, Moon, Menu, X, ArrowLeft, LogOut, ExternalLink, ChevronRight, Edit3,
   Trash2, Check, UserCheck, AlertCircle, Eye, CornerDownRight, Tag, ChevronDown, Sparkles,
   UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera,
-  Star, Images, GripVertical, ArrowUpDown, Crop, Palette, CreditCard, Receipt
+  Star, Images, GripVertical, ArrowUpDown, Crop, Palette, CreditCard, Receipt, Flame
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../context/AuthContext';
@@ -31,6 +31,8 @@ export default function AdminDashboard() {
 
   const [activeSection, setActiveSection] = useState('overview'); // overview, products, inventory, locations, queue, employees, reports, qr
   const [dashboardData, setDashboardData] = useState(null);
+  const [overviewPeriod, setOverviewPeriod] = useState('today'); // 'today', 'week', 'month'
+  const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -297,9 +299,9 @@ export default function AdminDashboard() {
   };
 
   // Load Dashboard Overview Data
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (selectedPeriod = overviewPeriod) => {
     try {
-      const res = await adminService.getDashboard();
+      const res = await adminService.getDashboard({ period: selectedPeriod });
       if (res && res.data) {
         setDashboardData(res.data);
         if (res.data.shop) {
@@ -311,6 +313,13 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePeriodChange = async (period) => {
+    setOverviewPeriod(period);
+    setIsRefreshingDashboard(true);
+    await fetchDashboard(period);
+    setIsRefreshingDashboard(false);
   };
 
   // Pre-load reference lists (categories & locations & employees & user's authorized shops)
@@ -442,7 +451,7 @@ export default function AdminDashboard() {
           prevAdminReqIdsRef.current = new Set(newReqs.map((r) => r.id));
           setRequestsList(newReqs);
         } else if (activeSection === 'overview') {
-          const res = await adminService.getDashboard();
+          const res = await adminService.getDashboard({ period: overviewPeriod });
           if (res?.data) setDashboardData(res.data);
         }
       } catch (e) {
@@ -1754,16 +1763,20 @@ export default function AdminDashboard() {
 
   // Metrics
   const metrics = dashboardData?.metrics || {
-    today_customers: 24,
+    shoppers_count: 0,
+    shoppers_all_time: 0,
+    period_revenue: 0,
+    period_bills_count: 0,
+    average_bill_value: 0,
+    total_units_sold: 0,
+    cash_sales: 0,
+    upi_sales: 0,
+    card_sales: 0,
+    all_time_revenue: 0,
+    all_time_bills_count: 0,
+    low_stock_count: 0,
+    inventory_value: 0,
     active_requests: requestsList.filter((r) => ['waiting', 'assigned', 'in_progress'].includes(r.status)).length,
-    completed_requests: 142,
-    today_completed: 18,
-    average_wait_minutes: 3.5,
-    staff_online: employees.filter((e) => e.status === 'online').length || 3,
-    total_staff: employees.length || 4,
-    low_stock_count: 2,
-    inventory_value: 48950.0,
-    revenue: 5196.0,
   };
 
   const navItems = [
@@ -2195,115 +2208,337 @@ export default function AdminDashboard() {
         )}
 
         {/* ======================================================== */}
-        {/* SECTION 1: OVERVIEW DASHBOARD */}
+        {/* SECTION 1: OVERVIEW DASHBOARD (SALES, CATEGORIES & SHOPPERS) */}
         {/* ======================================================== */}
         {activeSection === 'overview' && (
           <div className="space-y-6 animate-fade-in">
-            {/* Top Stat Cards */}
+            {/* Header Banner: Period Switcher & Quick Actions for Shop Owner */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
+                    Store Performance & Billing
+                  </h2>
+                  {isRefreshingDashboard && (
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Real-time sales, category-wise demand & showroom QR visitors
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Daily, Weekly, Monthly Filter */}
+                <div className="inline-flex p-1 bg-slate-100 dark:bg-zinc-800 rounded-xl border border-slate-200/80 dark:border-zinc-700/80 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => handlePeriodChange('today')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      overviewPeriod === 'today'
+                        ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-sm font-black'
+                        : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Daily (Today)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePeriodChange('week')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      overviewPeriod === 'week'
+                        ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-sm font-black'
+                        : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Weekly (7 Days)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePeriodChange('month')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      overviewPeriod === 'month'
+                        ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-sm font-black'
+                        : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Monthly (30 Days)
+                  </button>
+                </div>
+
+                {/* Quick New POS Bill button */}
+                <button
+                  type="button"
+                  onClick={() => setActiveSection('billing')}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/20 active:scale-95 transition-all"
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>+ New Bill</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Top Stat Cards:
+                1. Today's Shoppers (QR scanned sessions & frontstore visits)
+                2. Period Sales Revenue (₹)
+                3. Bills Generated & Units Sold
+                4. Payment Mode Split (Cash vs UPI)
+            */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1">
-                <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 block font-medium">
-                  Today's Shoppers
-                </span>
+              {/* 1. Shoppers / Store Visitors */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 font-semibold">
+                    {overviewPeriod === 'today' ? "Today's Shoppers" : `${dashboardData?.period_title || 'Period'} Shoppers`}
+                  </span>
+                  <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <QrCode className="w-4 h-4" />
+                  </span>
+                </div>
                 <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                  {metrics.today_customers}
+                  {metrics.shoppers_count ?? 0}
                 </div>
-                <span className="text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-400 font-bold block truncate">
-                  QR scanned sessions
+                <div className="text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 truncate">
+                  <span>QR scanned & frontstore visits</span>
+                </div>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 block truncate">
+                  All-time visitors: {metrics.shoppers_all_time ?? 0}
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-blue-500/30 shadow-sm space-y-1">
-                <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 block font-medium">
-                  Active Requests
-                </span>
-                <div className="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400">
-                  {metrics.active_requests}
+              {/* 2. Total Sales Revenue */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 font-semibold">
+                    {overviewPeriod === 'today' ? "Today's Sales Revenue" : `${dashboardData?.period_title || 'Period'} Sales`}
+                  </span>
+                  <span className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                    <TrendingUp className="w-4 h-4" />
+                  </span>
                 </div>
-                <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium block truncate">
-                  Avg wait: ~{metrics.average_wait_minutes}m
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                  ₹{Number(metrics.period_revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] sm:text-xs text-blue-600 dark:text-blue-400 font-bold block truncate">
+                  Avg Bill Value: ₹{Number(metrics.average_bill_value || 0).toLocaleString('en-IN')}
+                </div>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 block truncate">
+                  All-time: ₹{Number(metrics.all_time_revenue || 0).toLocaleString('en-IN')}
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1">
-                <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 block font-medium">
-                  Completed Today
-                </span>
-                <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
-                  {metrics.today_completed}
+              {/* 3. Bills Generated & Units Sold */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 font-semibold">
+                    Bills & Units Sold
+                  </span>
+                  <span className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                    <Receipt className="w-4 h-4" />
+                  </span>
                 </div>
-                <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 block truncate">
-                  Total served: {metrics.completed_requests}
-                </span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1">
-                <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 block font-medium">
-                  Staff Online
-                </span>
                 <div className="text-2xl sm:text-3xl font-black text-purple-600 dark:text-purple-400">
-                  {metrics.staff_online} / {metrics.total_staff}
+                  {metrics.period_bills_count || 0} <span className="text-sm font-semibold text-slate-400">bills</span>
                 </div>
-                <span className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 block truncate">
-                  Active floor team
+                <div className="text-[10px] sm:text-xs text-slate-600 dark:text-zinc-300 font-semibold block truncate">
+                  {metrics.total_units_sold || 0} total items sold
+                </div>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 block truncate">
+                  All-time: {metrics.all_time_bills_count || 0} bills
+                </span>
+              </div>
+
+              {/* 4. Payment Collection Breakdown (Cash vs UPI) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 font-semibold">
+                    Payment Mode Split
+                  </span>
+                  <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <CreditCard className="w-4 h-4" />
+                  </span>
+                </div>
+                <div className="space-y-1 pt-0.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Cash:
+                    </span>
+                    <strong className="text-slate-900 dark:text-white font-extrabold">
+                      ₹{Number(metrics.cash_sales || 0).toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> UPI / QR:
+                    </span>
+                    <strong className="text-slate-900 dark:text-white font-extrabold">
+                      ₹{Number(metrics.upi_sales || 0).toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                </div>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 block truncate pt-0.5 border-t border-slate-100 dark:border-zinc-800">
+                  Drawer Cash + Bank UPI reconciled
                 </span>
               </div>
             </div>
 
-            {/* Smart Demand & Stock Alerts */}
-            {dashboardData?.smart_insights && dashboardData.smart_insights.length > 0 && (
-              <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-500/10 via-slate-50 to-blue-50/20 dark:from-amber-500/10 dark:via-zinc-900 dark:to-zinc-900 border border-amber-500/30 space-y-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>Smart Retail Demand Insights</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {dashboardData.smart_insights.map((ins, i) => (
-                    <div
-                      key={i}
-                      className="p-3 bg-white/80 dark:bg-zinc-900/80 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs space-y-1 shadow-sm"
-                    >
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center justify-between gap-2">
-                        <span className="truncate">{ins.title}</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
-                          {ins.action}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 dark:text-zinc-400 leading-relaxed">
-                        {ins.message}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Charts: Requests by Hour & Top Requested Products */}
+            {/* Row 2: Sales by Category & Top Selling Items (from Billing) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-              {/* Hourly Customer Demand Chart */}
+              {/* Sales by Category (Jeans, Shirt, Shoes, Trousers, etc.) */}
+              <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Sales by Category</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full">
+                        {overviewPeriod === 'today' ? 'Today' : overviewPeriod === 'week' ? 'Past 7 Days' : 'Past 30 Days'}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400">
+                      Breakdown across Jeans, Shirts, Shoes, Trousers, Kurtas & Accessories
+                    </p>
+                  </div>
+                  <Tag className="w-4 h-4 text-slate-400" />
+                </div>
+
+                {dashboardData?.category_sales && dashboardData.category_sales.length > 0 ? (
+                  <div className="space-y-3 pt-1">
+                    {dashboardData.category_sales.map((cat, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400"></span>
+                            <span className="font-bold text-slate-900 dark:text-white">{cat.category}</span>
+                            <span className="text-[11px] text-slate-500 dark:text-zinc-400">
+                              ({cat.units_sold} {cat.units_sold === 1 ? 'item' : 'items'} sold)
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-black text-slate-900 dark:text-white">
+                              ₹{Number(cat.revenue).toLocaleString('en-IN')}
+                            </span>
+                            <span className="text-[10px] text-slate-400 dark:text-zinc-500 ml-1.5">
+                              {cat.percentage}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="w-full h-2 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 rounded-full"
+                            style={{ width: `${Math.max(6, Math.min(100, cat.percentage))}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-10 text-center text-xs text-slate-400 dark:text-zinc-500 space-y-2">
+                    <Package className="w-8 h-8 mx-auto opacity-40" />
+                    <p>No category billing transactions recorded for {dashboardData?.period_title || 'this period'} yet.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Top Selling Items (from Billing Data) */}
+              <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Top Selling Items</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full">
+                        From Billing Data
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400">
+                      Fastest-moving items generating maximum revenue
+                    </p>
+                  </div>
+                  <Flame className="w-4 h-4 text-amber-500" />
+                </div>
+
+                {dashboardData?.top_selling_items && dashboardData.top_selling_items.length > 0 ? (
+                  <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                    {dashboardData.top_selling_items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 hover:border-blue-500/30 transition-all"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                            idx === 0 ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-extrabold' :
+                            idx === 1 ? 'bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300' :
+                            idx === 2 ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' :
+                            'bg-slate-100 dark:bg-zinc-800/60 text-slate-400'
+                          }`}>
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                              {item.name}
+                            </h4>
+                            <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium">
+                              {item.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                            {item.units_sold} {item.units_sold === 1 ? 'pc' : 'pcs'} sold
+                          </div>
+                          <div className="text-[11px] font-bold text-slate-800 dark:text-zinc-200">
+                            ₹{Number(item.total_revenue).toLocaleString('en-IN')}
+                          </div>
+                          {item.available_stock !== null && (
+                            <span
+                              className={`text-[9px] font-semibold block ${
+                                item.available_stock <= 5
+                                  ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                  : 'text-slate-400 dark:text-zinc-500'
+                              }`}
+                            >
+                              {item.available_stock} in stock
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-10 text-center text-xs text-slate-400 dark:text-zinc-500 space-y-2">
+                    <Package className="w-8 h-8 mx-auto opacity-40" />
+                    <p>No billing transactions found for {dashboardData?.period_title || 'this period'}.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 3: Sales Timeline Chart & Recent Bills */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              {/* Sales Trend Chart (Hourly for Today, Daily for Week/Month) */}
               <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      Customer Requests by Hour
+                      {overviewPeriod === 'today' ? 'Sales & Counter Pace by Hour' : 'Sales Trend by Day'}
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-zinc-400">
-                      Identify peak showroom traffic hours
+                      {overviewPeriod === 'today' ? 'Track counter billing pace through the day' : 'Revenue and bill volume trend'}
                     </p>
                   </div>
                   <span className="text-[10px] sm:text-xs font-bold px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg shrink-0">
-                    Peak: 5 - 6 PM
+                    {dashboardData?.peak_label || 'Live Traffic'}
                   </span>
                 </div>
 
                 <div className="h-60 sm:h-64 w-full pt-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={dashboardData?.hourly_chart || []}
+                      data={dashboardData?.timeline_chart || []}
                       margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#27272A' : '#E2E8F0'} />
-                      <XAxis dataKey="hour" stroke={isDark ? '#71717A' : '#94A3B8'} fontSize={10} />
+                      <XAxis dataKey="time_label" stroke={isDark ? '#71717A' : '#94A3B8'} fontSize={10} />
                       <YAxis stroke={isDark ? '#71717A' : '#94A3B8'} fontSize={10} />
                       <Tooltip
                         contentStyle={{
@@ -2314,118 +2549,99 @@ export default function AdminDashboard() {
                           color: isDark ? '#FFFFFF' : '#0F172A',
                           boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
                         }}
+                        formatter={(val, name) => [
+                          name === 'sales' ? `₹${Number(val).toLocaleString('en-IN')}` : `${val} bills`,
+                          name === 'sales' ? 'Revenue' : 'Bills Generated'
+                        ]}
                       />
-                      <Bar dataKey="requests" name="Requested" fill="#2563EB" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="served" name="Served" fill="#10B981" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="sales" name="sales" fill="#2563EB" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* Top Requested Products */}
+              {/* Live Recent Bills Feed (Shop Owner Need) */}
               <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      Top In-Store Requested Items
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Live Invoices & Counter Bills</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-zinc-400">
-                      Products shoppers asked staff to inspect
+                      Latest transactions issued at POS counter
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection('billing')}
+                    className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline"
+                  >
+                    Open POS Register →
+                  </button>
                 </div>
 
-                <div className="space-y-2.5">
-                  {(dashboardData?.top_products || []).map((p, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="font-extrabold text-xs text-slate-400 dark:text-zinc-500 w-4">
-                          #{idx + 1}
-                        </span>
+                {dashboardData?.recent_bills && dashboardData.recent_bills.length > 0 ? (
+                  <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                    {dashboardData.recent_bills.map((bill) => (
+                      <div
+                        key={bill.id}
+                        className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800"
+                      >
                         <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                            {p.name}
-                          </h4>
-                          <span className="text-[10px] text-slate-500 dark:text-zinc-400">
-                            {p.category}
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-xs text-slate-900 dark:text-white">
+                              Bill {bill.bill_number}
+                            </span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                              bill.payment_method === 'upi'
+                                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                : bill.payment_method === 'partial'
+                                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            }`}>
+                              {bill.payment_method}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-zinc-400 truncate mt-0.5">
+                            {bill.customer_name} • {bill.items_count} {bill.items_count === 1 ? 'item' : 'items'}
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="text-xs font-black text-slate-900 dark:text-white">
+                            ₹{Number(bill.total_amount).toLocaleString('en-IN')}
+                          </div>
+                          <span className="text-[10px] text-slate-400 dark:text-zinc-500">
+                            {bill.time_formatted}
                           </span>
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                          {p.requests} requests
-                        </div>
-                        <span
-                          className={`text-[10px] font-semibold ${
-                            p.available_stock < 5
-                              ? 'text-amber-600 dark:text-amber-400'
-                              : 'text-slate-400 dark:text-zinc-500'
-                          }`}
-                        >
-                          {p.available_stock} in stock
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Employee Workload Table / Cards */}
-            <div className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Employee Live Workload
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400">
-                    Real-time queue assignments across floor staff
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveSection('employees')}
-                  className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline"
-                >
-                  Manage Roster →
-                </button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(dashboardData?.employee_workload || employees.slice(0, 3)).map((emp) => (
-                  <div
-                    key={emp.id}
-                    className="p-3.5 bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">
-                        {emp.name}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                        {emp.status}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-zinc-400">
-                      {emp.zone || emp.assigned_zone || 'Showroom Floor'}
-                    </div>
-                    <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300">
-                      <span>
-                        Active:{' '}
-                        <strong className="text-blue-600 dark:text-blue-400">
-                          {emp.active_requests_count ?? emp.active_requests ?? 0}
-                        </strong>
-                      </span>
-                      <span>
-                        Served:{' '}
-                        <strong className="text-emerald-600 dark:text-emerald-400">
-                          {emp.total_requests_completed ?? emp.completed_today ?? 0}
-                        </strong>
-                      </span>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                ) : (
+                  <div className="py-8 text-center text-xs text-slate-400 dark:text-zinc-500">
+                    No bills generated yet today.
+                  </div>
+                )}
+
+                {/* Low Stock Quick Banner */}
+                {dashboardData?.low_stock_products && dashboardData.low_stock_products.length > 0 && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-2 mt-2">
+                    <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 font-bold min-w-0">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span className="truncate">
+                        {dashboardData.low_stock_products.length} products running low in store stock
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection('inventory')}
+                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-bold shrink-0 transition-colors"
+                    >
+                      Restock Now
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

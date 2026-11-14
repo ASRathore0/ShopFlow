@@ -8,8 +8,8 @@ export const shopService = {
   },
 
   // Get shop details & landing data
-  getShop: async (slug) => {
-    const res = await api.get(`/shops/${slug}`);
+  getShop: async (slug, params = {}) => {
+    const res = await api.get(`/shops/${slug}`, { params });
     return res.data;
   },
 

@@ -2,8 +2,8 @@ import api from './api';
 
 export const adminService = {
   // Dashboard metrics, charts & smart inventory insights
-  getDashboard: async () => {
-    const res = await api.get('/admin/dashboard');
+  getDashboard: async (params = {}) => {
+    const res = await api.get('/admin/dashboard', { params });
     return res.data;
   },
 
