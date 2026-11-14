@@ -78,6 +78,10 @@ class AdminDashboardController extends Controller
         $shopId = $this->getAdminShopId($request);
         $shop = Shop::find($shopId);
 
+        // Shop Timezone (default Asia/Kolkata for India retail stores)
+        $shopTz = !empty($shop?->timezone) && $shop->timezone !== 'UTC' ? $shop->timezone : 'Asia/Kolkata';
+        $nowLocal = Carbon::now($shopTz);
+
         // Period filter: 'today', 'week', 'month'
         $period = $request->input('period', 'today');
         if (!in_array($period, ['today', 'week', 'month'])) {
@@ -85,16 +89,16 @@ class AdminDashboardController extends Controller
         }
 
         if ($period === 'week') {
-            $startDate = now()->subDays(6)->startOfDay();
-            $endDate = now()->endOfDay();
+            $startDate = $nowLocal->copy()->subDays(6)->startOfDay()->utc();
+            $endDate = $nowLocal->copy()->endOfDay()->utc();
             $periodTitle = 'Past 7 Days';
         } elseif ($period === 'month') {
-            $startDate = now()->subDays(29)->startOfDay();
-            $endDate = now()->endOfDay();
+            $startDate = $nowLocal->copy()->subDays(29)->startOfDay()->utc();
+            $endDate = $nowLocal->copy()->endOfDay()->utc();
             $periodTitle = 'Past 30 Days';
         } else {
-            $startDate = now()->startOfDay();
-            $endDate = now()->endOfDay();
+            $startDate = $nowLocal->copy()->startOfDay()->utc();
+            $endDate = $nowLocal->copy()->endOfDay()->utc();
             $periodTitle = 'Today';
         }
 
@@ -215,12 +219,13 @@ class AdminDashboardController extends Controller
         // ========================================================
         $timelineChart = [];
         if ($period === 'today') {
-            // Hours 9 AM to 9 PM
-            $hours = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+            // Hours 9 AM to 10 PM in shop local timezone
+            $hours = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
             foreach ($hours as $h) {
-                $label = Carbon::createFromTime($h, 0, 0)->format('g A');
-                $matching = $periodOrders->filter(function ($ord) use ($h) {
-                    return (int) $ord->created_at->format('G') === $h;
+                $label = Carbon::createFromTime($h, 0, 0, $shopTz)->format('g A');
+                $matching = $periodOrders->filter(function ($ord) use ($h, $shopTz) {
+                    $localCreatedAt = $ord->created_at->copy()->timezone($shopTz);
+                    return (int) $localCreatedAt->format('G') === $h;
                 });
                 $timelineChart[] = [
                     'time_label' => $label,
@@ -230,10 +235,11 @@ class AdminDashboardController extends Controller
             }
         } elseif ($period === 'week') {
             for ($i = 6; $i >= 0; $i--) {
-                $date = now()->subDays($i);
+                $date = $nowLocal->copy()->subDays($i);
                 $label = $date->format('D, d M');
-                $matching = $periodOrders->filter(function ($ord) use ($date) {
-                    return $ord->created_at->isSameDay($date);
+                $matching = $periodOrders->filter(function ($ord) use ($date, $shopTz) {
+                    $localCreatedAt = $ord->created_at->copy()->timezone($shopTz);
+                    return $localCreatedAt->isSameDay($date);
                 });
                 $timelineChart[] = [
                     'time_label' => $label,
@@ -243,11 +249,12 @@ class AdminDashboardController extends Controller
             }
         } else { // month (30 days in 6 intervals of 5 days)
             for ($i = 29; $i >= 0; $i -= 5) {
-                $start = now()->subDays($i)->startOfDay();
-                $end = now()->subDays(max(0, $i - 4))->endOfDay();
+                $start = $nowLocal->copy()->subDays($i)->startOfDay();
+                $end = $nowLocal->copy()->subDays(max(0, $i - 4))->endOfDay();
                 $label = $start->format('d M') . ' - ' . $end->format('d M');
-                $matching = $periodOrders->filter(function ($ord) use ($start, $end) {
-                    return $ord->created_at->between($start, $end);
+                $matching = $periodOrders->filter(function ($ord) use ($start, $end, $shopTz) {
+                    $localCreatedAt = $ord->created_at->copy()->timezone($shopTz);
+                    return $localCreatedAt->between($start, $end);
                 });
                 $timelineChart[] = [
                     'time_label' => $label,
@@ -276,7 +283,8 @@ class AdminDashboardController extends Controller
             ->take(6)
             ->with(['items'])
             ->get()
-            ->map(function ($o) {
+            ->map(function ($o) use ($shopTz) {
+                $localTime = $o->created_at->copy()->timezone($shopTz);
                 return [
                     'id' => $o->id,
                     'bill_number' => $o->bill_number ?: ($o->bill_serial_no ? "#{$o->bill_serial_no}" : $o->order_number),
@@ -288,8 +296,8 @@ class AdminDashboardController extends Controller
                     'split_upi' => (float) $o->split_upi_amount,
                     'items_count' => $o->items->sum('quantity') ?: $o->items->count(),
                     'created_at' => $o->created_at->toIso8601String(),
-                    'time_formatted' => $o->created_at->format('h:i A'),
-                    'date_formatted' => $o->created_at->format('d M, Y'),
+                    'time_formatted' => $localTime->format('h:i A'),
+                    'date_formatted' => $localTime->format('d M, Y'),
                 ];
             });
 

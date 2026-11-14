@@ -50,6 +50,18 @@ export default function AdminDashboard() {
     }, 3500);
   };
 
+  const formatBillTime = (bill) => {
+    if (bill?.created_at) {
+      try {
+        const d = new Date(bill.created_at);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+      } catch (e) {}
+    }
+    return bill?.time_formatted || '';
+  };
+
   // Section specific data
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -2240,7 +2252,7 @@ export default function AdminDashboard() {
                         : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    Daily (Today)
+                    Today
                   </button>
                   <button
                     type="button"
@@ -2251,7 +2263,7 @@ export default function AdminDashboard() {
                         : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    Weekly (7 Days)
+                    7 Days
                   </button>
                   <button
                     type="button"
@@ -2262,19 +2274,19 @@ export default function AdminDashboard() {
                         : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    Monthly (30 Days)
+                    30 Days
                   </button>
                 </div>
 
                 {/* Quick New POS Bill button */}
-                <button
+                {/* <button
                   type="button"
                   onClick={() => setActiveSection('billing')}
                   className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/20 active:scale-95 transition-all"
                 >
                   <Receipt className="w-3.5 h-3.5" />
                   <span>+ New Bill</span>
-                </button>
+                </button> */}
               </div>
             </div>
 
@@ -2611,8 +2623,8 @@ export default function AdminDashboard() {
                           <div className="text-xs font-black text-slate-900 dark:text-white">
                             ₹{Number(bill.total_amount).toLocaleString('en-IN')}
                           </div>
-                          <span className="text-[10px] text-slate-400 dark:text-zinc-500">
-                            {bill.time_formatted}
+                          <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-medium">
+                            {formatBillTime(bill)}
                           </span>
                         </div>
                       </div>
