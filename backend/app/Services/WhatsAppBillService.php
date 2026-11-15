@@ -74,15 +74,26 @@ class WhatsAppBillService
 
         $subtotal = number_format((float) ($order->subtotal ?: $order->total_amount), 2);
         $total = number_format((float) $order->total_amount, 2);
+        $dueAmount = (float) ($order->due_amount ?: 0);
+        $isDue = $dueAmount > 0 || $order->payment_status === 'due' || $order->payment_method === 'due';
+        $paid = number_format((float) ($order->received_amount ?: ($isDue ? 0 : $order->total_amount)), 2);
+        $due = number_format((float) ($dueAmount ?: ($isDue ? $order->total_amount : 0)), 2);
+
         if (in_array($order->payment_method, ['partial', 'split'])) {
             $c = number_format((float) ($order->split_cash_amount ?: 0), 0);
             $u = number_format((float) ($order->split_upi_amount ?: 0), 0);
             $payMode = "PARTIAL (Cash: ₹{$c} + UPI: ₹{$u})";
+        } elseif ($order->payment_method === 'due') {
+            $payMode = "CREDIT / UDHAAR (Due)";
         } else {
             $payMode = strtoupper($order->payment_method ?: 'Cash');
         }
 
-        $msg = "🧾 *BILL MEMO - {$shopName}*\n";
+        if ($isDue && (float) $due > 0) {
+            $msg = "⚠️ *DUE BILL MEMO - {$shopName}*\n";
+        } else {
+            $msg = "🧾 *BILL MEMO - {$shopName}*\n";
+        }
         $msg .= "━━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "*Sr. No.:* #{$srNo}\n";
         $msg .= "*Date:* {$dateStr}\n";
@@ -100,8 +111,31 @@ class WhatsAppBillService
             $msg .= "*Discount:* - {$pct}%\n";
         }
 
-        $msg .= "*GRAND TOTAL: ₹{$total}*\n";
-        $msg .= "*Payment:* {$payMode} (" . ucfirst($order->payment_status ?: 'paid') . ")\n\n";
+        if ($isDue && (float) $due > 0) {
+            $msg .= "*GRAND TOTAL: ₹{$total}*\n";
+            if ((float) ($order->received_amount ?: 0) > 0) {
+                $advDetails = $order->payment_details ?: [];
+                $advMethod = strtoupper($advDetails['advance_payment_method'] ?? 'cash');
+                if ($advMethod === 'PARTIAL') {
+                    $c = number_format((float) ($order->split_cash_amount ?: 0), 0);
+                    $u = number_format((float) ($order->split_upi_amount ?: 0), 0);
+                    $advMethod = "PARTIAL (Cash: ₹{$c} + UPI: ₹{$u})";
+                }
+                $msg .= "*Amount Paid:* ₹{$paid} (via {$advMethod})\n";
+            } else {
+                $msg .= "*Amount Paid:* ₹0.00\n";
+            }
+            $msg .= "*🔴 OUTSTANDING DUE: ₹{$due}*\n";
+            if ($order->due_date) {
+                $dueDateStr = \Carbon\Carbon::parse($order->due_date)->format('d/m/Y');
+                $msg .= "*Promised Pay Date:* {$dueDateStr}\n";
+            }
+            $msg .= "*Payment Status:* " . strtoupper($order->payment_status ?: 'DUE') . "\n\n";
+            $msg .= "⚠️ *Kindly clear the pending balance of ₹{$due} at your earliest convenience or visit the store.*\n\n";
+        } else {
+            $msg .= "*GRAND TOTAL: ₹{$total}*\n";
+            $msg .= "*Payment:* {$payMode} (" . ucfirst($order->payment_status ?: 'paid') . ")\n\n";
+        }
         $msg .= "📄 *View / Download Your Official Bill Copy:*\n{$billCopyUrl}\n\n";
         $msg .= "🛍️ *Browse our live digital showroom:*\n{$frontstoreUrl}\n\n";
         $msg .= "📌 *Policy:* {$terms}\n\n";
@@ -358,6 +392,149 @@ class WhatsAppBillService
             'status' => 'none',
             'message' => 'Provider is set to manual/none. Direct API test is only for Meta or Twilio.',
         ];
+    }
+
+    /**
+     * Format a gentle, professional payment reminder for an outstanding bill.
+     */
+    public static function formatReminderMessage(Order $order, Shop $shop): string
+    {
+        $shopName = strtoupper($shop->name);
+        $srNo = $order->bill_number ?: ($order->bill_serial_no ?: $order->order_number);
+        $customer = $order->customer_name ?: 'Valued Customer';
+        $total = number_format((float) $order->total_amount, 2);
+        $paid = number_format((float) ($order->received_amount ?: 0), 2);
+        $due = number_format((float) ($order->due_amount ?: max(0, $order->total_amount - $order->received_amount)), 2);
+        $dueDateStr = $order->due_date ? \Carbon\Carbon::parse($order->due_date)->format('d/m/Y') : null;
+        $billCopyUrl = self::getBillCopyUrl($order, $shop);
+
+        $msg = "🔔 *PAYMENT REMINDER - {$shopName}*\n";
+        $msg .= "━━━━━━━━━━━━━━━━━━━━\n";
+        $msg .= "Dear *{$customer}*,\n";
+        $msg .= "This is a friendly reminder regarding your outstanding bill payment with *{$shop->name}*.\n\n";
+        $msg .= "📋 *Bill Details:*\n";
+        $msg .= "• *Bill No.:* #{$srNo}\n";
+        $msg .= "• *Bill Total:* ₹{$total}\n";
+        $msg .= "• *Already Paid:* ₹{$paid}\n";
+        $msg .= "• *⚠️ OUTSTANDING DUE:* *₹{$due}*\n";
+        if ($dueDateStr) {
+            $msg .= "• *Promised Pay Date:* {$dueDateStr}\n";
+        }
+        $msg .= "\n📄 *View Original Bill Copy:*\n{$billCopyUrl}\n\n";
+
+        $msg .= "Kindly clear the pending balance of *₹{$due}* at your earliest convenience or visit the store. If you have already made the payment, please disregard this message.\n\n";
+        $msg .= "Thank you for your business! 🙏\n*{$shop->name}*";
+        if ($shop->phone) {
+            $msg .= " (📞 {$shop->phone})";
+        }
+
+        return $msg;
+    }
+
+    /**
+     * Send payment reminder automatically or prepare fallback direct WhatsApp URL.
+     */
+    public function sendReminder(Order $order, ?Shop $shop = null): array
+    {
+        $shop = $shop ?: $order->shop;
+        if (!$shop) {
+            return ['success' => false, 'status' => 'no_shop', 'message' => 'Shop not found.'];
+        }
+
+        $phone = $order->customer_phone;
+        if (!$phone) {
+            return ['success' => false, 'status' => 'no_phone', 'message' => 'Customer phone number was not provided.'];
+        }
+
+        $cleanedPhone = self::cleanPhone($phone);
+        $provider = $shop->whatsapp_provider ?: 'none';
+        $config = $shop->whatsapp_config ?: [];
+        $messageBody = self::formatReminderMessage($order, $shop);
+        $fallbackLink = "https://api.whatsapp.com/send?phone={$cleanedPhone}&text=" . urlencode($messageBody);
+
+        $order->update([
+            'last_reminder_sent_at' => now(),
+        ]);
+
+        if ($provider === 'none') {
+            return [
+                'success' => false,
+                'status' => 'not_configured',
+                'provider' => 'none',
+                'fallback_url' => $fallbackLink,
+                'message' => 'Reminder prepared for 1-click WhatsApp delivery.',
+            ];
+        }
+
+        if ($provider === 'meta') {
+            return $this->sendViaMeta($config, $cleanedPhone, $messageBody, $order, $fallbackLink);
+        }
+
+        if ($provider === 'twilio') {
+            return $this->sendViaTwilio($config, $cleanedPhone, $messageBody, $order, $fallbackLink);
+        }
+
+        return ['success' => false, 'status' => 'unknown_provider', 'fallback_url' => $fallbackLink];
+    }
+
+    /**
+     * Format a confirmation receipt message when due payment is collected/settled.
+     */
+    public static function formatSettlementReceiptMessage(Order $order, Shop $shop, float $settledAmount, string $settledMethod): string
+    {
+        $shopName = strtoupper($shop->name);
+        $srNo = $order->bill_number ?: ($order->bill_serial_no ?: $order->order_number);
+        $customer = $order->customer_name ?: 'Valued Customer';
+        $settledFormatted = number_format($settledAmount, 2);
+        $remainingDue = number_format((float) ($order->due_amount ?: 0), 2);
+        $billCopyUrl = self::getBillCopyUrl($order, $shop);
+
+        $msg = "✅ *PAYMENT RECEIVED - {$shopName}*\n";
+        $msg .= "━━━━━━━━━━━━━━━━━━━━\n";
+        $msg .= "Dear *{$customer}*,\n";
+        $msg .= "We have received your payment of *₹{$settledFormatted}* via *" . strtoupper($settledMethod) . "* towards Bill #{$srNo}.\n\n";
+
+        if ((float) $remainingDue <= 0) {
+            $msg .= "🎉 *BILL FULLY CLEARED!* Outstanding balance is ₹0.00.\n\n";
+        } else {
+            $msg .= "⚠️ *Remaining Balance Due:* *₹{$remainingDue}*\n\n";
+        }
+
+        $msg .= "📄 *Updated Bill Copy:*\n{$billCopyUrl}\n\n";
+        $msg .= "Thank you for your payment! 🙏\n*{$shop->name}*";
+
+        return $msg;
+    }
+
+    /**
+     * Send payment settled confirmation to customer.
+     */
+    public function sendSettlementReceipt(Order $order, Shop $shop, float $settledAmount, string $settledMethod): array
+    {
+        $phone = $order->customer_phone;
+        if (!$phone) {
+            return ['success' => false, 'status' => 'no_phone', 'message' => 'Customer phone not provided.'];
+        }
+
+        $cleanedPhone = self::cleanPhone($phone);
+        $provider = $shop->whatsapp_provider ?: 'none';
+        $config = $shop->whatsapp_config ?: [];
+        $messageBody = self::formatSettlementReceiptMessage($order, $shop, $settledAmount, $settledMethod);
+        $fallbackLink = "https://api.whatsapp.com/send?phone={$cleanedPhone}&text=" . urlencode($messageBody);
+
+        if ($provider === 'none') {
+            return ['success' => false, 'status' => 'not_configured', 'fallback_url' => $fallbackLink];
+        }
+
+        if ($provider === 'meta') {
+            return $this->sendViaMeta($config, $cleanedPhone, $messageBody, $order, $fallbackLink);
+        }
+
+        if ($provider === 'twilio') {
+            return $this->sendViaTwilio($config, $cleanedPhone, $messageBody, $order, $fallbackLink);
+        }
+
+        return ['success' => false, 'fallback_url' => $fallbackLink];
     }
 }
 

@@ -65,19 +65,41 @@ export default function ShopBillReceipt({
     const customerPhone = bill.customer_phone ? bill.customer_phone.replace(/\D/g, '') : '';
     const phoneParam = customerPhone ? (customerPhone.length === 10 ? `91${customerPhone}` : customerPhone) : '';
 
+    const isDue = (parseFloat(bill.due_amount) > 0) || bill.payment_status === 'due' || bill.payment_method === 'due';
+    const dueAmtVal = parseFloat(bill.due_amount) > 0 ? parseFloat(bill.due_amount) : (isDue ? Math.max(0, parseFloat(bill.total_amount || 0) - parseFloat(bill.received_amount || 0)) : 0);
+    const paidAmtVal = parseFloat(bill.received_amount || 0);
+
     let itemsText = items.map((it, idx) => `${idx + 1}. ${it.item_name || it.product?.name || 'Item'} (Qty: ${it.quantity}) - ₹${parseFloat(it.total_price || 0).toFixed(2)}`).join('\n');
 
-    const message = `🧾 *BILL RECEIPT - ${shopName.toUpperCase()}*\n` +
-      `*Sr. No.:* ${bill.bill_number || bill.bill_serial_no || bill.order_number}\n` +
-      `*Date:* ${formattedDate}\n` +
-      `*Customer:* ${bill.customer_name || 'Valued Customer'}\n\n` +
-      `*Items:*\n${itemsText}\n\n` +
-      `*Total Amount:* ₹${parseFloat(bill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-      `*Payment:* ${bill.payment_method === 'partial' || bill.payment_method === 'split' ? `PARTIAL (Cash: ₹${parseFloat(bill.split_cash_amount || 0).toFixed(0)} + UPI: ₹${parseFloat(bill.split_upi_amount || 0).toFixed(0)})` : (bill.payment_method || 'Cash').toUpperCase()} (${bill.payment_status || 'Paid'})\n\n` +
-      `📄 *View / Download Your Official Bill Memo:*\n${billCopyUrl}\n\n` +
-      `🛍️ *Browse our live digital showroom:*\n${frontstoreUrl}\n\n` +
-      `*Note:* ${shopTerms}\n` +
-      `Thank you for shopping with us!`;
+    let message = '';
+    if (isDue && dueAmtVal > 0) {
+      message = `⚠️ *DUE BILL MEMO - ${shopName.toUpperCase()}*\n` +
+        `*Sr. No.:* ${bill.bill_number || bill.bill_serial_no || bill.order_number}\n` +
+        `*Date:* ${formattedDate}\n` +
+        `*Customer:* ${bill.customer_name || 'Valued Customer'}\n\n` +
+        `*Items:*\n${itemsText}\n\n` +
+        `*Grand Total:* ₹${parseFloat(bill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `*Amount Paid:* ₹${paidAmtVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `*🔴 OUTSTANDING DUE:* *₹${dueAmtVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}*\n` +
+        (bill.due_date ? `*📅 Promised Pay Date:* ${new Date(bill.due_date).toLocaleDateString('en-IN')}\n` : '') +
+        `*Status:* DUE / PENDING\n\n` +
+        `📄 *View / Download Your Official Due Bill Memo:*\n${billCopyUrl}\n\n` +
+        `🛍️ *Browse our live digital showroom:*\n${frontstoreUrl}\n\n` +
+        `*Note:* Kindly clear the due amount at your earliest convenience or visit the store.\n` +
+        `Thank you for shopping with us! 🙏`;
+    } else {
+      message = `🧾 *BILL RECEIPT - ${shopName.toUpperCase()}*\n` +
+        `*Sr. No.:* ${bill.bill_number || bill.bill_serial_no || bill.order_number}\n` +
+        `*Date:* ${formattedDate}\n` +
+        `*Customer:* ${bill.customer_name || 'Valued Customer'}\n\n` +
+        `*Items:*\n${itemsText}\n\n` +
+        `*Total Amount:* ₹${parseFloat(bill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `*Payment:* ${bill.payment_method === 'partial' || bill.payment_method === 'split' ? `PARTIAL (Cash: ₹${parseFloat(bill.split_cash_amount || 0).toFixed(0)} + UPI: ₹${parseFloat(bill.split_upi_amount || 0).toFixed(0)})` : (bill.payment_method || 'Cash').toUpperCase()} (${bill.payment_status || 'Paid'})\n\n` +
+        `📄 *View / Download Your Official Bill Memo:*\n${billCopyUrl}\n\n` +
+        `🛍️ *Browse our live digital showroom:*\n${frontstoreUrl}\n\n` +
+        `*Note:* ${shopTerms}\n` +
+        `Thank you for shopping with us!`;
+    }
 
     const waUrl = phoneParam
       ? `https://api.whatsapp.com/send?phone=${phoneParam}&text=${encodeURIComponent(message)}`
@@ -348,6 +370,34 @@ export default function ShopBillReceipt({
                   ₹{parseFloat(bill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
               </tr>
+
+              {/* If Due / Partial Paid */}
+              {((parseFloat(bill.due_amount) > 0) || bill.payment_status === 'due' || bill.payment_method === 'due') && (() => {
+                const totalAmt = parseFloat(bill.total_amount || 0);
+                const paidAmt = parseFloat(bill.received_amount || 0);
+                const dueAmt = parseFloat(bill.due_amount) > 0 ? parseFloat(bill.due_amount) : Math.max(0, totalAmt - paidAmt);
+
+                return (
+                  <>
+                    <tr className="border-t border-black text-xs">
+                      <td colSpan="3" className="border-r-2 border-black"></td>
+                      <td className="border-r-2 border-black text-right px-2 py-0.5 font-bold text-slate-700">Amount Paid:</td>
+                      <td className="text-right px-2 py-0.5 font-bold text-slate-800">
+                        ₹{paidAmt.toFixed(2)}
+                      </td>
+                    </tr>
+                    <tr className="border-t-2 border-red-600 bg-red-50 text-xs sm:text-sm font-black text-red-700">
+                      <td colSpan="3" className="border-r-2 border-black"></td>
+                      <td className="border-r-2 border-black text-center py-1 px-2 font-black uppercase text-red-700">
+                        BALANCE DUE
+                      </td>
+                      <td className="text-right py-1 px-2 font-black text-red-700">
+                        ₹{dueAmt.toFixed(2)}
+                      </td>
+                    </tr>
+                  </>
+                );
+              })()}
             </tbody>
           </table>
         </div>
@@ -367,7 +417,11 @@ export default function ShopBillReceipt({
               <div className="text-[10px] font-semibold text-slate-700 leading-snug">
                 Mode:{' '}
                 <span className="uppercase font-bold text-black">
-                  {bill.payment_method === 'partial' || bill.payment_method === 'split' ? (
+                  {bill.payment_method === 'due' ? (
+                    <span className="text-red-700 font-extrabold">
+                      DUE {parseFloat(bill.received_amount || 0) > 0 ? `(ADVANCE: ₹${parseFloat(bill.received_amount).toFixed(0)} VIA ${(bill.payment_details?.advance_payment_method || 'CASH').toUpperCase()})` : ''}
+                    </span>
+                  ) : bill.payment_method === 'partial' || bill.payment_method === 'split' ? (
                     <>
                       PARTIAL (Cash: ₹{parseFloat(bill.split_cash_amount || 0).toFixed(0)} + UPI: ₹{parseFloat(bill.split_upi_amount || 0).toFixed(0)})
                     </>
@@ -375,6 +429,7 @@ export default function ShopBillReceipt({
                     bill.payment_method
                   )}
                 </span>
+                {bill.due_date && <span> • <strong>Pay by: {new Date(bill.due_date).toLocaleDateString('en-IN')}</strong></span>}
                 {bill.soundbox_account_name && <span> • <strong>{bill.soundbox_account_name}</strong></span>}
                 {bill.utr_number && <span className="font-mono"> (UTR: {bill.utr_number})</span>}
                 {!bill.soundbox_account_name && !bill.utr_number && ` (${bill.payment_status || 'Paid'})`}

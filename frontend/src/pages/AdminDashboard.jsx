@@ -22,6 +22,7 @@ import { removeImageBackground } from '../services/bgRemovalService';
 import StorefrontThemeCustomizer from '../components/StorefrontThemeCustomizer';
 import RequestStatusBadge from '../components/RequestStatusBadge';
 import PosBillingView from '../components/PosBillingView';
+import DueBillsModal from '../components/DueBillsModal';
 import { billingService } from '../services/billingService';
 
 export default function AdminDashboard() {
@@ -33,6 +34,7 @@ export default function AdminDashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [overviewPeriod, setOverviewPeriod] = useState('today'); // 'today', 'week', 'month'
   const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
+  const [showDueBillsModal, setShowDueBillsModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -2295,8 +2297,9 @@ export default function AdminDashboard() {
                 2. Period Sales Revenue (₹)
                 3. Bills Generated & Units Sold
                 4. Payment Mode Split (Cash vs UPI)
+                5. Customer Pending Dues / Udhaar (Click to View All Due Bills)
             */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
               {/* 1. Shoppers / Store Visitors */}
               <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#18181B] border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -2390,6 +2393,33 @@ export default function AdminDashboard() {
                 </div>
                 <span className="text-[10px] text-slate-400 dark:text-zinc-500 block truncate pt-0.5 border-t border-slate-100 dark:border-zinc-800">
                   Drawer Cash + Bank UPI reconciled
+                </span>
+              </div>
+
+              {/* 5. Customer Pending Dues (Udhaar / Credit Ledger) */}
+              <div
+                onClick={() => setShowDueBillsModal(true)}
+                className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#18181B] border-2 border-amber-300 dark:border-amber-700/60 shadow-sm space-y-1.5 cursor-pointer hover:shadow-md hover:border-amber-500 hover:scale-[1.01] active:scale-[0.99] transition-all col-span-2 lg:col-span-1"
+                title="Click to view and manage all pending customer due bills"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs text-amber-800 dark:text-amber-400 font-bold flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Customer Due (Udhaar)</span>
+                  </span>
+                  <span className="p-1.5 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="w-4 h-4" />
+                  </span>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400">
+                  ₹{Number(metrics.total_due_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] sm:text-xs text-amber-700 dark:text-amber-400 font-bold flex items-center justify-between">
+                  <span>{metrics.due_bills_count || 0} unpaid bills</span>
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 underline font-semibold">View All →</span>
+                </div>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 block truncate">
+                  Click to send reminders & collect dues
                 </span>
               </div>
             </div>
@@ -6751,6 +6781,20 @@ export default function AdminDashboard() {
           onClose={() => setShowQRModal(false)}
         />
       )}
+
+      {/* ======================================================== */}
+      {/* CUSTOMER DUE BILLS & CREDIT LEDGER MODAL */}
+      {/* ======================================================== */}
+      <DueBillsModal
+        isOpen={showDueBillsModal}
+        onClose={() => setShowDueBillsModal(false)}
+        role="admin"
+        onBillUpdated={() => {
+          adminService.getDashboard({ period: overviewPeriod }).then((res) => {
+            if (res?.data) setDashboardData(res.data);
+          });
+        }}
+      />
 
       {/* ======================================================== */}
       {/* IMAGE CROP & ROTATE MODAL */}

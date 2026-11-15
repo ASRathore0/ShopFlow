@@ -137,13 +137,16 @@ class AdminDashboardController extends Controller
 
         // Payment Mode Breakdown
         $cashSales = (float) $periodOrders->where('payment_method', 'cash')->sum('total_amount')
-            + (float) $periodOrders->where('payment_method', 'partial')->sum('split_cash_amount');
+            + (float) $periodOrders->where('payment_method', 'partial')->sum('split_cash_amount')
+            + (float) $periodOrders->where('payment_method', 'due')->sum('split_cash_amount');
 
         $upiSales = (float) $periodOrders->where('payment_method', 'upi')->sum('total_amount')
-            + (float) $periodOrders->where('payment_method', 'partial')->sum('split_upi_amount');
+            + (float) $periodOrders->where('payment_method', 'partial')->sum('split_upi_amount')
+            + (float) $periodOrders->where('payment_method', 'due')->sum('split_upi_amount');
 
         $cardSales = (float) $periodOrders->where('payment_method', 'card')->sum('total_amount')
-            + (float) $periodOrders->where('payment_method', 'partial')->sum('split_card_amount');
+            + (float) $periodOrders->where('payment_method', 'partial')->sum('split_card_amount')
+            + (float) $periodOrders->where('payment_method', 'due')->sum('split_card_amount');
 
         // ========================================================
         // 3. TOP SELLING ITEMS & SALES BY CATEGORY (FROM BILLING)
@@ -328,7 +331,52 @@ class AdminDashboardController extends Controller
             ->sum(DB::raw('inventory.available_quantity * products.price'));
 
         // ========================================================
-        // 7. NOTIFICATIONS
+        // 7. DUE PAYMENTS & OUTSTANDING CREDIT (UDHAAR)
+        // ========================================================
+        $dueQuery = Order::where('shop_id', $shopId)
+            ->where('type', 'pos_billing')
+            ->where(function ($q) {
+                $q->where('due_amount', '>', 0)
+                  ->orWhereIn('payment_status', ['due', 'partial'])
+                  ->orWhere('payment_method', 'due');
+            });
+
+        $totalDueAmount = (float) $dueQuery->sum(DB::raw('CASE WHEN due_amount > 0 THEN due_amount ELSE GREATEST(0, total_amount - COALESCE(received_amount, 0)) END'));
+        $dueBillsCount = (int) $dueQuery->count();
+
+        $topDueBills = Order::where('shop_id', $shopId)
+            ->where('type', 'pos_billing')
+            ->where(function ($q) {
+                $q->where('due_amount', '>', 0)
+                  ->orWhereIn('payment_status', ['due', 'partial'])
+                  ->orWhere('payment_method', 'due');
+            })
+            ->orderBy('due_amount', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->take(10)
+            ->get()
+            ->map(function ($o) use ($shopTz) {
+                $localTime = $o->created_at->copy()->timezone($shopTz);
+                $calculatedDue = (float) ($o->due_amount > 0 ? $o->due_amount : max(0, $o->total_amount - (float) $o->received_amount));
+                return [
+                    'id' => $o->id,
+                    'bill_number' => $o->bill_number ?: ($o->bill_serial_no ? "#{$o->bill_serial_no}" : $o->order_number),
+                    'customer_name' => $o->customer_name ?: 'Walk-in Customer',
+                    'customer_phone' => $o->customer_phone,
+                    'total_amount' => (float) $o->total_amount,
+                    'received_amount' => (float) $o->received_amount,
+                    'due_amount' => $calculatedDue,
+                    'due_date' => $o->due_date ? Carbon::parse($o->due_date)->format('d M, Y') : null,
+                    'due_date_raw' => $o->due_date,
+                    'last_reminder_sent_at' => $o->last_reminder_sent_at ? Carbon::parse($o->last_reminder_sent_at)->timezone($shopTz)->format('d M, h:i A') : null,
+                    'created_at' => $o->created_at->toIso8601String(),
+                    'time_formatted' => $localTime->format('h:i A'),
+                    'date_formatted' => $localTime->format('d M, Y'),
+                ];
+            });
+
+        // ========================================================
+        // 8. NOTIFICATIONS
         // ========================================================
         $notifications = Notification::where('shop_id', $shopId)
             ->orderBy('created_at', 'desc')
@@ -350,6 +398,9 @@ class AdminDashboardController extends Controller
                     'period_bills_count' => $periodBillsCount,
                     'average_bill_value' => $averageBillValue,
                     'total_units_sold' => $totalUnitsSold,
+                    // Outstanding Due
+                    'total_due_amount' => round($totalDueAmount, 2),
+                    'due_bills_count' => $dueBillsCount,
                     // Payment split
                     'cash_sales' => $cashSales,
                     'upi_sales' => $upiSales,
@@ -366,6 +417,7 @@ class AdminDashboardController extends Controller
                 'timeline_chart' => $timelineChart,
                 'peak_label' => $peakLabel,
                 'recent_bills' => $recentBills,
+                'top_due_bills' => $topDueBills,
                 'low_stock_products' => $lowStockProducts,
                 'notifications' => $notifications,
             ],

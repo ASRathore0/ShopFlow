@@ -4,8 +4,8 @@ import {
   Receipt, Plus, Minus, Trash2, Search, QrCode, Printer,
   Share2, Check, RefreshCw, ShoppingCart, User, Phone,
   CreditCard, Banknote, Sparkles, AlertCircle, AlertTriangle, ArrowRight,
-  Calendar, Layers, Filter, FileText, ChevronRight, CheckCircle2,
-  DollarSign, Zap, Tag, Edit2, Volume2, ShieldCheck, Radio, Clock, X, UserCheck
+  Calendar, Layers, Filter, FileText, ChevronRight, ChevronDown, CheckCircle2,
+  DollarSign, Zap, Tag, Edit2, Volume2, ShieldCheck, Radio, Clock, X, UserCheck, MessageCircle
 } from 'lucide-react';
 import { billingService } from '../services/billingService';
 import ShopBillReceipt from './ShopBillReceipt';
@@ -79,13 +79,31 @@ export default function PosBillingView({
   const [splitUpiAmount, setSplitUpiAmount] = useState('');
   const [receivedAmount, setReceivedAmount] = useState('');
   const [notes, setNotes] = useState('');
+  const [dueAdvanceAmount, setDueAdvanceAmount] = useState('');
+  const [dueAdvanceMode, setDueAdvanceMode] = useState('cash'); // 'cash' | 'upi' | 'card' | 'partial'
+  const [dueAdvanceCashAmount, setDueAdvanceCashAmount] = useState('');
+  const [dueAdvanceUpiAmount, setDueAdvanceUpiAmount] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [settleModalBill, setSettleModalBill] = useState(null);
+  const [settleAmount, setSettleAmount] = useState('');
+  const [settleMethod, setSettleMethod] = useState('cash'); // 'cash' | 'upi' | 'card'
+  const [settleNotes, setSettleNotes] = useState('');
+  const [isSettling, setIsSettling] = useState(false);
+  const [sendingReminderId, setSendingReminderId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Generated Bill for Receipt Modal
   const [activeReceiptBill, setActiveReceiptBill] = useState(null);
 
-  // Invoices List State
+  // Invoices List State & 20-Bill Pagination
   const [invoices, setInvoices] = useState([]);
+  const [invoicesPagination, setInvoicesPagination] = useState({
+    currentPage: 1,
+    lastPage: 1,
+    total: 0,
+    hasMore: false,
+  });
+  const [isLoadingMoreInvoices, setIsLoadingMoreInvoices] = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [invoicePaymentFilter, setInvoicePaymentFilter] = useState('all');
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
@@ -552,10 +570,17 @@ export default function PosBillingView({
     }
   };
 
-  const loadInvoices = async (period = overviewPeriod) => {
-    setIsLoadingInvoices(true);
+  const loadInvoices = async (period = overviewPeriod, page = 1, append = false) => {
+    if (append) {
+      setIsLoadingMoreInvoices(true);
+    } else {
+      setIsLoadingInvoices(true);
+    }
     try {
-      const params = {};
+      const params = {
+        per_page: 20,
+        page: page,
+      };
       if (invoiceSearch) params.search = invoiceSearch;
       if (invoicePaymentFilter !== 'all') params.payment_method = invoicePaymentFilter;
 
@@ -578,12 +603,37 @@ export default function PosBillingView({
 
       const res = await billingService.getInvoices(params, role);
       if (res && res.data) {
-        setInvoices(res.data.data || res.data || []);
+        const paginated = res.data.data ? res.data : null;
+        const list = Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
+        
+        if (append) {
+          setInvoices((prev) => [...prev, ...list]);
+        } else {
+          setInvoices(list);
+        }
+
+        const curPage = paginated?.current_page || page;
+        const lastPage = paginated?.last_page || 1;
+        const total = paginated?.total || (append ? invoices.length + list.length : list.length);
+
+        setInvoicesPagination({
+          currentPage: curPage,
+          lastPage: lastPage,
+          total: total,
+          hasMore: curPage < lastPage,
+        });
       }
     } catch (err) {
       console.error('Failed to load invoices', err);
     } finally {
       setIsLoadingInvoices(false);
+      setIsLoadingMoreInvoices(false);
+    }
+  };
+
+  const handleShowMoreInvoices = () => {
+    if (invoicesPagination.hasMore && !isLoadingMoreInvoices) {
+      loadInvoices(overviewPeriod, invoicesPagination.currentPage + 1, true);
     }
   };
 
@@ -884,8 +934,28 @@ export default function PosBillingView({
 
     setIsSubmitting(true);
     try {
-      const splitCashVal = paymentMethod === 'partial' ? (parseFloat(splitCashAmount) || 0) : null;
-      const splitUpiVal = paymentMethod === 'partial' ? (parseFloat(splitUpiAmount) || 0) : null;
+      let receivedVal = totalAmount;
+      let splitCashVal = paymentMethod === 'partial' ? (parseFloat(splitCashAmount) || 0) : null;
+      let splitUpiVal = paymentMethod === 'partial' ? (parseFloat(splitUpiAmount) || 0) : null;
+      let splitCardVal = null;
+
+      if (paymentMethod === 'cash') {
+        receivedVal = parseFloat(receivedAmount) || totalAmount;
+      } else if (paymentMethod === 'due') {
+        receivedVal = parseFloat(dueAdvanceAmount) || 0;
+        if (receivedVal > 0) {
+          if (dueAdvanceMode === 'cash') {
+            splitCashVal = receivedVal;
+          } else if (dueAdvanceMode === 'upi') {
+            splitUpiVal = receivedVal;
+          } else if (dueAdvanceMode === 'card') {
+            splitCardVal = receivedVal;
+          } else if (dueAdvanceMode === 'partial') {
+            splitCashVal = parseFloat(dueAdvanceCashAmount) || 0;
+            splitUpiVal = parseFloat(dueAdvanceUpiAmount) || 0;
+          }
+        }
+      }
 
       const payload = {
         customer_name: customerName.trim() || 'Walk-in Customer',
@@ -902,13 +972,16 @@ export default function PosBillingView({
         discount_amount: parseFloat(discountAmount) || 0,
         tax_amount: parseFloat(taxAmount) || 0,
         payment_method: paymentMethod,
+        advance_payment_method: paymentMethod === 'due' && receivedVal > 0 ? dueAdvanceMode : null,
         split_cash_amount: splitCashVal,
         split_upi_amount: splitUpiVal,
-        received_amount: paymentMethod === 'cash' ? (parseFloat(receivedAmount) || totalAmount) : totalAmount,
+        split_card_amount: splitCardVal,
+        received_amount: receivedVal,
+        due_date: (paymentMethod === 'due' && dueDate) ? dueDate : null,
         notes: notes.trim() || null,
-        soundbox_device_id: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0)) ? (selectedSoundbox?.id || null) : null,
-        soundbox_account_name: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0)) ? (selectedSoundbox?.name || null) : null,
-        utr_number: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0)) ? (soundboxUtr.trim() || null) : null,
+        soundbox_device_id: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0) || (paymentMethod === 'due' && (splitUpiVal || 0) > 0)) ? (selectedSoundbox?.id || null) : null,
+        soundbox_account_name: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0) || (paymentMethod === 'due' && (splitUpiVal || 0) > 0)) ? (selectedSoundbox?.name || null) : null,
+        utr_number: (paymentMethod === 'upi' || (paymentMethod === 'partial' && (splitUpiVal || 0) > 0) || (paymentMethod === 'due' && (splitUpiVal || 0) > 0)) ? (soundboxUtr.trim() || null) : null,
       };
 
       let res;
@@ -942,6 +1015,11 @@ export default function PosBillingView({
         setPaymentMethod('cash');
         setSplitCashAmount('');
         setSplitUpiAmount('');
+        setDueAdvanceAmount('');
+        setDueAdvanceMode('cash');
+        setDueAdvanceCashAmount('');
+        setDueAdvanceUpiAmount('');
+        setDueDate('');
         setTaxAmount(0);
         setReceivedAmount('');
         setNotes('');
@@ -955,6 +1033,70 @@ export default function PosBillingView({
       alert(err.response?.data?.message || 'Failed to create bill. Please check inputs.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSendDueReminder = async (bill) => {
+    if (!bill.customer_phone) {
+      showToast('Customer phone number is missing on this bill.', 'error');
+      return;
+    }
+    setSendingReminderId(bill.id);
+    try {
+      const res = await billingService.sendDueReminder(bill.id, role);
+      showToast('Payment reminder sent to customer!', 'success');
+      if (res?.data?.fallback_url) {
+        window.open(res.data.fallback_url, '_blank');
+      }
+      loadInvoices(overviewPeriod, invoicesPagination.currentPage, false);
+    } catch (err) {
+      console.error('Failed to send reminder:', err);
+      showToast(err.response?.data?.message || 'Failed to send payment reminder.', 'error');
+    } finally {
+      setSendingReminderId(null);
+    }
+  };
+
+  const handleOpenSettle = (bill) => {
+    const remainingDue = parseFloat(bill.due_amount) > 0
+      ? parseFloat(bill.due_amount)
+      : Math.max(0, parseFloat(bill.total_amount || 0) - parseFloat(bill.received_amount || 0));
+    setSettleModalBill(bill);
+    setSettleAmount(String(remainingDue));
+    setSettleMethod('cash');
+    setSettleNotes('');
+  };
+
+  const handleConfirmSettle = async (e) => {
+    e?.preventDefault();
+    if (!settleModalBill) return;
+
+    const amt = parseFloat(settleAmount);
+    if (!amt || amt <= 0) {
+      showToast('Please enter a valid payment amount.', 'error');
+      return;
+    }
+
+    setIsSettling(true);
+    try {
+      const res = await billingService.settleDuePayment(
+        settleModalBill.id,
+        {
+          amount: amt,
+          payment_method: settleMethod,
+          notes: settleNotes.trim() || null,
+        },
+        role
+      );
+
+      showToast(res.message || 'Payment recorded successfully!', 'success');
+      setSettleModalBill(null);
+      loadInvoices(overviewPeriod, 1, false);
+    } catch (err) {
+      console.error('Failed to settle due:', err);
+      showToast(err.response?.data?.message || 'Failed to settle due payment.', 'error');
+    } finally {
+      setIsSettling(false);
     }
   };
 
@@ -2101,7 +2243,7 @@ export default function PosBillingView({
                 <div className="text-xs font-bold text-slate-700 dark:text-zinc-300">
                   Payment Mode
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('cash')}
@@ -2158,9 +2300,231 @@ export default function PosBillingView({
                     }`}
                   >
                     <Layers className="w-4 h-4" />
-                    <span>Partial / Split</span>
+                    <span>Partial</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentMethod('due');
+                      if (!dueAdvanceAmount) setDueAdvanceAmount('0');
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                      paymentMethod === 'due'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-600/20'
+                        : 'bg-slate-50 dark:bg-zinc-850 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>Due</span>
                   </button>
                 </div>
+
+                {/* Due / Udhaar (Credit) Breakdown Box */}
+                {paymentMethod === 'due' && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/25 border-2 border-amber-300/80 dark:border-amber-700/60 space-y-3 text-xs animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5 text-xs">
+                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        Due/Udhaar Bill Details
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDueAdvanceAmount('0')}
+                          className="px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-700 text-[10px] font-bold text-amber-800 dark:text-amber-300 hover:bg-amber-50 cursor-pointer shadow-2xs"
+                        >
+                          ₹0 Paid (Full Due)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const half = Math.round((totalAmount / 2) * 100) / 100;
+                            setDueAdvanceAmount(String(half));
+                          }}
+                          className="px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-700 text-[10px] font-bold text-amber-800 dark:text-amber-300 hover:bg-amber-50 cursor-pointer shadow-2xs"
+                        >
+                          50% Advance
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {/* Advance Amount Received Now */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300">
+                          Amount Paid Now (₹):
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={dueAdvanceAmount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setDueAdvanceAmount(val);
+                              const adv = parseFloat(val) || 0;
+                              if (dueAdvanceMode === 'partial' && adv > 0) {
+                                const half = Math.round((adv / 2) * 100) / 100;
+                                setDueAdvanceCashAmount(String(half));
+                                setDueAdvanceUpiAmount(String(Math.round((adv - half) * 100) / 100));
+                              }
+                            }}
+                            placeholder="0"
+                            className="w-full pl-6 pr-2 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-amber-300 dark:border-amber-700 font-black text-xs text-slate-900 dark:text-white focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Promised Payment Due Date */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-amber-600" />
+                          <span>Promised Pay Date (Optional):</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-amber-300 dark:border-amber-700 font-bold text-xs text-slate-900 dark:text-white focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Advance Payment Accepted Mode Selector (Cash, UPI, Card, Partial) */}
+                    {parseFloat(dueAdvanceAmount) > 0 && (
+                      <div className="p-3 rounded-xl bg-white dark:bg-zinc-800 border-2 border-amber-400 dark:border-amber-600 space-y-2.5 animate-fade-in shadow-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-[11px] text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                            <CreditCard className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Advance Paid Via (Accept Mode):</span>
+                          </span>
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                            Collecting ₹{parseFloat(dueAdvanceAmount).toFixed(2)} Now
+                          </span>
+                        </div>
+
+                        {/* 4 Mode Buttons for Advance: Cash, UPI, Card, Partial */}
+                        <div className="grid grid-cols-4 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setDueAdvanceMode('cash')}
+                            className={`py-2 px-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                              dueAdvanceMode === 'cash'
+                                ? 'bg-blue-600 text-white border border-blue-600 shadow-sm font-black'
+                                : 'bg-slate-50 dark:bg-zinc-700/60 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-100'
+                            }`}
+                          >
+                            <Banknote className="w-3.5 h-3.5" />
+                            <span>Cash</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDueAdvanceMode('upi')}
+                            className={`py-2 px-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                              dueAdvanceMode === 'upi'
+                                ? 'bg-emerald-600 text-white border border-emerald-600 shadow-sm font-black'
+                                : 'bg-slate-50 dark:bg-zinc-700/60 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-100'
+                            }`}
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                            <span>UPI / QR</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDueAdvanceMode('card')}
+                            className={`py-2 px-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                              dueAdvanceMode === 'card'
+                                ? 'bg-indigo-600 text-white border border-indigo-600 shadow-sm font-black'
+                                : 'bg-slate-50 dark:bg-zinc-700/60 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-100'
+                            }`}
+                          >
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span>Card</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDueAdvanceMode('partial');
+                              const adv = parseFloat(dueAdvanceAmount) || 0;
+                              if (adv > 0) {
+                                const half = Math.round((adv / 2) * 100) / 100;
+                                setDueAdvanceCashAmount(String(half));
+                                setDueAdvanceUpiAmount(String(Math.round((adv - half) * 100) / 100));
+                              }
+                            }}
+                            className={`py-2 px-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                              dueAdvanceMode === 'partial'
+                                ? 'bg-purple-600 text-white border border-purple-600 shadow-sm font-black'
+                                : 'bg-slate-50 dark:bg-zinc-700/60 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 hover:bg-slate-100'
+                            }`}
+                          >
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>Partial</span>
+                          </button>
+                        </div>
+
+                        {/* If Partial Advance Selected (Breakdown between Cash & UPI) */}
+                        {dueAdvanceMode === 'partial' && (
+                          <div className="pt-2 border-t border-slate-100 dark:border-zinc-700 space-y-2">
+                            <span className="text-[10px] font-bold text-purple-900 dark:text-purple-300 block">
+                              Split the ₹{parseFloat(dueAdvanceAmount).toFixed(0)} Advance Payment:
+                            </span>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <span className="text-[10px] font-semibold text-slate-600 dark:text-zinc-400">Cash Part (₹):</span>
+                                <input
+                                  type="number"
+                                  value={dueAdvanceCashAmount}
+                                  onChange={(e) => {
+                                    setDueAdvanceCashAmount(e.target.value);
+                                    const c = parseFloat(e.target.value) || 0;
+                                    const adv = parseFloat(dueAdvanceAmount) || 0;
+                                    setDueAdvanceUpiAmount(String(Math.max(0, Math.round((adv - c) * 100) / 100)));
+                                  }}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-purple-200 dark:border-purple-700 text-xs font-bold text-slate-900 dark:text-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-[10px] font-semibold text-slate-600 dark:text-zinc-400">UPI Part (₹):</span>
+                                <input
+                                  type="number"
+                                  value={dueAdvanceUpiAmount}
+                                  onChange={(e) => {
+                                    setDueAdvanceUpiAmount(e.target.value);
+                                    const u = parseFloat(e.target.value) || 0;
+                                    const adv = parseFloat(dueAdvanceAmount) || 0;
+                                    setDueAdvanceCashAmount(String(Math.max(0, Math.round((adv - u) * 100) / 100)));
+                                  }}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-purple-200 dark:border-purple-700 text-xs font-bold text-slate-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Calculated Balance Due Banner */}
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-100/90 dark:bg-amber-900/40 border border-amber-300/70 text-amber-950 dark:text-amber-200 font-extrabold">
+                      <span>Total Due (Remaining):</span>
+                      <span className="text-sm font-black text-red-600 dark:text-red-400">
+                        ₹{Math.max(0, totalAmount - (parseFloat(dueAdvanceAmount) || 0)).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {!customerPhone.trim() && (
+                      <div className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 p-2 rounded-xl border border-amber-400/30 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                        <span>💡 Enter customer phone number above so Due Bill & WhatsApp payment reminders can be sent automatically.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Cash Change Calculator */}
                 {paymentMethod === 'cash' && (
@@ -2820,6 +3184,7 @@ export default function PosBillingView({
                 <option value="upi">UPI Only</option>
                 <option value="card">Card Only</option>
                 <option value="partial">Partial / Split</option>
+                <option value="due">🔴 Due / Udhaar</option>
               </select>
 
               <button
@@ -2892,17 +3257,33 @@ export default function PosBillingView({
                         </td>
                         <td className="p-4">
                           <div className="flex flex-col gap-1 items-start">
-                            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
-                              inv.payment_method === 'upi'
-                                ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                                : inv.payment_method === 'card'
-                                ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
-                                : inv.payment_method === 'partial' || inv.payment_method === 'split'
-                                ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
-                                : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                            }`}>
-                              {inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial / Split' : (inv.payment_method || 'Cash')}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
+                                inv.payment_method === 'due'
+                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                                  : inv.payment_method === 'upi'
+                                  ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                  : inv.payment_method === 'card'
+                                  ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
+                                  : inv.payment_method === 'partial' || inv.payment_method === 'split'
+                                  ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
+                                  : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                              }`}>
+                                {inv.payment_method === 'due' ? 'Due / Udhaar' : (inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial / Split' : (inv.payment_method || 'Cash'))}
+                              </span>
+
+                              {(parseFloat(inv.due_amount) > 0 || inv.payment_status === 'due') && (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                                  Due: ₹{parseFloat(inv.due_amount || (inv.total_amount - inv.received_amount)).toFixed(0)}
+                                </span>
+                              )}
+                            </div>
+
+                            {inv.due_date && (
+                              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                                Pay by: {new Date(inv.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                              </span>
+                            )}
                             {(inv.payment_method === 'partial' || inv.payment_method === 'split') && (
                               <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-400">
                                 Cash: ₹{inv.split_cash_amount || 0} + UPI: ₹{inv.split_upi_amount || 0}
@@ -2921,18 +3302,54 @@ export default function PosBillingView({
                           </div>
                         </td>
                         <td className="p-4 text-right font-black text-slate-900 dark:text-white text-sm">
-                          ₹{parseFloat(inv.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          <div>₹{parseFloat(inv.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                          {parseFloat(inv.received_amount) > 0 && parseFloat(inv.received_amount) < parseFloat(inv.total_amount) && (
+                            <div className="text-[10px] font-semibold text-emerald-600">
+                              Paid: ₹{parseFloat(inv.received_amount).toFixed(0)}
+                            </div>
+                          )}
                         </td>
                         <td className="p-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setActiveReceiptBill(inv)}
-                            className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                            title="View, Print & Share Bill"
-                          >
-                            <Printer className="w-3.5 h-3.5 text-blue-500" />
-                            <span>Receipt</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {(parseFloat(inv.due_amount) > 0 || inv.payment_status === 'due') && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSettle(inv)}
+                                  className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 transition-all"
+                                  title="Record Payment / Settle Due"
+                                >
+                                  <DollarSign className="w-3 h-3" />
+                                  <span>Settle</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendDueReminder(inv)}
+                                  disabled={sendingReminderId === inv.id || !inv.customer_phone}
+                                  className="px-2 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                                  title="Send WhatsApp Payment Reminder"
+                                >
+                                  {sendingReminderId === inv.id ? (
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <MessageCircle className="w-3 h-3 text-emerald-600" />
+                                  )}
+                                  <span>Remind</span>
+                                </button>
+                              </>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => setActiveReceiptBill(inv)}
+                              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-200 font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="View, Print & Share Bill"
+                            >
+                              <Printer className="w-3.5 h-3.5 text-blue-500" />
+                              <span>Receipt</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -2961,12 +3378,14 @@ export default function PosBillingView({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-sm text-slate-900 dark:text-white">
                           #{inv.bill_number || inv.bill_serial_no || inv.order_number}
                         </span>
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                          inv.payment_method === 'upi'
+                          inv.payment_method === 'due'
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                            : inv.payment_method === 'upi'
                             ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
                             : inv.payment_method === 'card'
                             ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
@@ -2974,12 +3393,22 @@ export default function PosBillingView({
                             ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
                             : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
                         }`}>
-                          {inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial' : (inv.payment_method || 'Cash')}
+                          {inv.payment_method === 'due' ? 'Due / Udhaar' : (inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial' : (inv.payment_method || 'Cash'))}
                         </span>
+                        {(parseFloat(inv.due_amount) > 0 || inv.payment_status === 'due') && (
+                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                            🔴 Due: ₹{parseFloat(inv.due_amount || (inv.total_amount - inv.received_amount)).toFixed(0)}
+                          </span>
+                        )}
                       </div>
                       {(inv.payment_method === 'partial' || inv.payment_method === 'split') && (
                         <div className="text-[10px] font-semibold text-purple-700 dark:text-purple-300 mt-0.5">
                           Cash: ₹{inv.split_cash_amount || 0} • UPI: ₹{inv.split_upi_amount || 0}
+                        </div>
+                      )}
+                      {inv.due_date && (
+                        <div className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 mt-0.5">
+                          Pay by: {new Date(inv.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                         </div>
                       )}
                       <div className="text-[10px] text-slate-400 mt-0.5">
@@ -3002,20 +3431,49 @@ export default function PosBillingView({
                     </div>
                   </div>
 
-                  <div className="text-xs text-slate-600 dark:text-zinc-400 flex items-center justify-between border-t border-slate-100 dark:border-zinc-800 pt-2">
-                    <div className="truncate max-w-[190px]">
+                  <div className="text-xs text-slate-600 dark:text-zinc-400 flex flex-wrap items-center justify-between border-t border-slate-100 dark:border-zinc-800 pt-2 gap-2">
+                    <div className="truncate max-w-[170px]">
                       <span className="font-bold text-slate-800 dark:text-zinc-200">{inv.customer_name || 'Walk-in'}</span>
                       {inv.customer_phone && <span className="text-[10px] text-slate-400 ml-1">({inv.customer_phone})</span>}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setActiveReceiptBill(inv)}
-                      className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Receipt</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      {(parseFloat(inv.due_amount) > 0 || inv.payment_status === 'due') && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSettle(inv)}
+                            className="px-2 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <DollarSign className="w-3 h-3" />
+                            <span>Settle</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSendDueReminder(inv)}
+                            disabled={sendingReminderId === inv.id || !inv.customer_phone}
+                            className="px-2 py-1 rounded-xl bg-emerald-50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          >
+                            {sendingReminderId === inv.id ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <MessageCircle className="w-3 h-3 text-emerald-600" />
+                            )}
+                            <span>Remind</span>
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveReceiptBill(inv)}
+                        className="px-2.5 py-1 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-zinc-800 text-blue-600 dark:text-blue-400 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Receipt</span>
+                      </button>
+                    </div>
                   </div>
 
                   {inv.soundbox_account_name && (
@@ -3028,6 +3486,37 @@ export default function PosBillingView({
               ))
             )}
           </div>
+
+          {/* SHOW MORE BILLS PAGINATION (20 bills per batch) */}
+          {invoices.length > 0 && (
+            <div className="flex flex-col items-center justify-center pt-3 pb-2 text-center space-y-2">
+              {invoicesPagination.hasMore ? (
+                <button
+                  type="button"
+                  onClick={handleShowMoreInvoices}
+                  disabled={isLoadingMoreInvoices}
+                  className="px-6 py-2.5 rounded-2xl bg-white dark:bg-[#18181B] hover:bg-slate-50 dark:hover:bg-zinc-800 text-blue-600 dark:text-blue-400 font-bold text-xs border border-blue-500/30 hover:border-blue-500 shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-60"
+                >
+                  {isLoadingMoreInvoices ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Loading more bills...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-4 h-4" />
+                      <span>Show More Bills ({invoices.length} of {invoicesPagination.total})</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div className="text-[11px] text-slate-400 dark:text-zinc-500 font-semibold flex items-center gap-1.5 py-1">
+                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Showing all {invoices.length} {invoices.length === 1 ? 'bill' : 'bills'}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -3108,6 +3597,170 @@ export default function PosBillingView({
                   <>
                     <RefreshCw className="w-4 h-4" />
                     <span>Yes, Reset All</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* SETTLE DUE PAYMENT POPUP MODAL */}
+      {settleModalBill && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-sm animate-fade-in !m-0 !mt-0"
+          style={{ margin: 0, marginTop: 0 }}
+        >
+          <div className="w-full max-w-md bg-white dark:bg-[#18181B] rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                    Record Payment / Clear Due
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Bill #{settleModalBill.bill_number || settleModalBill.bill_serial_no || settleModalBill.id} • {settleModalBill.customer_name || 'Walk-in'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettleModalBill(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Amount Info */}
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Total Bill Amount:</span>
+                <span className="font-bold text-slate-700 dark:text-zinc-300">
+                  ₹{parseFloat(settleModalBill.total_amount || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Already Paid:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  ₹{parseFloat(settleModalBill.received_amount || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-zinc-800">
+                <span className="font-bold text-slate-700 dark:text-zinc-300">Outstanding Due:</span>
+                <span className="font-black text-rose-600 dark:text-rose-400">
+                  ₹{parseFloat(settleModalBill.due_amount || (settleModalBill.total_amount - settleModalBill.received_amount)).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Amount to receive */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                Amount Received Now (₹):
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  autoFocus
+                  value={settleAmount}
+                  onChange={(e) => setSettleAmount(e.target.value)}
+                  className="w-full pl-8 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 font-black text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Payment Method Selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                Payment Method:
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSettleMethod('cash')}
+                  className={`py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    settleMethod === 'cash'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-slate-50 dark:bg-zinc-850 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300'
+                  }`}
+                >
+                  <Banknote className="w-3.5 h-3.5" />
+                  <span>Cash</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSettleMethod('upi')}
+                  className={`py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    settleMethod === 'upi'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : 'bg-slate-50 dark:bg-zinc-850 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300'
+                  }`}
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>UPI</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSettleMethod('card')}
+                  className={`py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    settleMethod === 'card'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-slate-50 dark:bg-zinc-850 border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300'
+                  }`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Card</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                Notes (Optional):
+              </label>
+              <input
+                type="text"
+                value={settleNotes}
+                onChange={(e) => setSettleNotes(e.target.value)}
+                placeholder="e.g. Paid at store counter, PhonePe UPI"
+                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-xs text-slate-900 dark:text-white focus:outline-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setSettleModalBill(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSettle}
+                disabled={isSettling}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSettling ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Collect & Settle</span>
                   </>
                 )}
               </button>

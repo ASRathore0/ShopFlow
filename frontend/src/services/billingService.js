@@ -129,4 +129,23 @@ export const billingService = {
     const res = await api.post(`${prefix}/billing/price-presets`, { presets });
     return res.data;
   },
+
+  // Due Bills & Payment Settlement
+  getDueBills: async (params = {}, role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.get(`${prefix}/billing/due-bills`, { params });
+    return res.data;
+  },
+
+  settleDuePayment: async (id, data, role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.post(`${prefix}/billing/invoices/${id}/settle`, data);
+    return res.data;
+  },
+
+  sendDueReminder: async (id, role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.post(`${prefix}/billing/invoices/${id}/send-reminder`);
+    return res.data;
+  },
 };

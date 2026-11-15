@@ -187,8 +187,9 @@ class BillingController extends Controller
             'items.*.unit_price' => 'required|numeric|min:0',
             'discount_amount' => 'nullable|numeric|min:0',
             'tax_amount' => 'nullable|numeric|min:0',
-            'payment_method' => 'nullable|string|in:cash,upi,card,split,partial',
+            'payment_method' => 'nullable|string|in:cash,upi,card,split,partial,due',
             'received_amount' => 'nullable|numeric|min:0',
+            'due_date' => 'nullable|date',
             'notes' => 'nullable|string|max:500',
             'custom_serial_no' => 'nullable|integer',
         ]);
@@ -234,14 +235,55 @@ class BillingController extends Controller
             $tax = (float) ($request->tax_amount ?: 0);
             $totalAmount = max(0, round($subtotal - $discount + $tax, 2));
 
-            $received = (float) ($request->received_amount ?: $totalAmount);
-            $change = max(0, round($received - $totalAmount, 2));
             $paymentMethod = $request->payment_method ?: 'cash';
+            $dueDate = $request->filled('due_date') ? \Carbon\Carbon::parse($request->due_date)->format('Y-m-d') : null;
+            $advancePaymentMethod = $request->advance_payment_method ?: 'cash';
 
-            $splitCash = (float) ($request->split_cash_amount ?: 0);
-            $splitUpi = (float) ($request->split_upi_amount ?: 0);
-            $splitCard = (float) ($request->split_card_amount ?: 0);
-            $isSplit = in_array($paymentMethod, ['partial', 'split']);
+            if ($paymentMethod === 'due') {
+                $received = $request->has('received_amount') && $request->received_amount !== '' && $request->received_amount !== null
+                    ? (float) $request->received_amount
+                    : 0.0;
+                $change = 0.0;
+                $dueAmount = max(0, round($totalAmount - $received, 2));
+                $paymentStatus = $dueAmount > 0 ? ($received > 0 ? 'partial' : 'due') : 'paid';
+
+                if ($received > 0) {
+                    if ($advancePaymentMethod === 'upi') {
+                        $splitCash = 0.0;
+                        $splitUpi = $received;
+                        $splitCard = 0.0;
+                    } elseif ($advancePaymentMethod === 'card') {
+                        $splitCash = 0.0;
+                        $splitUpi = 0.0;
+                        $splitCard = $received;
+                    } elseif ($advancePaymentMethod === 'partial') {
+                        $splitCash = (float) ($request->split_cash_amount ?: 0);
+                        $splitUpi = (float) ($request->split_upi_amount ?: 0);
+                        $splitCard = 0.0;
+                    } else { // cash
+                        $splitCash = $received;
+                        $splitUpi = 0.0;
+                        $splitCard = 0.0;
+                    }
+                } else {
+                    $splitCash = 0.0;
+                    $splitUpi = 0.0;
+                    $splitCard = 0.0;
+                }
+            } else {
+                $received = $request->has('received_amount') && $request->received_amount !== '' && $request->received_amount !== null
+                    ? (float) $request->received_amount
+                    : $totalAmount;
+                $change = max(0, round($received - $totalAmount, 2));
+                $dueAmount = max(0, round($totalAmount - $received, 2));
+                $paymentStatus = $dueAmount > 0 ? ($received > 0 ? 'partial' : 'due') : 'paid';
+
+                $splitCash = (float) ($request->split_cash_amount ?: 0);
+                $splitUpi = (float) ($request->split_upi_amount ?: 0);
+                $splitCard = (float) ($request->split_card_amount ?: 0);
+            }
+
+            $isSplit = in_array($paymentMethod, ['partial', 'split']) || ($paymentMethod === 'due' && $received > 0);
 
             $user = $request->user();
 
@@ -249,6 +291,22 @@ class BillingController extends Controller
             $soundboxAccountName = $request->soundbox_account_name ?: null;
             $utrNumber = $request->utr_number ? trim($request->utr_number) : null;
             $syncedAt = (($paymentMethod === 'upi' || ($isSplit && $splitUpi > 0)) && ($soundboxDeviceId || $utrNumber)) ? now() : null;
+
+            $paymentDetails = $isSplit ? [
+                'cash' => $splitCash,
+                'upi' => $splitUpi,
+                'card' => $splitCard,
+            ] : [];
+
+            if ($dueAmount > 0 || $paymentMethod === 'due') {
+                $paymentDetails['due_amount'] = $dueAmount;
+                $paymentDetails['due_date'] = $dueDate;
+                $paymentDetails['initial_received'] = $received;
+                $paymentDetails['advance_payment_method'] = $advancePaymentMethod;
+                $paymentDetails['advance_cash'] = $splitCash;
+                $paymentDetails['advance_upi'] = $splitUpi;
+                $paymentDetails['advance_card'] = $splitCard;
+            }
 
             // 1. Create the Order / Bill
             $order = Order::create([
@@ -264,17 +322,15 @@ class BillingController extends Controller
                 'tax_amount' => $tax,
                 'discount_amount' => $discount,
                 'payment_method' => $paymentMethod,
-                'split_cash_amount' => $isSplit ? $splitCash : null,
-                'split_upi_amount' => $isSplit ? $splitUpi : null,
-                'split_card_amount' => $isSplit ? $splitCard : null,
-                'payment_details' => $isSplit ? [
-                    'cash' => $splitCash,
-                    'upi' => $splitUpi,
-                    'card' => $splitCard,
-                ] : null,
-                'payment_status' => 'paid',
+                'split_cash_amount' => $splitCash > 0 ? $splitCash : null,
+                'split_upi_amount' => $splitUpi > 0 ? $splitUpi : null,
+                'split_card_amount' => $splitCard > 0 ? $splitCard : null,
+                'payment_details' => !empty($paymentDetails) ? $paymentDetails : null,
+                'payment_status' => $paymentStatus,
                 'received_amount' => $received,
                 'change_amount' => $change,
+                'due_amount' => $dueAmount,
+                'due_date' => $dueDate,
                 'customer_name' => $request->customer_name ?: 'Walk-in Customer',
                 'customer_phone' => $request->customer_phone,
                 'customer_address' => $request->customer_address,
@@ -412,6 +468,12 @@ class BillingController extends Controller
         if ($request->filled('payment_method') && $request->payment_method !== 'all') {
             if ($request->payment_method === 'partial' || $request->payment_method === 'split') {
                 $query->whereIn('payment_method', ['partial', 'split']);
+            } elseif ($request->payment_method === 'due') {
+                $query->where(function ($q) {
+                    $q->where('payment_method', 'due')
+                      ->orWhere('due_amount', '>', 0)
+                      ->orWhereIn('payment_status', ['due', 'partial']);
+                });
             } else {
                 $query->where('payment_method', $request->payment_method);
             }
@@ -944,6 +1006,161 @@ class BillingController extends Controller
             'data' => [
                 'quick_price_presets' => $presets,
             ],
+        ]);
+    }
+
+    /**
+     * List all outstanding Due Bills for the store with summary.
+     */
+    public function getDueBills(Request $request)
+    {
+        $shop = $this->getActiveShop($request);
+        $this->ensureBillingEnabled($shop);
+
+        $query = Order::where('shop_id', $shop->id)
+            ->where('type', 'pos_billing')
+            ->where(function ($q) {
+                $q->where('due_amount', '>', 0)
+                  ->orWhereIn('payment_status', ['due', 'partial'])
+                  ->orWhere('payment_method', 'due');
+            })
+            ->with(['items.product', 'items.variant', 'user']);
+
+        if ($request->filled('search')) {
+            $term = $request->search;
+            $query->where(function ($q) use ($term) {
+                $q->where('bill_number', 'like', "%{$term}%")
+                    ->orWhere('order_number', 'like', "%{$term}%")
+                    ->orWhere('customer_name', 'like', "%{$term}%")
+                    ->orWhere('customer_phone', 'like', "%{$term}%");
+            });
+        }
+
+        // Summary of all unpaid dues for this store
+        $allDueQuery = Order::where('shop_id', $shop->id)
+            ->where('type', 'pos_billing')
+            ->where(function ($q) {
+                $q->where('due_amount', '>', 0)
+                  ->orWhereIn('payment_status', ['due', 'partial'])
+                  ->orWhere('payment_method', 'due');
+            });
+
+        $totalDueAmount = (float) $allDueQuery->sum(DB::raw('CASE WHEN due_amount > 0 THEN due_amount ELSE GREATEST(0, total_amount - COALESCE(received_amount, 0)) END'));
+        $dueBillsCount = $allDueQuery->count();
+
+        $perPage = (int) ($request->get('per_page') ?: 20);
+        $bills = $query->orderBy('due_amount', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $bills,
+            'summary' => [
+                'total_due_amount' => round($totalDueAmount, 2),
+                'due_bills_count' => $dueBillsCount,
+            ],
+            'shop' => [
+                'id' => $shop->id,
+                'name' => $shop->name,
+                'phone' => $shop->phone,
+            ],
+        ]);
+    }
+
+    /**
+     * Settle / record payment against an outstanding due bill.
+     */
+    public function settleDuePayment(Request $request, $id)
+    {
+        $shop = $this->getActiveShop($request);
+        $this->ensureBillingEnabled($shop);
+
+        $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'payment_method' => 'required|string|in:cash,upi,card',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        $order = Order::where('shop_id', $shop->id)
+            ->where('type', 'pos_billing')
+            ->findOrFail($id);
+
+        $settleAmount = (float) $request->amount;
+        $settleMethod = $request->payment_method;
+        $currentDue = (float) ($order->due_amount ?: max(0, $order->total_amount - $order->received_amount));
+        $newDue = max(0, round($currentDue - $settleAmount, 2));
+        $newReceived = round(((float) $order->received_amount) + $settleAmount, 2);
+
+        $details = $order->payment_details ?: [];
+        if (!isset($details['settlement_history']) || !is_array($details['settlement_history'])) {
+            $details['settlement_history'] = [];
+        }
+
+        $user = $request->user();
+        $details['settlement_history'][] = [
+            'amount' => $settleAmount,
+            'method' => $settleMethod,
+            'settled_at' => now()->toIso8601String(),
+            'cashier' => $user?->name ?: 'Admin / Staff',
+            'notes' => $request->notes ?: 'Due payment cleared',
+        ];
+
+        $order->received_amount = $newReceived;
+        $order->due_amount = $newDue;
+        $order->payment_status = $newDue <= 0 ? 'paid' : 'partial';
+        $order->payment_details = $details;
+        $order->save();
+
+        // Auto-send settlement confirmation receipt to customer if phone available
+        $waService = new \App\Services\WhatsAppBillService();
+        $waResult = null;
+        if (!empty($order->customer_phone)) {
+            try {
+                $waResult = $waService->sendSettlementReceipt($order, $shop, $settleAmount, $settleMethod);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Settlement receipt WhatsApp error: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $newDue <= 0
+                ? "Payment of ₹" . number_format($settleAmount, 2) . " received! Bill is now fully cleared."
+                : "Payment of ₹" . number_format($settleAmount, 2) . " received. Remaining due: ₹" . number_format($newDue, 2) . ".",
+            'data' => [
+                'bill' => $order->fresh(['items.product', 'items.variant', 'user']),
+                'whatsapp' => $waResult,
+            ],
+        ]);
+    }
+
+    /**
+     * Send payment reminder on WhatsApp for an outstanding due bill.
+     */
+    public function sendDueReminder(Request $request, $id)
+    {
+        $shop = $this->getActiveShop($request);
+        $this->ensureBillingEnabled($shop);
+
+        $order = Order::where('shop_id', $shop->id)
+            ->where('type', 'pos_billing')
+            ->findOrFail($id);
+
+        if (empty($order->customer_phone)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Customer phone number is missing on this bill.',
+            ], 422);
+        }
+
+        $waService = new \App\Services\WhatsAppBillService();
+        $res = $waService->sendReminder($order, $shop);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Payment reminder dispatched successfully!',
+            'data' => $res,
         ]);
     }
 }
