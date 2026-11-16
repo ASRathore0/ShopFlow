@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Printer, Share2, X, Download, CheckCircle2, MessageSquare, Loader2, ExternalLink, Edit2 } from 'lucide-react';
+import { Printer, Share2, X, Download, CheckCircle2, MessageSquare, Loader2, ExternalLink, Edit2, Trash2 } from 'lucide-react';
 import { billingService } from '../services/billingService';
 
 export default function ShopBillReceipt({
@@ -9,6 +9,7 @@ export default function ShopBillReceipt({
   onClose,
   showActions = true,
   onEdit,
+  onDelete,
 }) {
   const printRef = useRef(null);
   const [sendingWa, setSendingWa] = useState(false);
@@ -168,6 +169,17 @@ export default function ShopBillReceipt({
               <Printer className="w-3.5 h-3.5" />
               <span>Print</span>
             </button>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => onDelete(bill)}
+                className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                title="Permanently delete this bill & restore stock"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
             {onClose && (
               <button
                 type="button"

@@ -734,6 +734,69 @@ class BillingController extends Controller
     }
 
     /**
+     * Delete an individual POS bill / invoice and restore inventory.
+     */
+    public function deleteInvoice(Request $request, $id)
+    {
+        $shop = $this->getActiveShop($request);
+        $this->ensureBillingEnabled($shop);
+        $user = $request->user();
+
+        return DB::transaction(function () use ($shop, $user, $id) {
+            $order = Order::where('shop_id', $shop->id)
+                ->where('type', 'pos_billing')
+                ->findOrFail($id);
+
+            $billNumber = $order->bill_number ?: ($order->bill_serial_no ? "#{$order->bill_serial_no}" : $order->order_number);
+
+            // 1. Restore inventory for all items on this bill
+            $items = OrderItem::where('order_id', $order->id)->get();
+            foreach ($items as $item) {
+                if (!empty($item->product_id)) {
+                    $inv = Inventory::where('shop_id', $shop->id)
+                        ->where('product_id', $item->product_id)
+                        ->when($item->product_variant_id, function ($q, $varId) {
+                            $q->where('product_variant_id', $varId);
+                        })
+                        ->first();
+
+                    if ($inv) {
+                        $inv->available_quantity += $item->quantity;
+                        $inv->status = $inv->available_quantity <= $inv->reorder_level ? 'low_stock' : 'in_stock';
+                        $inv->save();
+
+                        InventoryMovement::create([
+                            'shop_id' => $shop->id,
+                            'product_id' => $item->product_id,
+                            'product_variant_id' => $item->product_variant_id,
+                            'user_id' => $user ? $user->id : null,
+                            'type' => 'stock_in',
+                            'quantity' => $item->quantity,
+                            'from_location_id' => $inv->location_id,
+                            'reason' => "POS Bill #{$billNumber} Deleted - Stock Restored",
+                        ]);
+                    }
+                }
+            }
+
+            // 2. Remove line items
+            OrderItem::where('order_id', $order->id)->delete();
+
+            // 3. Remove soundbox transactions attached to this order
+            \App\Models\SoundboxTransaction::where('order_id', $order->id)->delete();
+
+            // 4. Delete the order
+            $order->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => "Bill #{$billNumber} has been permanently deleted and stock restored.",
+                'deleted_id' => (int) $id,
+            ]);
+        });
+    }
+
+    /**
      * Dispatch WhatsApp bill memo to customer on-demand.
      */
     public function sendWhatsApp(Request $request, $id, \App\Services\WhatsAppBillService $waService)

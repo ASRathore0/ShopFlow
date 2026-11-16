@@ -31,6 +31,12 @@ export const billingService = {
     return res.data;
   },
 
+  deleteBill: async (id, role = 'admin') => {
+    const prefix = role === 'staff' ? '/staff' : '/admin';
+    const res = await api.delete(`${prefix}/billing/invoices/${id}`);
+    return res.data;
+  },
+
   getInvoices: async (params = {}, role = 'admin') => {
     const prefix = role === 'staff' ? '/staff' : '/admin';
     const res = await api.get(`${prefix}/billing/invoices`, { params });

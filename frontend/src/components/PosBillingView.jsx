@@ -112,6 +112,36 @@ export default function PosBillingView({
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [billToDelete, setBillToDelete] = useState(null);
+  const [isDeletingBill, setIsDeletingBill] = useState(false);
+
+  const handleConfirmDeleteBill = (bill) => {
+    setBillToDelete(bill);
+  };
+
+  const handleExecuteDeleteBill = async () => {
+    if (!billToDelete) return;
+    setIsDeletingBill(true);
+    try {
+      const billNum = billToDelete.bill_number || billToDelete.bill_serial_no || billToDelete.order_number || billToDelete.id;
+      const res = await billingService.deleteBill(billToDelete.id, role);
+      showToast(res?.message || `Bill #${billNum} deleted successfully.`, 'success');
+      setBillToDelete(null);
+      if (activeReceiptBill?.id === billToDelete.id) {
+        setActiveReceiptBill(null);
+      }
+      loadInvoices(overviewPeriod, 1, false, selectedCustomDate);
+      fetchStatusAndProducts();
+      if (soundboxEnabled) {
+        loadReconciliation(overviewPeriod, selectedCustomDate);
+      }
+    } catch (err) {
+      console.error('Failed to delete bill:', err);
+      showToast(err.response?.data?.message || 'Failed to delete bill.', 'error');
+    } finally {
+      setIsDeletingBill(false);
+    }
+  };
 
   const handleResetBilling = async () => {
     try {
@@ -142,7 +172,7 @@ export default function PosBillingView({
 
   // Lock background scrolling when any modal is open
   useEffect(() => {
-    if (activeReceiptBill || isSoundboxModalOpen || showResetModal) {
+    if (activeReceiptBill || isSoundboxModalOpen || showResetModal || billToDelete) {
       const originalBodyOverflow = document.body.style.overflow;
       const mainEl = document.querySelector('main');
       const originalMainOverflow = mainEl ? mainEl.style.overflow : '';
@@ -155,7 +185,7 @@ export default function PosBillingView({
         if (mainEl) mainEl.style.overflow = originalMainOverflow;
       };
     }
-  }, [activeReceiptBill, isSoundboxModalOpen, showResetModal]);
+  }, [activeReceiptBill, isSoundboxModalOpen, showResetModal, billToDelete]);
 
   // Handle mobile / WhatsApp phone input change with live customer lookup
   const handleCustomerPhoneChange = (val) => {
@@ -3475,36 +3505,7 @@ export default function PosBillingView({
                           )}
                         </td>
                         <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {(parseFloat(inv.due_amount) > 0 || inv.payment_status === 'due') && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenSettle(inv)}
-                                  className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 transition-all"
-                                  title="Record Payment / Settle Due"
-                                >
-                                  <DollarSign className="w-3 h-3" />
-                                  <span>Settle</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendDueReminder(inv)}
-                                  disabled={sendingReminderId === inv.id || !inv.customer_phone}
-                                  className="px-2 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
-                                  title="Send WhatsApp Payment Reminder"
-                                >
-                                  {sendingReminderId === inv.id ? (
-                                    <RefreshCw className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <MessageCircle className="w-3 h-3 text-emerald-600" />
-                                  )}
-                                  <span>Remind</span>
-                                </button>
-                              </>
-                            )}
-
+                          <div className="flex items-center justify-end">
                             <button
                               type="button"
                               onClick={() => setActiveReceiptBill(inv)}
@@ -3611,33 +3612,6 @@ export default function PosBillingView({
                     </div>
 
                     <div className="flex items-center gap-1.5 ml-auto">
-                      {(parseFloat(inv.due_amount) > 0 || inv.payment_status === 'due') && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenSettle(inv)}
-                            className="px-2 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <DollarSign className="w-3 h-3" />
-                            <span>Settle</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleSendDueReminder(inv)}
-                            disabled={sendingReminderId === inv.id || !inv.customer_phone}
-                            className="px-2 py-1 rounded-xl bg-emerald-50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                          >
-                            {sendingReminderId === inv.id ? (
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <MessageCircle className="w-3 h-3 text-emerald-600" />
-                            )}
-                            <span>Remind</span>
-                          </button>
-                        </>
-                      )}
-
                       <button
                         type="button"
                         onClick={() => setActiveReceiptBill(inv)}
@@ -3711,7 +3685,75 @@ export default function PosBillingView({
               onClose={() => setActiveReceiptBill(null)}
               showActions={true}
               onEdit={handleStartEditBill}
+              onDelete={handleConfirmDeleteBill}
             />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* DELETE BILL CONFIRMATION MODAL */}
+      {billToDelete && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-fade-in !m-0 !mt-0"
+          style={{ margin: 0, marginTop: 0 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingBill) {
+              setBillToDelete(null);
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-[#18181B] border border-rose-200 dark:border-rose-900/50 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto border border-rose-200 dark:border-rose-900/30">
+              <Trash2 className="w-7 h-7" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-base font-black text-slate-900 dark:text-white">
+                Delete Bill #{billToDelete.bill_number || billToDelete.bill_serial_no || billToDelete.order_number || billToDelete.id}?
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+                Are you sure you want to permanently delete this bill for <strong>₹{parseFloat(billToDelete.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>?
+              </p>
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-left text-xs space-y-1.5 text-rose-900 dark:text-rose-300">
+                <p className="font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-rose-700 dark:text-rose-400">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Automatic Stock Restored</span>
+                </p>
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-zinc-400">
+                  All billed item quantities will be safely restored back to your shop inventory.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingBill}
+                onClick={() => setBillToDelete(null)}
+                className="w-1/2 py-3 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-2xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingBill}
+                onClick={handleExecuteDeleteBill}
+                className="w-1/2 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingBill ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Bill</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>,
         document.body

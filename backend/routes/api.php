@@ -136,6 +136,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
         Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
         Route::put('/billing/invoices/{id}', [BillingController::class, 'updateBill']);
+        Route::delete('/billing/invoices/{id}', [BillingController::class, 'deleteInvoice']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
         Route::get('/billing/due-bills', [BillingController::class, 'getDueBills']);
         Route::post('/billing/invoices/{id}/settle', [BillingController::class, 'settleDuePayment']);
@@ -212,6 +213,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/billing/invoices', [BillingController::class, 'getInvoices']);
         Route::get('/billing/invoices/{id}', [BillingController::class, 'getInvoice']);
         Route::put('/billing/invoices/{id}', [BillingController::class, 'updateBill']);
+        Route::delete('/billing/invoices/{id}', [BillingController::class, 'deleteInvoice']);
         Route::post('/billing/invoices/{id}/send-whatsapp', [BillingController::class, 'sendWhatsApp']);
         Route::get('/billing/due-bills', [BillingController::class, 'getDueBills']);
         Route::post('/billing/invoices/{id}/settle', [BillingController::class, 'settleDuePayment']);
