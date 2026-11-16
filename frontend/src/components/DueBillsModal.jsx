@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   X, Search, Clock, AlertCircle, Phone, MessageCircle, DollarSign,
   Calendar, CheckCircle2, RefreshCw, AlertTriangle, User, FileText,
-  CreditCard, Banknote, QrCode, ArrowRight, ShieldCheck, ChevronRight
+  CreditCard, Banknote, QrCode, ArrowRight, ShieldCheck, ChevronRight,
+  History, Sparkles, Filter
 } from 'lucide-react';
 import { billingService } from '../services/billingService';
 
@@ -14,9 +15,17 @@ export default function DueBillsModal({
   onViewBill,
 }) {
   const [dueBills, setDueBills] = useState([]);
-  const [summary, setSummary] = useState({ total_due_amount: 0, due_bills_count: 0 });
+  const [summary, setSummary] = useState({
+    total_due_amount: 0,
+    due_bills_count: 0,
+    pending_bills_count: 0,
+    settled_bills_count: 0,
+    settled_total_amount: 0,
+    all_count: 0,
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'settled' | 'all'
   const [toast, setToast] = useState(null);
 
   // Settlement Form State
@@ -34,10 +43,12 @@ export default function DueBillsModal({
     setTimeout(() => setToast(null), 3500);
   };
 
-  const loadDueBills = async (searchTerm = search) => {
+  const loadDueBills = async (searchTerm = search, tab = activeTab) => {
     setIsLoading(true);
     try {
-      const params = {};
+      const params = {
+        status: tab,
+      };
       if (searchTerm.trim()) params.search = searchTerm.trim();
       const res = await billingService.getDueBills(params, role);
       if (res?.data) {
@@ -56,9 +67,14 @@ export default function DueBillsModal({
 
   useEffect(() => {
     if (isOpen) {
-      loadDueBills();
+      loadDueBills(search, activeTab);
     }
-  }, [isOpen]);
+  }, [isOpen, activeTab]);
+
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    loadDueBills(search, newTab);
+  };
 
   const handleSendReminder = async (bill) => {
     if (!bill.customer_phone) {
@@ -72,7 +88,7 @@ export default function DueBillsModal({
       if (res?.data?.fallback_url) {
         window.open(res.data.fallback_url, '_blank');
       }
-      loadDueBills();
+      loadDueBills(search, activeTab);
       if (onBillUpdated) onBillUpdated();
     } catch (err) {
       console.error('Failed to send reminder:', err);
@@ -116,7 +132,7 @@ export default function DueBillsModal({
 
       showToast(res.message || 'Payment recorded successfully!', 'success');
       setSettlingBill(null);
-      loadDueBills();
+      loadDueBills(search, activeTab);
       if (onBillUpdated) onBillUpdated();
     } catch (err) {
       console.error('Failed to settle due payment:', err);
@@ -127,6 +143,10 @@ export default function DueBillsModal({
   };
 
   if (!isOpen) return null;
+
+  const realPendingCount = summary.pending_bills_count ?? summary.due_bills_count ?? 0;
+  const realSettledCount = summary.settled_bills_count ?? 0;
+  const realAllCount = summary.all_count ?? (realPendingCount + realSettledCount);
 
   return (
     <div
@@ -148,12 +168,17 @@ export default function DueBillsModal({
                 <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
                   Customer Due Bills & Credit Ledger (Udhaar)
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                  {summary.due_bills_count} Pending
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                  {realPendingCount} Pending
                 </span>
+                {realSettledCount > 0 && (
+                  <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                    {realSettledCount} Settled
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 dark:text-zinc-400">
-                Track pending customer payments, send WhatsApp reminders, and collect dues.
+                Track pending customer payments, send WhatsApp reminders, and view settled credit history.
               </p>
             </div>
           </div>
@@ -179,10 +204,10 @@ export default function DueBillsModal({
           </div>
         )}
 
-        {/* SUMMARY STATS & SEARCH BAR */}
+        {/* SUMMARY STATS & TABS */}
         <div className="p-4 sm:p-6 pb-2 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Total Due Amount */}
+            {/* Total Outstanding Due */}
             <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-950/20 border border-amber-500/30 flex items-center justify-between">
               <div>
                 <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">
@@ -197,14 +222,14 @@ export default function DueBillsModal({
               </span>
             </div>
 
-            {/* Total Pending Bills */}
+            {/* Total Pending Bills (REAL COUNT ONLY) */}
             <div className="p-4 rounded-2xl bg-rose-500/10 dark:bg-rose-950/20 border border-rose-500/30 flex items-center justify-between">
               <div>
                 <span className="text-[11px] font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wider block">
                   Pending Due Bills
                 </span>
                 <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-0.5">
-                  {summary.due_bills_count || dueBills.length} <span className="text-xs font-bold text-slate-500">bills</span>
+                  {realPendingCount} <span className="text-xs font-bold text-slate-500">unpaid bills</span>
                 </div>
               </div>
               <span className="p-2 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400">
@@ -212,42 +237,108 @@ export default function DueBillsModal({
               </span>
             </div>
 
-            {/* Quick Helper */}
-            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-800 flex flex-col justify-center text-xs text-slate-600 dark:text-zinc-400 space-y-1">
-              <span className="font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                1-Click Reminders & Settle
+            {/* Cleared / Settled Bills Count */}
+            <div className="p-4 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block">
+                  Settled Credit History
+                </span>
+                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  {realSettledCount} <span className="text-xs font-bold text-slate-500">cleared bills</span>
+                </div>
+              </div>
+              <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="w-5 h-5" />
               </span>
-              <p className="text-[11px] leading-tight">
-                Tap <strong>Send Reminder</strong> to dispatch WhatsApp messages, or <strong>Settle</strong> when payment is received.
-              </p>
             </div>
           </div>
 
-          {/* Search Box */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  loadDueBills(e.target.value);
-                }}
-                placeholder="Search by customer name, phone number, or bill #..."
-                className="w-full pl-9 pr-4 py-2 rounded-2xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700/80 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
-              />
+          {/* FILTER TABS & SEARCH BAR */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+            {/* Navigation Filter Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-2xl border border-slate-200 dark:border-zinc-700/60 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleTabChange('pending')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'pending'
+                    ? 'bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 shadow-xs'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Current Pending</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  activeTab === 'pending'
+                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                    : 'bg-slate-200 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300'
+                }`}>
+                  {realPendingCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange('settled')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'settled'
+                    ? 'bg-white dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>Settled History</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  activeTab === 'settled'
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-slate-200 dark:bg-zinc-700 text-slate-600 dark:text-zinc-300'
+                }`}>
+                  {realSettledCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'all'
+                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>All Dues</span>
+                <span className="text-[10px] font-semibold text-slate-400">
+                  ({realAllCount})
+                </span>
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => loadDueBills()}
-              disabled={isLoading}
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 transition-colors cursor-pointer disabled:opacity-50"
-              title="Refresh Due List"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
+
+            {/* Search Box */}
+            <div className="flex items-center gap-2 flex-1 sm:max-w-xs">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    loadDueBills(e.target.value, activeTab);
+                  }}
+                  placeholder="Search customer, phone, bill #..."
+                  className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700/80 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => loadDueBills(search, activeTab)}
+                disabled={isLoading}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                title="Refresh List"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -256,7 +347,7 @@ export default function DueBillsModal({
           {isLoading ? (
             <div className="p-12 text-center text-slate-400 space-y-2">
               <RefreshCw className="w-6 h-6 animate-spin mx-auto text-amber-500" />
-              <p className="text-xs font-semibold">Loading due bills...</p>
+              <p className="text-xs font-semibold">Loading bills...</p>
             </div>
           ) : dueBills.length === 0 ? (
             <div className="p-12 text-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-zinc-800 space-y-2">
@@ -264,11 +355,27 @@ export default function DueBillsModal({
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                All Customer Dues are Cleared!
+                {activeTab === 'pending'
+                  ? 'All Customer Dues are Cleared!'
+                  : activeTab === 'settled'
+                  ? 'No Settled History Found'
+                  : 'No Credit Bills Found'}
               </h4>
               <p className="text-xs text-slate-400 dark:text-zinc-500 max-w-sm mx-auto">
-                No outstanding due bills found. All credit payments have been settled.
+                {activeTab === 'pending'
+                  ? 'There are zero outstanding due balances. Check the "Settled History" tab to inspect previous cleared records.'
+                  : 'Bills settled from due payments will appear here in chronological history.'}
               </p>
+              {activeTab === 'pending' && realSettledCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('settled')}
+                  className="px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer inline-flex items-center gap-1 mt-2"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>View {realSettledCount} Settled Bills →</span>
+                </button>
+              )}
             </div>
           ) : (
             dueBills.map((bill) => {
@@ -277,23 +384,39 @@ export default function DueBillsModal({
               const dueAmt = parseFloat(bill.due_amount) > 0
                 ? parseFloat(bill.due_amount)
                 : Math.max(0, totalAmt - paidAmt);
+              const isFullySettled = dueAmt <= 0 || bill.payment_status === 'paid';
               const billNum = bill.bill_number || bill.bill_serial_no || bill.order_number;
-              const isOverdue = bill.due_date && new Date(bill.due_date) < new Date(new Date().setHours(0,0,0,0));
+              const isOverdue = !isFullySettled && bill.due_date && new Date(bill.due_date) < new Date(new Date().setHours(0,0,0,0));
+              const settlementHistory = bill.payment_details?.settlement_history || [];
+              const latestSettlement = settlementHistory.length > 0 ? settlementHistory[settlementHistory.length - 1] : null;
 
               return (
                 <div
                   key={bill.id}
-                  className="p-4 rounded-2xl bg-white dark:bg-zinc-850 border border-slate-200 dark:border-zinc-700/80 shadow-xs hover:border-amber-400/60 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3.5"
+                  className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-xs ${
+                    isFullySettled
+                      ? 'bg-emerald-50/20 dark:bg-zinc-850/60 border-emerald-200/60 dark:border-zinc-800'
+                      : 'bg-white dark:bg-zinc-850 border-slate-200 dark:border-zinc-700/80 hover:border-amber-400/60'
+                  }`}
                 >
                   {/* Bill & Customer Info */}
                   <div className="space-y-1 min-w-[200px]">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-black text-sm text-slate-900 dark:text-white">
                         Bill #{billNum}
                       </span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                        Due
-                      </span>
+
+                      {isFullySettled ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Fully Settled</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          Due Pending
+                        </span>
+                      )}
+
                       {isOverdue && (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
                           Overdue
@@ -320,64 +443,89 @@ export default function DueBillsModal({
                       <span className="text-[10px] text-slate-400 italic">No phone number</span>
                     )}
 
-                    <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                    <div className="text-[10px] text-slate-400 flex items-center gap-2 flex-wrap">
                       <span>Billed: {new Date(bill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                      {bill.due_date && (
+                      {!isFullySettled && bill.due_date && (
                         <span className={`font-semibold ${isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
                           • Pay by: {new Date(bill.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                        </span>
+                      )}
+                      {isFullySettled && latestSettlement && (
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          • Cleared via {latestSettlement.method?.toUpperCase() || 'CASH'}
                         </span>
                       )}
                     </div>
                   </div>
 
                   {/* Financial Breakdown (Total, Paid, Balance Due) */}
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 text-xs min-w-[170px] space-y-1">
+                  <div className={`p-3 rounded-xl border text-xs min-w-[170px] space-y-1 ${
+                    isFullySettled
+                      ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/40'
+                      : 'bg-slate-50 dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800'
+                  }`}>
                     <div className="flex justify-between items-center text-slate-500 dark:text-zinc-400">
                       <span>Bill Total:</span>
                       <span className="font-semibold text-slate-700 dark:text-zinc-300">₹{totalAmt.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400">
-                      <span>Paid:</span>
+                      <span>Total Paid:</span>
                       <span className="font-semibold">₹{paidAmt.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-zinc-800 font-black text-rose-600 dark:text-rose-400">
+                    <div className={`flex justify-between items-center pt-1 border-t font-black ${
+                      isFullySettled
+                        ? 'border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
+                        : 'border-slate-200 dark:border-zinc-800 text-rose-600 dark:text-rose-400'
+                    }`}>
                       <span>Balance Due:</span>
-                      <span className="text-sm">₹{dueAmt.toFixed(2)}</span>
+                      <span className="text-sm">
+                        {isFullySettled ? '₹0.00 (Cleared)' : `₹${dueAmt.toFixed(2)}`}
+                      </span>
                     </div>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex flex-wrap sm:flex-col items-stretch gap-2 shrink-0">
-                    {/* Settle Due Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSettle(bill)}
-                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-                    >
-                      <DollarSign className="w-3.5 h-3.5" />
-                      <span>Settle / Clear Due</span>
-                    </button>
+                  <div className="flex flex-wrap sm:flex-col items-stretch gap-2 shrink-0 sm:min-w-[150px]">
+                    {!isFullySettled ? (
+                      <>
+                        {/* Settle Due Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSettle(bill)}
+                          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                        >
+                          <DollarSign className="w-3.5 h-3.5" />
+                          <span>Settle / Clear Due</span>
+                        </button>
 
-                    {/* Send WhatsApp Reminder Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleSendReminder(bill)}
-                      disabled={sendingReminderId === bill.id || !bill.customer_phone}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-300 dark:border-emerald-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                      title={!bill.customer_phone ? 'Phone number missing' : 'Send payment reminder via WhatsApp'}
-                    >
-                      {sendingReminderId === bill.id ? (
-                        <>
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                          <span>Sending...</span>
-                        </>
-                      ) : (
-                        <>
-                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                          <span>Send Reminder</span>
-                        </>
-                      )}
-                    </button>
+                        {/* Send WhatsApp Reminder Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleSendReminder(bill)}
+                          disabled={sendingReminderId === bill.id || !bill.customer_phone}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-300 dark:border-emerald-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                          title={!bill.customer_phone ? 'Phone number missing' : 'Send payment reminder via WhatsApp'}
+                        >
+                          {sendingReminderId === bill.id ? (
+                            <>
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>Sending...</span>
+                            </>
+                          ) : (
+                            <>
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>Send Reminder</span>
+                            </>
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      /* Settled Status Pill */
+                      <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Payment Cleared</span>
+                      </div>
+                    )}
 
                     {/* View Bill Receipt */}
                     {onViewBill && (
@@ -387,7 +535,7 @@ export default function DueBillsModal({
                         className="px-2.5 py-1 text-[11px] text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
                       >
                         <FileText className="w-3 h-3" />
-                        <span>View Bill</span>
+                        <span>View Receipt</span>
                       </button>
                     )}
                   </div>

@@ -443,9 +443,15 @@ class SoundboxController extends Controller
 
         $period = $request->input('period', 'daily');
 
-        if ($request->filled('start_date') && $request->filled('end_date')) {
+        if ($request->filled('date')) {
+            $startDate = \Carbon\Carbon::parse($request->input('date'))->startOfDay();
+            $endDate = \Carbon\Carbon::parse($request->input('date'))->endOfDay();
+        } elseif ($request->filled('start_date') && $request->filled('end_date')) {
             $startDate = \Carbon\Carbon::parse($request->input('start_date'))->startOfDay();
             $endDate = \Carbon\Carbon::parse($request->input('end_date'))->endOfDay();
+        } elseif ($request->filled('start_date')) {
+            $startDate = \Carbon\Carbon::parse($request->input('start_date'))->startOfDay();
+            $endDate = \Carbon\Carbon::parse($request->input('start_date'))->endOfDay();
         } elseif ($period === 'weekly' || $period === 'week') {
             $startDate = now()->startOfWeek();
             $endDate = now()->endOfDay();

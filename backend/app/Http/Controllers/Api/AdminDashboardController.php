@@ -333,24 +333,42 @@ class AdminDashboardController extends Controller
         // ========================================================
         // 7. DUE PAYMENTS & OUTSTANDING CREDIT (UDHAAR)
         // ========================================================
+        $pendingDueCondition = function ($q) {
+            $q->where(function ($sub) {
+                $sub->where('due_amount', '>', 0)
+                    ->orWhere(function ($sub2) {
+                        $sub2->whereNull('due_amount')
+                             ->whereIn('payment_status', ['due', 'partial'])
+                             ->whereRaw('total_amount > COALESCE(received_amount, 0)');
+                    });
+            })->where('payment_status', '!=', 'paid');
+        };
+
         $dueQuery = Order::where('shop_id', $shopId)
             ->where('type', 'pos_billing')
-            ->where(function ($q) {
-                $q->where('due_amount', '>', 0)
-                  ->orWhereIn('payment_status', ['due', 'partial'])
-                  ->orWhere('payment_method', 'due');
-            });
+            ->where($pendingDueCondition);
 
         $totalDueAmount = (float) $dueQuery->sum(DB::raw('CASE WHEN due_amount > 0 THEN due_amount ELSE GREATEST(0, total_amount - COALESCE(received_amount, 0)) END'));
         $dueBillsCount = (int) $dueQuery->count();
 
-        $topDueBills = Order::where('shop_id', $shopId)
+        // Settled credit bills count
+        $settledDueCount = Order::where('shop_id', $shopId)
             ->where('type', 'pos_billing')
             ->where(function ($q) {
-                $q->where('due_amount', '>', 0)
-                  ->orWhereIn('payment_status', ['due', 'partial'])
-                  ->orWhere('payment_method', 'due');
+                $q->where('payment_method', 'due')
+                  ->orWhereNotNull('due_date')
+                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(payment_details, '$.settlement_history')) IS NOT NULL");
             })
+            ->where(function ($q) {
+                $q->where('due_amount', '<=', 0)
+                  ->orWhere('payment_status', 'paid')
+                  ->orWhereRaw('COALESCE(received_amount, 0) >= total_amount');
+            })
+            ->count();
+
+        $topDueBills = Order::where('shop_id', $shopId)
+            ->where('type', 'pos_billing')
+            ->where($pendingDueCondition)
             ->orderBy('due_amount', 'desc')
             ->orderBy('created_at', 'desc')
             ->take(10)
@@ -401,6 +419,7 @@ class AdminDashboardController extends Controller
                     // Outstanding Due
                     'total_due_amount' => round($totalDueAmount, 2),
                     'due_bills_count' => $dueBillsCount,
+                    'settled_due_bills_count' => $settledDueCount,
                     // Payment split
                     'cash_sales' => $cashSales,
                     'upi_sales' => $upiSales,

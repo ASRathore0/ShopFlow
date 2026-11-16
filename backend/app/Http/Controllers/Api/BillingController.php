@@ -468,6 +468,25 @@ class BillingController extends Controller
         if ($request->filled('payment_method') && $request->payment_method !== 'all') {
             if ($request->payment_method === 'partial' || $request->payment_method === 'split') {
                 $query->whereIn('payment_method', ['partial', 'split']);
+            } elseif ($request->payment_method === 'due_pending') {
+                $query->where(function ($q) {
+                    $q->where('due_amount', '>', 0)
+                      ->orWhere(function ($q2) {
+                          $q2->whereNull('due_amount')
+                             ->whereIn('payment_status', ['due', 'partial'])
+                             ->whereRaw('total_amount > COALESCE(received_amount, 0)');
+                      });
+                });
+            } elseif ($request->payment_method === 'due_settled') {
+                $query->where(function ($q) {
+                    $q->where('payment_method', 'due')
+                      ->orWhereNotNull('due_date')
+                      ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(payment_details, '$.settlement_history')) IS NOT NULL");
+                })->where(function ($q) {
+                    $q->where('due_amount', '<=', 0)
+                      ->orWhere('payment_status', 'paid')
+                      ->orWhereRaw('COALESCE(received_amount, 0) >= total_amount');
+                });
             } elseif ($request->payment_method === 'due') {
                 $query->where(function ($q) {
                     $q->where('payment_method', 'due')
@@ -479,6 +498,10 @@ class BillingController extends Controller
             }
         }
 
+        if ($request->filled('date')) {
+            $query->whereDate('created_at', $request->date);
+        }
+
         if ($request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $request->date_from);
         }
@@ -487,12 +510,19 @@ class BillingController extends Controller
             $query->whereDate('created_at', '<=', $request->date_to);
         }
 
+        $periodTotalRevenue = (float) (clone $query)->sum('total_amount');
+        $periodTotalBills = (clone $query)->count();
+
         $perPage = (int) ($request->get('per_page') ?: 20);
         $invoices = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json([
             'status' => 'success',
             'data' => $invoices,
+            'summary' => [
+                'period_revenue' => round($periodTotalRevenue, 2),
+                'period_bills_count' => $periodTotalBills,
+            ],
             'shop' => [
                 'id' => $shop->id,
                 'name' => $shop->name,
@@ -1010,21 +1040,76 @@ class BillingController extends Controller
     }
 
     /**
-     * List all outstanding Due Bills for the store with summary.
+     * List all outstanding Due Bills & Settled Credit History for the store with summary.
      */
     public function getDueBills(Request $request)
     {
         $shop = $this->getActiveShop($request);
         $this->ensureBillingEnabled($shop);
 
+        // Condition for Real Pending Dues (balance > 0 and not fully paid)
+        $pendingCondition = function ($q) {
+            $q->where(function ($sub) {
+                $sub->where('due_amount', '>', 0)
+                    ->orWhere(function ($sub2) {
+                        $sub2->whereNull('due_amount')
+                             ->whereIn('payment_status', ['due', 'partial'])
+                             ->whereRaw('total_amount > COALESCE(received_amount, 0)');
+                    });
+            })->where('payment_status', '!=', 'paid');
+        };
+
+        // Condition for Settled Credit Bills (originally credit/due, but now 0 due and paid)
+        $settledCondition = function ($q) {
+            $q->where(function ($sub) {
+                $sub->where('payment_method', 'due')
+                    ->orWhereNotNull('due_date')
+                    ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(payment_details, '$.settlement_history')) IS NOT NULL");
+            })->where(function ($sub2) {
+                $sub2->where('due_amount', '<=', 0)
+                     ->orWhere('payment_status', 'paid')
+                     ->orWhereRaw('COALESCE(received_amount, 0) >= total_amount');
+            });
+        };
+
+        // Summary queries
+        $pendingQueryBase = Order::where('shop_id', $shop->id)
+            ->where('type', 'pos_billing')
+            ->where($pendingCondition);
+
+        $settledQueryBase = Order::where('shop_id', $shop->id)
+            ->where('type', 'pos_billing')
+            ->where($settledCondition);
+
+        $totalDueAmount = (float) (clone $pendingQueryBase)->sum(
+            DB::raw('CASE WHEN due_amount > 0 THEN due_amount ELSE GREATEST(0, total_amount - COALESCE(received_amount, 0)) END')
+        );
+        $pendingBillsCount = (clone $pendingQueryBase)->count();
+        $settledBillsCount = (clone $settledQueryBase)->count();
+        $settledTotalAmount = (float) (clone $settledQueryBase)->sum('total_amount');
+
+        // Status Filter: 'pending' (default) | 'settled' | 'all'
+        $status = $request->get('status', 'all');
+
         $query = Order::where('shop_id', $shop->id)
             ->where('type', 'pos_billing')
-            ->where(function ($q) {
-                $q->where('due_amount', '>', 0)
-                  ->orWhereIn('payment_status', ['due', 'partial'])
-                  ->orWhere('payment_method', 'due');
-            })
             ->with(['items.product', 'items.variant', 'user']);
+
+        if ($status === 'pending') {
+            $query->where($pendingCondition);
+            $query->orderBy('due_amount', 'desc')->orderBy('created_at', 'desc');
+        } elseif ($status === 'settled') {
+            $query->where($settledCondition);
+            $query->orderBy('updated_at', 'desc')->orderBy('created_at', 'desc');
+        } else {
+            // 'all': pending dues first, then settled
+            $query->where(function ($q) use ($pendingCondition, $settledCondition) {
+                $q->where($pendingCondition)->orWhere($settledCondition);
+            });
+            $query->orderByRaw('CASE WHEN due_amount > 0 THEN 0 ELSE 1 END ASC')
+                  ->orderBy('due_amount', 'desc')
+                  ->orderBy('created_at', 'desc');
+        }
 
         if ($request->filled('search')) {
             $term = $request->search;
@@ -1036,29 +1121,19 @@ class BillingController extends Controller
             });
         }
 
-        // Summary of all unpaid dues for this store
-        $allDueQuery = Order::where('shop_id', $shop->id)
-            ->where('type', 'pos_billing')
-            ->where(function ($q) {
-                $q->where('due_amount', '>', 0)
-                  ->orWhereIn('payment_status', ['due', 'partial'])
-                  ->orWhere('payment_method', 'due');
-            });
-
-        $totalDueAmount = (float) $allDueQuery->sum(DB::raw('CASE WHEN due_amount > 0 THEN due_amount ELSE GREATEST(0, total_amount - COALESCE(received_amount, 0)) END'));
-        $dueBillsCount = $allDueQuery->count();
-
-        $perPage = (int) ($request->get('per_page') ?: 20);
-        $bills = $query->orderBy('due_amount', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->paginate($perPage);
+        $perPage = (int) ($request->get('per_page') ?: 30);
+        $bills = $query->paginate($perPage);
 
         return response()->json([
             'status' => 'success',
             'data' => $bills,
             'summary' => [
                 'total_due_amount' => round($totalDueAmount, 2),
-                'due_bills_count' => $dueBillsCount,
+                'due_bills_count' => $pendingBillsCount, // Real pending bills count
+                'pending_bills_count' => $pendingBillsCount,
+                'settled_bills_count' => $settledBillsCount,
+                'settled_total_amount' => round($settledTotalAmount, 2),
+                'all_count' => $pendingBillsCount + $settledBillsCount,
             ],
             'shop' => [
                 'id' => $shop->id,
@@ -1105,6 +1180,15 @@ class BillingController extends Controller
             'cashier' => $user?->name ?: 'Admin / Staff',
             'notes' => $request->notes ?: 'Due payment cleared',
         ];
+
+        // Increment drawer/collection totals for the settle method
+        if ($settleMethod === 'cash') {
+            $order->split_cash_amount = round(((float) $order->split_cash_amount) + $settleAmount, 2);
+        } elseif ($settleMethod === 'upi') {
+            $order->split_upi_amount = round(((float) $order->split_upi_amount) + $settleAmount, 2);
+        } elseif ($settleMethod === 'card') {
+            $order->split_card_amount = round(((float) $order->split_card_amount) + $settleAmount, 2);
+        }
 
         $order->received_amount = $newReceived;
         $order->due_amount = $newDue;

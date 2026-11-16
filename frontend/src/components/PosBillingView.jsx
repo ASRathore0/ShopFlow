@@ -41,7 +41,9 @@ export default function PosBillingView({
   const [isSimulatingSoundbox, setIsSimulatingSoundbox] = useState(false);
   const [reconciliationData, setReconciliationData] = useState(null);
   const [isLoadingReconciliation, setIsLoadingReconciliation] = useState(false);
-  const [overviewPeriod, setOverviewPeriod] = useState('daily'); // 'daily' | 'weekly' | 'monthly' | 'all'
+  const [overviewPeriod, setOverviewPeriod] = useState('daily'); // 'daily' | 'weekly' | 'monthly' | 'all' | 'custom'
+  const [selectedCustomDate, setSelectedCustomDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [customPeriodSummary, setCustomPeriodSummary] = useState(null);
 
   // Fast Quick-Item Entry (No Upload Required)
   const [quickName, setQuickName] = useState('');
@@ -73,6 +75,7 @@ export default function PosBillingView({
   const [discountAmount, setDiscountAmount] = useState(0);
   const [discountType, setDiscountType] = useState('amount'); // 'amount' (default) | 'percent'
   const [discountPercentInput, setDiscountPercentInput] = useState('');
+  const [negotiatedAmount, setNegotiatedAmount] = useState('');
   const [taxAmount, setTaxAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' | 'upi' | 'card' | 'partial'
   const [splitCashAmount, setSplitCashAmount] = useState('');
@@ -271,8 +274,11 @@ export default function PosBillingView({
       const p = (disc / subTot) * 100;
       setDiscountPercentInput(Number.isInteger(p) ? String(p) : Number(p.toFixed(2)).toString());
       setDiscountType('percent');
+      const neg = Math.max(0, subTot - disc);
+      setNegotiatedAmount(String(neg));
     } else {
       setDiscountPercentInput('');
+      setNegotiatedAmount('');
     }
     setTaxAmount(parseFloat(billToEdit.tax_amount) || 0);
     const mode = billToEdit.payment_method || 'cash';
@@ -305,6 +311,7 @@ export default function PosBillingView({
     setDiscountAmount(0);
     setDiscountType('amount');
     setDiscountPercentInput('');
+    setNegotiatedAmount('');
     setPaymentMethod('cash');
     setSplitCashAmount('');
     setSplitUpiAmount('');
@@ -511,10 +518,14 @@ export default function PosBillingView({
     }
   };
 
-  const loadReconciliation = async (period = overviewPeriod) => {
+  const loadReconciliation = async (period = overviewPeriod, targetDate = selectedCustomDate) => {
     setIsLoadingReconciliation(true);
     try {
-      const res = await billingService.getSoundboxReconciliation({ period }, role);
+      const params = { period };
+      if (period === 'custom' && targetDate) {
+        params.date = targetDate;
+      }
+      const res = await billingService.getSoundboxReconciliation(params, role);
       setReconciliationData(res.data);
     } catch (err) {
       console.warn('Failed to load reconciliation:', err);
@@ -570,7 +581,7 @@ export default function PosBillingView({
     }
   };
 
-  const loadInvoices = async (period = overviewPeriod, page = 1, append = false) => {
+  const loadInvoices = async (period = overviewPeriod, page = 1, append = false, targetDate = selectedCustomDate) => {
     if (append) {
       setIsLoadingMoreInvoices(true);
     } else {
@@ -585,9 +596,11 @@ export default function PosBillingView({
       if (invoicePaymentFilter !== 'all') params.payment_method = invoicePaymentFilter;
 
       if (!invoiceSearch) {
-        if (period === 'daily') {
+        if (period === 'custom' && targetDate) {
+          params.date = targetDate;
+        } else if (period === 'daily') {
           const todayStr = new Date().toISOString().split('T')[0];
-          params.date_from = todayStr;
+          params.date = todayStr;
         } else if (period === 'weekly') {
           const d = new Date();
           const day = d.getDay();
@@ -603,6 +616,12 @@ export default function PosBillingView({
 
       const res = await billingService.getInvoices(params, role);
       if (res && res.data) {
+        if (res.summary) {
+          setCustomPeriodSummary({
+            revenue: res.summary.period_revenue,
+            bills_count: res.summary.period_bills_count,
+          });
+        }
         const paginated = res.data.data ? res.data : null;
         const list = Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
         
@@ -633,15 +652,18 @@ export default function PosBillingView({
 
   const handleShowMoreInvoices = () => {
     if (invoicesPagination.hasMore && !isLoadingMoreInvoices) {
-      loadInvoices(overviewPeriod, invoicesPagination.currentPage + 1, true);
+      loadInvoices(overviewPeriod, invoicesPagination.currentPage + 1, true, selectedCustomDate);
     }
   };
 
-  const handlePeriodChange = (period) => {
+  const handlePeriodChange = (period, targetDate = selectedCustomDate) => {
     setOverviewPeriod(period);
-    loadInvoices(period);
+    if (period === 'custom' && targetDate) {
+      setSelectedCustomDate(targetDate);
+    }
+    loadInvoices(period, 1, false, targetDate);
     if (soundboxEnabled) {
-      loadReconciliation(period);
+      loadReconciliation(period, targetDate);
     }
   };
 
@@ -651,9 +673,9 @@ export default function PosBillingView({
 
   useEffect(() => {
     if (activeSubTab === 'invoices') {
-      loadInvoices(overviewPeriod);
+      loadInvoices(overviewPeriod, 1, false, selectedCustomDate);
       if (soundboxEnabled) {
-        loadReconciliation(overviewPeriod);
+        loadReconciliation(overviewPeriod, selectedCustomDate);
       }
     }
   }, [activeSubTab, invoicePaymentFilter, soundboxEnabled, overviewPeriod]);
@@ -691,9 +713,78 @@ export default function PosBillingView({
     return paymentMethod === 'partial' ? splitUpiNum : totalAmount;
   }, [paymentMethod, splitUpiNum, totalAmount]);
 
-  // Dynamic Overview Period Metrics (Daily / Weekly / Monthly / All Time)
+  // Handle Negotiated Final Amount (agreed price) -> auto-calculates discount
+  const handleNegotiatedPriceChange = (val) => {
+    setNegotiatedAmount(val);
+    if (val === '' || isNaN(parseFloat(val))) {
+      setDiscountAmount(0);
+      setDiscountPercentInput('');
+      return;
+    }
+    const n = parseFloat(val);
+    if (subtotal > 0) {
+      const calcDiscount = Math.max(0, Math.round((subtotal - n) * 100) / 100);
+      setDiscountAmount(calcDiscount);
+      if (calcDiscount > 0) {
+        const p = (calcDiscount / subtotal) * 100;
+        setDiscountPercentInput(Number.isInteger(p) ? String(p) : Number(p.toFixed(2)).toString());
+      } else {
+        setDiscountPercentInput('');
+      }
+    }
+  };
+
+  // Handle direct Discount Amount (₹) change -> keeps negotiated amount in sync
+  const handleDiscountAmountChange = (val) => {
+    setDiscountAmount(val);
+    const d = parseFloat(val) || 0;
+    if (subtotal > 0) {
+      if (d > 0) {
+        const neg = Math.max(0, Math.round((subtotal - d) * 100) / 100);
+        setNegotiatedAmount(String(neg));
+        const p = (d / subtotal) * 100;
+        setDiscountPercentInput(Number.isInteger(p) ? String(p) : Number(p.toFixed(2)).toString());
+      } else {
+        setNegotiatedAmount('');
+        setDiscountPercentInput('');
+      }
+    } else {
+      setNegotiatedAmount('');
+      setDiscountPercentInput('');
+    }
+  };
+
+  // Handle direct Discount Percent (%) change -> keeps negotiated amount in sync
+  const handleDiscountPercentChange = (val) => {
+    setDiscountPercentInput(val);
+    const p = parseFloat(val) || 0;
+    if (subtotal > 0 && p > 0) {
+      const d = Math.max(0, Math.round(((subtotal * p) / 100) * 100) / 100);
+      setDiscountAmount(d);
+      const neg = Math.max(0, Math.round((subtotal - d) * 100) / 100);
+      setNegotiatedAmount(String(neg));
+    } else {
+      setDiscountAmount(0);
+      setNegotiatedAmount('');
+    }
+  };
+
+  // Dynamic Overview Period Metrics (Daily / Weekly / Monthly / All Time / Specific Date)
   const activePeriodMetrics = useMemo(() => {
-    if (overviewPeriod === 'weekly') {
+    if (overviewPeriod === 'custom') {
+      const formattedDate = selectedCustomDate
+        ? new Date(selectedCustomDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : 'Selected Date';
+      const rev = customPeriodSummary?.revenue ?? reconciliationData?.summary?.total_revenue ?? 0;
+      const count = customPeriodSummary?.bills_count ?? reconciliationData?.summary?.total_bills ?? invoicesPagination.total ?? 0;
+      return {
+        label1: `Sales on ${formattedDate}`,
+        value1: rev,
+        label2: `Bills on ${formattedDate}`,
+        value2: count,
+        periodName: formattedDate,
+      };
+    } else if (overviewPeriod === 'weekly') {
       const rev = metrics.week_revenue ?? (reconciliationData?.summary?.total_revenue || 0);
       const count = metrics.week_bills_count ?? (reconciliationData?.summary?.total_bills || 0);
       return {
@@ -732,7 +823,7 @@ export default function PosBillingView({
       value2: count,
       periodName: "Today",
     };
-  }, [overviewPeriod, metrics, reconciliationData]);
+  }, [overviewPeriod, selectedCustomDate, customPeriodSummary, metrics, reconciliationData, invoicesPagination.total]);
 
   // Real-time Soundbox Radar: Auto-detects payment when customer scans UPI QR
   const isPollingRef = useRef(false);
@@ -1012,6 +1103,7 @@ export default function PosBillingView({
         setDiscountAmount(0);
         setDiscountType('amount');
         setDiscountPercentInput('');
+        setNegotiatedAmount('');
         setPaymentMethod('cash');
         setSplitCashAmount('');
         setSplitUpiAmount('');
@@ -1929,7 +2021,12 @@ export default function PosBillingView({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setCartItems([])}
+                    onClick={() => {
+                      setCartItems([]);
+                      setDiscountAmount(0);
+                      setDiscountPercentInput('');
+                      setNegotiatedAmount('');
+                    }}
                     disabled={cartItems.length === 0}
                     className="text-[11px] font-bold text-red-500 hover:underline disabled:opacity-30 cursor-pointer"
                   >
@@ -2141,6 +2238,34 @@ export default function PosBillingView({
                   </span>
                 </div>
 
+                {/* Negotiated At (Direct Agreed Deal Amount) */}
+                <div className="flex items-center justify-between gap-2 py-0.5">
+                  <div className="flex items-center gap-1.5 text-slate-700 dark:text-zinc-300">
+                    <span className="font-bold">Deal Price</span>
+                    <span className="text-[10px] text-slate-400 font-medium"></span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-xs text-slate-500">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      inputMode="decimal"
+                      value={negotiatedAmount}
+                      onChange={(e) => handleNegotiatedPriceChange(e.target.value)}
+                      placeholder={subtotal > 0 ? String(subtotal.toFixed(0)) : '0'}
+                      className="w-20 px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-black text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      title="Enter agreed negotiated final amount. Discount will calculate automatically."
+                    />
+                    {subtotal > 0 && parseFloat(negotiatedAmount) > 0 && parseFloat(negotiatedAmount) < subtotal && (
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                        (-₹{(subtotal - parseFloat(negotiatedAmount)).toFixed(0)})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-slate-600 dark:text-zinc-400">
                     <span>Discount</span>
@@ -2182,13 +2307,7 @@ export default function PosBillingView({
                           step="any"
                           inputMode="decimal"
                           value={discountPercentInput}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setDiscountPercentInput(val);
-                            const p = parseFloat(val) || 0;
-                            const amt = Math.max(0, (subtotal * p) / 100);
-                            setDiscountAmount(amt > 0 ? Number(amt.toFixed(2)) : 0);
-                          }}
+                          onChange={(e) => handleDiscountPercentChange(e.target.value)}
                           placeholder="0"
                           className="w-16 px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-bold text-xs"
                         />
@@ -2208,14 +2327,7 @@ export default function PosBillingView({
                           step="any"
                           inputMode="decimal"
                           value={discountAmount}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setDiscountAmount(val);
-                            if (subtotal > 0) {
-                              const p = (parseFloat(val || 0) / subtotal) * 100;
-                              setDiscountPercentInput(p > 0 ? (Number.isInteger(p) ? String(p) : p.toFixed(1)) : '');
-                            }
-                          }}
+                          onChange={(e) => handleDiscountAmountChange(e.target.value)}
                           className="w-20 px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-right font-bold text-xs"
                         />
                         {subtotal > 0 && parseFloat(discountAmount) > 0 && (
@@ -2929,74 +3041,117 @@ export default function PosBillingView({
       {/* SUB-VIEW 2: INVOICES & SALES HISTORY */}
       {activeSubTab === 'invoices' && (
         <div className="space-y-4">
-          {/* Overview Period Filter Bar: Daily, Weekly, Monthly, All Time */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#18181B] p-3 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm">
-            <div className="flex items-center gap-2.5">
+          {/* Overview Period Filter Bar: Daily, Weekly, Monthly, All Time & Custom Specific Date */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white dark:bg-[#18181B] p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                 <Calendar className="w-4 h-4" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider block">
                   Overview Period Filter
                 </span>
-                <span className="text-[11px] text-slate-400">
-                  Switch between daily, weekly, monthly and all-time collections
+                <span className="text-[11px] text-slate-400 truncate block">
+                  {overviewPeriod === 'custom'
+                    ? `Showing overview & bills for ${activePeriodMetrics.periodName}`
+                    : 'Switch between daily, weekly, monthly, all-time, or select any specific date'}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200/80 dark:border-zinc-700/80 overflow-x-auto no-scrollbar">
-              <button
-                type="button"
-                onClick={() => handlePeriodChange('daily')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-                  overviewPeriod === 'daily'
-                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>Daily (Today)</span>
-              </button>
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              {/* Preset Period Buttons */}
+              <div className="flex items-center p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200/80 dark:border-zinc-700/80 overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => handlePeriodChange('daily')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    overviewPeriod === 'daily'
+                      ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Today</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handlePeriodChange('weekly')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-                  overviewPeriod === 'weekly'
-                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Weekly (This Week)</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handlePeriodChange('weekly')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    overviewPeriod === 'weekly'
+                      ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>This Week</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handlePeriodChange('monthly')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-                  overviewPeriod === 'monthly'
-                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Monthly (This Month)</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handlePeriodChange('monthly')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    overviewPeriod === 'monthly'
+                      ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>This Month</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handlePeriodChange('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-                  overviewPeriod === 'all'
-                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                <button
+                  type="button"
+                  onClick={() => handlePeriodChange('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    overviewPeriod === 'all'
+                      ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>All Time</span>
+                </button>
+              </div>
+
+              {/* Specific Date Picker Selector */}
+              <div
+                className={`flex items-center gap-1.5 p-1 rounded-xl border transition-all shrink-0 ${
+                  overviewPeriod === 'custom'
+                    ? 'bg-blue-600/10 text-blue-700 dark:text-blue-300 border-blue-500 shadow-xs'
+                    : 'bg-slate-100 dark:bg-zinc-800/80 border-slate-200/80 dark:border-zinc-700/80 text-slate-600 dark:text-zinc-400 hover:border-slate-300'
                 }`}
               >
-                <Zap className="w-3.5 h-3.5" />
-                <span>All Time</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handlePeriodChange('custom', selectedCustomDate)}
+                  className={`px-2 py-1 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-colors ${
+                    overviewPeriod === 'custom'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'hover:text-blue-600 dark:hover:text-white'
+                  }`}
+                  title="Filter sales and bills by a specific date"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Pick Date:</span>
+                </button>
+
+                <input
+                  type="date"
+                  value={selectedCustomDate}
+                  max={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val) {
+                      setSelectedCustomDate(val);
+                      handlePeriodChange('custom', val);
+                    }
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  title="Select specific date"
+                />
+              </div>
             </div>
           </div>
 
@@ -3020,7 +3175,7 @@ export default function PosBillingView({
 
                 <div className="flex items-center gap-2 self-start sm:self-auto">
                   <button
-                    onClick={() => loadReconciliation(overviewPeriod)}
+                    onClick={() => loadReconciliation(overviewPeriod, selectedCustomDate)}
                     disabled={isLoadingReconciliation}
                     className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 text-xs flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
                     title="Refresh Reconciliation"
@@ -3184,7 +3339,9 @@ export default function PosBillingView({
                 <option value="upi">UPI Only</option>
                 <option value="card">Card Only</option>
                 <option value="partial">Partial / Split</option>
-                <option value="due">🔴 Due / Udhaar</option>
+                <option value="due_pending">🔴 Pending Due (Unpaid)</option>
+                <option value="due_settled">🟢 Settled Due (History)</option>
+                <option value="due">All Due Bills</option>
               </select>
 
               <button
@@ -3260,7 +3417,9 @@ export default function PosBillingView({
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
                                 inv.payment_method === 'due'
-                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                                  ? ((parseFloat(inv.due_amount) === 0 || inv.payment_status === 'paid')
+                                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30')
                                   : inv.payment_method === 'upi'
                                   ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
                                   : inv.payment_method === 'card'
@@ -3269,12 +3428,18 @@ export default function PosBillingView({
                                   ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
                                   : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
                               }`}>
-                                {inv.payment_method === 'due' ? 'Due / Udhaar' : (inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial / Split' : (inv.payment_method || 'Cash'))}
+                                {inv.payment_method === 'due'
+                                  ? ((parseFloat(inv.due_amount) === 0 || inv.payment_status === 'paid') ? '✓ Due Settled' : 'Due / Udhaar')
+                                  : (inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial / Split' : (inv.payment_method || 'Cash'))}
                               </span>
 
-                              {(parseFloat(inv.due_amount) > 0 || inv.payment_status === 'due') && (
+                              {(parseFloat(inv.due_amount) > 0 || (inv.payment_status === 'due' && parseFloat(inv.due_amount) !== 0)) ? (
                                 <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
                                   Due: ₹{parseFloat(inv.due_amount || (inv.total_amount - inv.received_amount)).toFixed(0)}
+                                </span>
+                              ) : inv.payment_method === 'due' && (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                  ✓ Cleared
                                 </span>
                               )}
                             </div>
@@ -3384,7 +3549,9 @@ export default function PosBillingView({
                         </span>
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
                           inv.payment_method === 'due'
-                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                            ? ((parseFloat(inv.due_amount) === 0 || inv.payment_status === 'paid')
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                                : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30')
                             : inv.payment_method === 'upi'
                             ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
                             : inv.payment_method === 'card'
@@ -3393,11 +3560,17 @@ export default function PosBillingView({
                             ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
                             : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
                         }`}>
-                          {inv.payment_method === 'due' ? 'Due / Udhaar' : (inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial' : (inv.payment_method || 'Cash'))}
+                          {inv.payment_method === 'due'
+                            ? ((parseFloat(inv.due_amount) === 0 || inv.payment_status === 'paid') ? '✓ Due Settled' : 'Due / Udhaar')
+                            : (inv.payment_method === 'partial' || inv.payment_method === 'split' ? 'Partial' : (inv.payment_method || 'Cash'))}
                         </span>
-                        {(parseFloat(inv.due_amount) > 0 || inv.payment_status === 'due') && (
+                        {(parseFloat(inv.due_amount) > 0 || (inv.payment_status === 'due' && parseFloat(inv.due_amount) !== 0)) ? (
                           <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
                             🔴 Due: ₹{parseFloat(inv.due_amount || (inv.total_amount - inv.received_amount)).toFixed(0)}
+                          </span>
+                        ) : inv.payment_method === 'due' && (
+                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                            ✓ Cleared
                           </span>
                         )}
                       </div>

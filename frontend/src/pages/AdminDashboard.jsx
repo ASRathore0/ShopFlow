@@ -2415,7 +2415,14 @@ export default function AdminDashboard() {
                   ₹{Number(metrics.total_due_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </div>
                 <div className="text-[10px] sm:text-xs text-amber-700 dark:text-amber-400 font-bold flex items-center justify-between">
-                  <span>{metrics.due_bills_count || 0} unpaid bills</span>
+                  <span>
+                    {metrics.due_bills_count || 0} unpaid {metrics.due_bills_count === 1 ? 'bill' : 'bills'}
+                    {metrics.settled_due_bills_count > 0 && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold ml-1">
+                        • {metrics.settled_due_bills_count} settled
+                      </span>
+                    )}
+                  </span>
                   <span className="text-[10px] text-blue-600 dark:text-blue-400 underline font-semibold">View All →</span>
                 </div>
                 <span className="text-[10px] text-slate-400 dark:text-zinc-500 block truncate">
