@@ -161,12 +161,64 @@ class AdminDashboardController extends Controller
 
         $totalUnitsSold = (int) $orderItems->sum('quantity');
 
+        $targetOrderLookup = $targetOrders->keyBy('id');
+
+        // Precompute line items grouped by order to apportion net billed amount
+        // This ensures items/categories reflect actual discounts, negotiated prices, and exact bill totals
+        $itemsByOrder = [];
+        $orderItemSubtotals = [];
+        foreach ($orderItems as $item) {
+            $itemsByOrder[$item->order_id][] = $item;
+            $orderItemSubtotals[$item->order_id] = ($orderItemSubtotals[$item->order_id] ?? 0.0) + (float) $item->total_price;
+        }
+
+        $itemNetRevenueLookup = [];
+        foreach ($itemsByOrder as $ordId => $orderItemList) {
+            $ord = $targetOrderLookup[$ordId] ?? null;
+            if (!$ord) {
+                foreach ($orderItemList as $it) {
+                    $itemNetRevenueLookup[$it->id] = (float) $it->total_price;
+                }
+                continue;
+            }
+
+            $orderTotal = (float) $ord->total_amount;
+            $subtotal = (float) ($ord->subtotal ?: ($orderItemSubtotals[$ordId] ?? 0));
+
+            // If only 1 item on the bill, it takes the entire net order total (e.g. ₹900 bill)
+            if (count($orderItemList) === 1) {
+                $itemNetRevenueLookup[$orderItemList[0]->id] = $orderTotal;
+                continue;
+            }
+
+            // Multiple items: apportion proportionally to each item's share of the bill
+            if ($subtotal > 0) {
+                $allocated = 0.0;
+                $count = count($orderItemList);
+                foreach ($orderItemList as $idx => $it) {
+                    if ($idx === $count - 1) {
+                        // Last item gets remainder to ensure exact match with order total
+                        $itemNetRevenueLookup[$it->id] = round($orderTotal - $allocated, 2);
+                    } else {
+                        $portion = round(((float) $it->total_price / $subtotal) * $orderTotal, 2);
+                        $itemNetRevenueLookup[$it->id] = $portion;
+                        $allocated += $portion;
+                    }
+                }
+            } else {
+                foreach ($orderItemList as $it) {
+                    $itemNetRevenueLookup[$it->id] = (float) $it->total_price;
+                }
+            }
+        }
+
         // Group by Item (Top Selling Items)
         $itemsGrouped = [];
         foreach ($orderItems as $item) {
             $key = $item->product_id ? "prod_{$item->product_id}" : "custom_" . strtolower(trim($item->item_name ?: 'item'));
             $resolvedCat = $this->resolveCategoryName($item);
             $displayName = $item->product ? $item->product->name : ($item->item_name ?: 'Quick Item');
+            $netRevenue = $itemNetRevenueLookup[$item->id] ?? (float) $item->total_price;
 
             if (!isset($itemsGrouped[$key])) {
                 $itemsGrouped[$key] = [
@@ -182,7 +234,7 @@ class AdminDashboardController extends Controller
             }
 
             $itemsGrouped[$key]['units_sold'] += (int) $item->quantity;
-            $itemsGrouped[$key]['total_revenue'] += (float) $item->total_price;
+            $itemsGrouped[$key]['total_revenue'] += $netRevenue;
         }
 
         // Sort items by units sold descending
@@ -195,6 +247,8 @@ class AdminDashboardController extends Controller
 
         foreach ($orderItems as $item) {
             $cat = $this->resolveCategoryName($item);
+            $netRevenue = $itemNetRevenueLookup[$item->id] ?? (float) $item->total_price;
+
             if (!isset($categoryGrouped[$cat])) {
                 $categoryGrouped[$cat] = [
                     'category' => $cat,
@@ -203,7 +257,7 @@ class AdminDashboardController extends Controller
                 ];
             }
             $categoryGrouped[$cat]['units_sold'] += (int) $item->quantity;
-            $categoryGrouped[$cat]['revenue'] += (float) $item->total_price;
+            $categoryGrouped[$cat]['revenue'] += $netRevenue;
         }
 
         uasort($categoryGrouped, fn ($a, $b) => $b['units_sold'] <=> $a['units_sold']);

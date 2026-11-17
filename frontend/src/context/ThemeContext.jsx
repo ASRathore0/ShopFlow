@@ -4,9 +4,13 @@ const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
+    const explicit = localStorage.getItem('shopflow_theme_explicit');
     const saved = localStorage.getItem('shopflow_theme');
-    if (saved) return saved;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    if (explicit === 'true' && (saved === 'dark' || saved === 'light')) {
+      return saved;
+    }
+    // Default across the whole website is light theme
+    return 'light';
   });
 
   useEffect(() => {
@@ -22,7 +26,11 @@ export const ThemeProvider = ({ children }) => {
   }, [theme]);
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('shopflow_theme_explicit', 'true');
+      return next;
+    });
   };
 
   return (
