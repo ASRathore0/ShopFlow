@@ -634,14 +634,77 @@ class BillingController extends Controller
             $tax = (float) ($request->tax_amount ?: 0);
             $totalAmount = max(0, round($subtotal - $discount + $tax, 2));
 
-            $received = (float) ($request->received_amount ?: $totalAmount);
-            $change = max(0, round($received - $totalAmount, 2));
-            $paymentMethod = $request->payment_method ?: $order->payment_method;
+            $paymentMethod = $request->payment_method ?: $order->payment_method ?: 'cash';
+            $dueDate = $request->filled('due_date') ? \Carbon\Carbon::parse($request->due_date)->format('Y-m-d') : null;
+            $advancePaymentMethod = $request->advance_payment_method ?: 'cash';
 
-            $splitCash = (float) ($request->split_cash_amount ?: 0);
-            $splitUpi = (float) ($request->split_upi_amount ?: 0);
-            $splitCard = (float) ($request->split_card_amount ?: 0);
-            $isSplit = in_array($paymentMethod, ['partial', 'split']);
+            if ($paymentMethod === 'due') {
+                $received = $request->has('received_amount') && $request->received_amount !== '' && $request->received_amount !== null
+                    ? (float) $request->received_amount
+                    : 0.0;
+                $change = 0.0;
+                $dueAmount = max(0, round($totalAmount - $received, 2));
+                $paymentStatus = $dueAmount > 0 ? ($received > 0 ? 'partial' : 'due') : 'paid';
+
+                if ($received > 0) {
+                    if ($advancePaymentMethod === 'upi') {
+                        $splitCash = 0.0;
+                        $splitUpi = $received;
+                        $splitCard = 0.0;
+                    } elseif ($advancePaymentMethod === 'card') {
+                        $splitCash = 0.0;
+                        $splitUpi = 0.0;
+                        $splitCard = $received;
+                    } elseif ($advancePaymentMethod === 'partial') {
+                        $splitCash = (float) ($request->split_cash_amount ?: 0);
+                        $splitUpi = (float) ($request->split_upi_amount ?: 0);
+                        $splitCard = 0.0;
+                    } else { // cash
+                        $splitCash = $received;
+                        $splitUpi = 0.0;
+                        $splitCard = 0.0;
+                    }
+                } else {
+                    $splitCash = 0.0;
+                    $splitUpi = 0.0;
+                    $splitCard = 0.0;
+                }
+            } else {
+                $received = $request->has('received_amount') && $request->received_amount !== '' && $request->received_amount !== null
+                    ? (float) $request->received_amount
+                    : $totalAmount;
+                $change = max(0, round($received - $totalAmount, 2));
+                $dueAmount = 0.0;
+                $dueDate = null;
+                $paymentStatus = 'paid';
+
+                $splitCash = (float) ($request->split_cash_amount ?: 0);
+                $splitUpi = (float) ($request->split_upi_amount ?: 0);
+                $splitCard = (float) ($request->split_card_amount ?: 0);
+            }
+
+            $isSplit = in_array($paymentMethod, ['partial', 'split']) || ($paymentMethod === 'due' && $received > 0);
+
+            $soundboxDeviceId = $request->soundbox_device_id ?: null;
+            $soundboxAccountName = $request->soundbox_account_name ?: null;
+            $utrNumber = $request->utr_number ? trim($request->utr_number) : null;
+            $syncedAt = (($paymentMethod === 'upi' || ($isSplit && $splitUpi > 0)) && ($soundboxDeviceId || $utrNumber)) ? now() : null;
+
+            $paymentDetails = $isSplit ? [
+                'cash' => $splitCash,
+                'upi' => $splitUpi,
+                'card' => $splitCard,
+            ] : [];
+
+            if ($dueAmount > 0 || $paymentMethod === 'due') {
+                $paymentDetails['due_amount'] = $dueAmount;
+                $paymentDetails['due_date'] = $dueDate;
+                $paymentDetails['initial_received'] = $received;
+                $paymentDetails['advance_payment_method'] = $advancePaymentMethod;
+                $paymentDetails['advance_cash'] = $splitCash;
+                $paymentDetails['advance_upi'] = $splitUpi;
+                $paymentDetails['advance_card'] = $splitCard;
+            }
 
             // 4. Update the order record
             $order->subtotal = $subtotal;
@@ -650,20 +713,47 @@ class BillingController extends Controller
             $order->total_amount = $totalAmount;
             $order->received_amount = $received;
             $order->change_amount = $change;
+            $order->due_amount = $dueAmount;
+            $order->due_date = $dueDate;
+            $order->payment_status = $paymentStatus;
             $order->payment_method = $paymentMethod;
-            $order->split_cash_amount = $isSplit ? $splitCash : null;
-            $order->split_upi_amount = $isSplit ? $splitUpi : null;
-            $order->split_card_amount = $isSplit ? $splitCard : null;
-            $order->payment_details = $isSplit ? [
-                'cash' => $splitCash,
-                'upi' => $splitUpi,
-                'card' => $splitCard,
-            ] : null;
+            $order->split_cash_amount = $splitCash > 0 ? $splitCash : null;
+            $order->split_upi_amount = $splitUpi > 0 ? $splitUpi : null;
+            $order->split_card_amount = $splitCard > 0 ? $splitCard : null;
+            $order->payment_details = !empty($paymentDetails) ? $paymentDetails : null;
             $order->customer_name = $request->customer_name ?: 'Walk-in Customer';
             $order->customer_phone = $request->customer_phone;
             $order->customer_address = $request->customer_address;
             $order->notes = $request->notes;
+            if ($soundboxDeviceId) $order->soundbox_device_id = $soundboxDeviceId;
+            if ($soundboxAccountName) $order->soundbox_account_name = $soundboxAccountName;
+            if ($utrNumber) $order->utr_number = $utrNumber;
+            if ($syncedAt) $order->soundbox_synced_at = $syncedAt;
             $order->save();
+
+            // Sync Soundbox ledger if UPI is involved
+            $isUpiInvolved = ($paymentMethod === 'upi') || ($isSplit && $splitUpi > 0);
+            if ($isUpiInvolved && ($utrNumber || $soundboxDeviceId || $order->soundbox_device_id)) {
+                try {
+                    $upiAmount = $isSplit ? $splitUpi : $totalAmount;
+                    \App\Models\SoundboxTransaction::updateOrCreate(
+                        ['order_id' => $order->id],
+                        [
+                            'shop_id' => $shop->id,
+                            'soundbox_device_id' => $order->soundbox_device_id,
+                            'amount' => $upiAmount,
+                            'utr_number' => $order->utr_number ?: ('POS' . date('YmdHis') . rand(100, 999)),
+                            'account_name' => $order->soundbox_account_name,
+                            'status' => 'matched',
+                            'raw_payload' => ['created_via_pos' => true, 'edited_via_pos' => true, 'account_name' => $order->soundbox_account_name],
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Could not update soundbox transaction: ' . $e->getMessage());
+                }
+            } elseif (!$isUpiInvolved) {
+                \App\Models\SoundboxTransaction::where('order_id', $order->id)->delete();
+            }
 
             // 5. Re-insert items and update inventory
             $user = $request->user();

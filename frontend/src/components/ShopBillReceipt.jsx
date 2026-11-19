@@ -66,9 +66,13 @@ export default function ShopBillReceipt({
     const customerPhone = bill.customer_phone ? bill.customer_phone.replace(/\D/g, '') : '';
     const phoneParam = customerPhone ? (customerPhone.length === 10 ? `91${customerPhone}` : customerPhone) : '';
 
-    const isDue = (parseFloat(bill.due_amount) > 0) || bill.payment_status === 'due' || bill.payment_method === 'due';
-    const dueAmtVal = parseFloat(bill.due_amount) > 0 ? parseFloat(bill.due_amount) : (isDue ? Math.max(0, parseFloat(bill.total_amount || 0) - parseFloat(bill.received_amount || 0)) : 0);
-    const paidAmtVal = parseFloat(bill.received_amount || 0);
+    const isDueMode = bill.payment_method === 'due' || bill.payment_status === 'due';
+    const rawDue = parseFloat(bill.due_amount);
+    const dueAmtVal = !isNaN(rawDue) && rawDue > 0
+      ? rawDue
+      : (isDueMode ? Math.max(0, parseFloat(bill.total_amount || 0) - parseFloat(bill.received_amount || 0)) : 0);
+    const isDue = dueAmtVal > 0;
+    const paidAmtVal = Math.max(0, Math.min(parseFloat(bill.total_amount || 0), parseFloat(bill.received_amount || (parseFloat(bill.total_amount || 0) - dueAmtVal))));
 
     let itemsText = items.map((it, idx) => `${idx + 1}. ${it.item_name || it.product?.name || 'Item'} (Qty: ${it.quantity}) - ₹${parseFloat(it.total_price || 0).toFixed(2)}`).join('\n');
 
@@ -384,10 +388,17 @@ export default function ShopBillReceipt({
               </tr>
 
               {/* If Due / Partial Paid */}
-              {((parseFloat(bill.due_amount) > 0) || bill.payment_status === 'due' || bill.payment_method === 'due') && (() => {
+              {(() => {
                 const totalAmt = parseFloat(bill.total_amount || 0);
-                const paidAmt = parseFloat(bill.received_amount || 0);
-                const dueAmt = parseFloat(bill.due_amount) > 0 ? parseFloat(bill.due_amount) : Math.max(0, totalAmt - paidAmt);
+                const rawDue = parseFloat(bill.due_amount);
+                const isDueMode = bill.payment_method === 'due' || bill.payment_status === 'due';
+                const dueAmt = !isNaN(rawDue) && rawDue > 0
+                  ? rawDue
+                  : (isDueMode ? Math.max(0, totalAmt - parseFloat(bill.received_amount || 0)) : 0);
+
+                if (dueAmt <= 0) return null;
+
+                const paidAmt = Math.max(0, Math.min(totalAmt, parseFloat(bill.received_amount !== undefined ? bill.received_amount : (totalAmt - dueAmt))));
 
                 return (
                   <>

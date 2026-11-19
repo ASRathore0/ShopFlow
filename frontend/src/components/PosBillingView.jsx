@@ -323,6 +323,35 @@ export default function PosBillingView({
     setReceivedAmount(billToEdit.received_amount ? String(billToEdit.received_amount) : '');
     setNotes(billToEdit.notes || '');
 
+    // Restore Soundbox details if any
+    if (billToEdit.soundbox_device_id) {
+      const matchDevice = soundboxDevices.find(d => d.id === billToEdit.soundbox_device_id);
+      if (matchDevice) setSelectedSoundbox(matchDevice);
+    }
+    if (billToEdit.utr_number) {
+      setSoundboxUtr(billToEdit.utr_number);
+    }
+
+    // Restore Due / Udhaar bill details
+    if (mode === 'due') {
+      const pDetails = billToEdit.payment_details || {};
+      const initialRec = pDetails.initial_received !== undefined
+        ? parseFloat(pDetails.initial_received)
+        : parseFloat(billToEdit.received_amount || 0);
+      setDueAdvanceAmount(initialRec > 0 ? String(initialRec) : '0');
+      setDueAdvanceMode(pDetails.advance_payment_method || 'cash');
+      setDueAdvanceCashAmount(pDetails.advance_cash ? String(pDetails.advance_cash) : (billToEdit.split_cash_amount ? String(billToEdit.split_cash_amount) : ''));
+      setDueAdvanceUpiAmount(pDetails.advance_upi ? String(pDetails.advance_upi) : (billToEdit.split_upi_amount ? String(billToEdit.split_upi_amount) : ''));
+      const dDate = billToEdit.due_date || pDetails.due_date || '';
+      setDueDate(dDate ? String(dDate).substring(0, 10) : '');
+    } else {
+      setDueAdvanceAmount('');
+      setDueAdvanceMode('cash');
+      setDueAdvanceCashAmount('');
+      setDueAdvanceUpiAmount('');
+      setDueDate('');
+    }
+
     setEditingBill(billToEdit);
     setActiveReceiptBill(null); // Close the receipt modal
     setActiveSubTab('pos');     // Navigate to POS entry screen
@@ -345,6 +374,11 @@ export default function PosBillingView({
     setPaymentMethod('cash');
     setSplitCashAmount('');
     setSplitUpiAmount('');
+    setDueAdvanceAmount('');
+    setDueAdvanceMode('cash');
+    setDueAdvanceCashAmount('');
+    setDueAdvanceUpiAmount('');
+    setDueDate('');
     setTaxAmount(0);
     setReceivedAmount('');
     setNotes('');
