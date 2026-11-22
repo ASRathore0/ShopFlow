@@ -82,23 +82,33 @@ class AdminDashboardController extends Controller
         $shopTz = !empty($shop?->timezone) && $shop->timezone !== 'UTC' ? $shop->timezone : 'Asia/Kolkata';
         $nowLocal = Carbon::now($shopTz);
 
-        // Period filter: 'today', 'week', 'month'
+        // Period filter: 'today', 'week', 'month', 'custom'
         $period = $request->input('period', 'today');
-        if (!in_array($period, ['today', 'week', 'month'])) {
-            $period = 'today';
-        }
+        $customDateInput = $request->input('date');
+        $customDateObj = null;
 
-        if ($period === 'week') {
-            $startDate = $nowLocal->copy()->subDays(6)->startOfDay()->utc();
-            $endDate = $nowLocal->copy()->endOfDay()->utc();
+        if ($request->filled('date') || $period === 'custom') {
+            $period = 'custom';
+            try {
+                $customDateObj = $customDateInput ? Carbon::parse($customDateInput, $shopTz) : $nowLocal;
+            } catch (\Exception $e) {
+                $customDateObj = $nowLocal;
+            }
+            $startDate = $customDateObj->copy()->startOfDay();
+            $endDate = $customDateObj->copy()->endOfDay();
+            $periodTitle = $customDateObj->isSameDay($nowLocal) ? 'Today' : $customDateObj->format('d M, Y');
+        } elseif ($period === 'week') {
+            $startDate = $nowLocal->copy()->subDays(6)->startOfDay();
+            $endDate = $nowLocal->copy()->endOfDay();
             $periodTitle = 'Past 7 Days';
         } elseif ($period === 'month') {
-            $startDate = $nowLocal->copy()->subDays(29)->startOfDay()->utc();
-            $endDate = $nowLocal->copy()->endOfDay()->utc();
+            $startDate = $nowLocal->copy()->subDays(29)->startOfDay();
+            $endDate = $nowLocal->copy()->endOfDay();
             $periodTitle = 'Past 30 Days';
         } else {
-            $startDate = $nowLocal->copy()->startOfDay()->utc();
-            $endDate = $nowLocal->copy()->endOfDay()->utc();
+            $period = 'today';
+            $startDate = $nowLocal->copy()->startOfDay();
+            $endDate = $nowLocal->copy()->endOfDay();
             $periodTitle = 'Today';
         }
 
@@ -151,8 +161,8 @@ class AdminDashboardController extends Controller
         // ========================================================
         // 3. TOP SELLING ITEMS & SALES BY CATEGORY (FROM BILLING)
         // ========================================================
-        // If period has bills, query period items; if none yet today, also prepare fallback to all-time so dashboard isn't blank
-        $targetOrders = $periodBillsCount > 0 ? $periodOrders : $allTimeOrders;
+        // Strictly use items from the selected period so stats match the filter
+        $targetOrders = $periodOrders;
         $orderIds = $targetOrders->pluck('id');
 
         $orderItems = OrderItem::whereIn('order_id', $orderIds)
@@ -272,10 +282,10 @@ class AdminDashboardController extends Controller
         }
 
         // ========================================================
-        // 4. TIMELINE CHART (HOURLY FOR TODAY, DAILY FOR WEEK/MONTH)
+        // 4. TIMELINE CHART (HOURLY FOR TODAY & CUSTOM DATE, DAILY FOR WEEK/MONTH)
         // ========================================================
         $timelineChart = [];
-        if ($period === 'today') {
+        if ($period === 'today' || $period === 'custom') {
             // Hours 9 AM to 10 PM in shop local timezone
             $hours = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
             foreach ($hours as $h) {
@@ -461,6 +471,7 @@ class AdminDashboardController extends Controller
                 'shop' => $shop,
                 'period' => $period,
                 'period_title' => $periodTitle,
+                'selected_date' => $period === 'custom' && !empty($customDateObj) ? $customDateObj->format('Y-m-d') : null,
                 'metrics' => [
                     // Shoppers
                     'shoppers_count' => $shoppersInPeriod,

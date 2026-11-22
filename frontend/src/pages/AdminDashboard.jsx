@@ -10,7 +10,7 @@ import {
   Sun, Moon, Menu, X, ArrowLeft, LogOut, ExternalLink, ChevronRight, Edit3,
   Trash2, Check, UserCheck, AlertCircle, Eye, CornerDownRight, Tag, ChevronDown, Sparkles,
   UploadCloud, ImagePlus, Loader2, Wifi, Globe, MessageCircle, Phone, Mail, Save, Camera,
-  Star, Images, GripVertical, ArrowUpDown, Crop, Palette, CreditCard, Receipt, Flame
+  Star, Images, GripVertical, ArrowUpDown, Crop, Palette, CreditCard, Receipt, Flame, Calendar
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { useAuth } from '../context/AuthContext';
@@ -32,7 +32,8 @@ export default function AdminDashboard() {
 
   const [activeSection, setActiveSection] = useState('overview'); // overview, products, inventory, locations, queue, employees, reports, qr
   const [dashboardData, setDashboardData] = useState(null);
-  const [overviewPeriod, setOverviewPeriod] = useState('today'); // 'today', 'week', 'month'
+  const [overviewPeriod, setOverviewPeriod] = useState('today'); // 'today', 'week', 'month', 'custom'
+  const [selectedCustomDate, setSelectedCustomDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
   const [showDueBillsModal, setShowDueBillsModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -313,9 +314,13 @@ export default function AdminDashboard() {
   };
 
   // Load Dashboard Overview Data
-  const fetchDashboard = async (selectedPeriod = overviewPeriod) => {
+  const fetchDashboard = async (selectedPeriod = overviewPeriod, customDate = selectedCustomDate) => {
     try {
-      const res = await adminService.getDashboard({ period: selectedPeriod });
+      const params = { period: selectedPeriod };
+      if (selectedPeriod === 'custom' && customDate) {
+        params.date = customDate;
+      }
+      const res = await adminService.getDashboard(params);
       if (res && res.data) {
         setDashboardData(res.data);
         if (res.data.shop) {
@@ -329,10 +334,13 @@ export default function AdminDashboard() {
     }
   };
 
-  const handlePeriodChange = async (period) => {
+  const handlePeriodChange = async (period, customDate = selectedCustomDate) => {
     setOverviewPeriod(period);
+    if (period === 'custom' && customDate) {
+      setSelectedCustomDate(customDate);
+    }
     setIsRefreshingDashboard(true);
-    await fetchDashboard(period);
+    await fetchDashboard(period, customDate);
     setIsRefreshingDashboard(false);
   };
 
@@ -465,7 +473,11 @@ export default function AdminDashboard() {
           prevAdminReqIdsRef.current = new Set(newReqs.map((r) => r.id));
           setRequestsList(newReqs);
         } else if (activeSection === 'overview') {
-          const res = await adminService.getDashboard({ period: overviewPeriod });
+          const pollParams = { period: overviewPeriod };
+          if (overviewPeriod === 'custom' && selectedCustomDate) {
+            pollParams.date = selectedCustomDate;
+          }
+          const res = await adminService.getDashboard(pollParams);
           if (res?.data) setDashboardData(res.data);
         }
       } catch (e) {
@@ -2248,7 +2260,7 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => handlePeriodChange('today')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                       overviewPeriod === 'today'
                         ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-sm font-black'
                         : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
@@ -2259,7 +2271,7 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => handlePeriodChange('week')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                       overviewPeriod === 'week'
                         ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-sm font-black'
                         : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
@@ -2270,7 +2282,7 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => handlePeriodChange('month')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                       overviewPeriod === 'month'
                         ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-sm font-black'
                         : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
@@ -2280,15 +2292,42 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                {/* Quick New POS Bill button */}
-                {/* <button
-                  type="button"
-                  onClick={() => setActiveSection('billing')}
-                  className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/20 active:scale-95 transition-all"
+                {/* Specific Date Picker Selector (Datewise Data) */}
+                <div
+                  className={`flex items-center gap-1.5 p-1 rounded-xl border transition-all shrink-0 ${
+                    overviewPeriod === 'custom'
+                      ? 'bg-blue-600/10 text-blue-700 dark:text-blue-300 border-blue-500 shadow-xs'
+                      : 'bg-slate-100 dark:bg-zinc-800/80 border-slate-200/80 dark:border-zinc-700/80 text-slate-600 dark:text-zinc-400 hover:border-slate-300'
+                  }`}
                 >
-                  <Receipt className="w-3.5 h-3.5" />
-                  <span>+ New Bill</span>
-                </button> */}
+                  <button
+                    type="button"
+                    onClick={() => handlePeriodChange('custom', selectedCustomDate)}
+                    className={`px-2 py-1 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-colors ${
+                      overviewPeriod === 'custom'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'hover:text-blue-600 dark:hover:text-white'
+                    }`}
+                    title="Filter dashboard overview by a specific date"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Pick Date:</span>
+                  </button>
+
+                  <input
+                    type="date"
+                    value={selectedCustomDate}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        setSelectedCustomDate(val);
+                        handlePeriodChange('custom', val);
+                      }
+                    }}
+                    className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-800 dark:text-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
               </div>
             </div>
 
@@ -2440,7 +2479,7 @@ export default function AdminDashboard() {
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                       <span>Sales by Category</span>
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full">
-                        {overviewPeriod === 'today' ? 'Today' : overviewPeriod === 'week' ? 'Past 7 Days' : 'Past 30 Days'}
+                        {overviewPeriod === 'today' ? 'Today' : (dashboardData?.period_title || (overviewPeriod === 'week' ? 'Past 7 Days' : 'Past 30 Days'))}
                       </span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-zinc-400">
@@ -2569,10 +2608,10 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      {overviewPeriod === 'today' ? 'Sales & Counter Pace by Hour' : 'Sales Trend by Day'}
+                      {(overviewPeriod === 'today' || overviewPeriod === 'custom') ? `Sales & Counter Pace (${dashboardData?.period_title || 'Today'})` : 'Sales Trend by Day'}
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-zinc-400">
-                      {overviewPeriod === 'today' ? 'Track counter billing pace through the day' : 'Revenue and bill volume trend'}
+                      {(overviewPeriod === 'today' || overviewPeriod === 'custom') ? 'Track counter billing pace through the day' : 'Revenue and bill volume trend'}
                     </p>
                   </div>
                   <span className="text-[10px] sm:text-xs font-bold px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg shrink-0">
@@ -6797,7 +6836,11 @@ export default function AdminDashboard() {
         onClose={() => setShowDueBillsModal(false)}
         role="admin"
         onBillUpdated={() => {
-          adminService.getDashboard({ period: overviewPeriod }).then((res) => {
+          const dueParams = { period: overviewPeriod };
+          if (overviewPeriod === 'custom' && selectedCustomDate) {
+            dueParams.date = selectedCustomDate;
+          }
+          adminService.getDashboard(dueParams).then((res) => {
             if (res?.data) setDashboardData(res.data);
           });
         }}

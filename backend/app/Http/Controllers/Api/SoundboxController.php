@@ -477,6 +477,31 @@ class SoundboxController extends Controller
         $totalRevenue = (float) $orders->sum('total_amount');
         $totalBills = $orders->count();
 
+        // Helper closures to safely extract split / advance portions (from partial, split, and due orders)
+        $getSplitCash = function ($order) {
+            $val = (float) ($order->split_cash_amount ?: 0);
+            if ($val <= 0 && is_array($order->payment_details)) {
+                $val = (float) (data_get($order->payment_details, 'advance_cash') ?: data_get($order->payment_details, 'cash') ?: 0);
+            }
+            return $val;
+        };
+
+        $getSplitUpi = function ($order) {
+            $val = (float) ($order->split_upi_amount ?: 0);
+            if ($val <= 0 && is_array($order->payment_details)) {
+                $val = (float) (data_get($order->payment_details, 'advance_upi') ?: data_get($order->payment_details, 'upi') ?: 0);
+            }
+            return $val;
+        };
+
+        $getSplitCard = function ($order) {
+            $val = (float) ($order->split_card_amount ?: 0);
+            if ($val <= 0 && is_array($order->payment_details)) {
+                $val = (float) (data_get($order->payment_details, 'advance_card') ?: data_get($order->payment_details, 'card') ?: 0);
+            }
+            return $val;
+        };
+
         // Separate orders by payment method
         $pureCashOrders = $orders->where('payment_method', 'cash');
         $pureUpiOrders = $orders->where('payment_method', 'upi');
@@ -484,39 +509,53 @@ class SoundboxController extends Controller
         $partialOrders = $orders->filter(function ($order) {
             return in_array($order->payment_method, ['partial', 'split']);
         });
+        $dueOrders = $orders->filter(function ($order) {
+            return $order->payment_method === 'due' || (float) $order->due_amount > 0;
+        });
+        $splitAndDueOrders = $orders->filter(function ($order) {
+            return in_array($order->payment_method, ['partial', 'split', 'due']);
+        });
 
-        // Split portions from partial bills
-        $splitCashTotal = (float) $partialOrders->sum(function ($order) {
-            return (float) ($order->split_cash_amount ?: 0);
-        });
-        $splitUpiTotal = (float) $partialOrders->sum(function ($order) {
-            return (float) ($order->split_upi_amount ?: 0);
-        });
-        $splitCardTotal = (float) $partialOrders->sum(function ($order) {
-            return (float) ($order->split_card_amount ?: 0);
-        });
-        $partialGrandTotal = (float) $partialOrders->sum('total_amount');
-        $partialCount = $partialOrders->count();
+        // Split portions from partial and due bills
+        $splitCashTotal = (float) $splitAndDueOrders->sum($getSplitCash);
+        $splitUpiTotal = (float) $splitAndDueOrders->sum($getSplitUpi);
+        $splitCardTotal = (float) $splitAndDueOrders->sum($getSplitCard);
 
-        // Effective Cash (Physical cash collected = pure cash bills + cash portion of split bills)
+        // Effective Cash (Physical cash collected = pure cash bills + cash portion of split/due bills)
         $pureCashTotal = (float) $pureCashOrders->sum('total_amount');
         $pureCashCount = $pureCashOrders->count();
+        $splitCashBillsCount = $splitAndDueOrders->filter(fn($o) => $getSplitCash($o) > 0)->count();
         $cashTotal = $pureCashTotal + $splitCashTotal;
-        $cashBillsCount = $pureCashCount + ($splitCashTotal > 0 ? $partialCount : 0);
+        $cashBillsCount = $pureCashCount + $splitCashBillsCount;
 
-        // Effective UPI (Digital UPI collected = pure UPI bills + UPI portion of split bills)
+        // Effective UPI (Digital UPI collected = pure UPI bills + UPI portion of split/due bills)
         $pureUpiTotal = (float) $pureUpiOrders->sum('total_amount');
         $pureUpiCount = $pureUpiOrders->count();
+        $splitUpiBillsCount = $splitAndDueOrders->filter(fn($o) => $getSplitUpi($o) > 0)->count();
         $upiTotal = $pureUpiTotal + $splitUpiTotal;
-        $upiBillsCount = $pureUpiCount + ($splitUpiTotal > 0 ? $partialCount : 0);
+        $upiBillsCount = $pureUpiCount + $splitUpiBillsCount;
 
         // Card Total
         $cardTotal = (float) $pureCardOrders->sum('total_amount') + $splitCardTotal;
         $cardCount = $pureCardOrders->count();
 
+        // Due / Udhaar Summary
+        $dueTotal = (float) $dueOrders->sum('due_amount');
+        $dueBillsCount = $dueOrders->count();
+        $dueAdvanceTotal = (float) $dueOrders->sum('received_amount');
+        $dueAdvanceCash = (float) $dueOrders->sum($getSplitCash);
+        $dueAdvanceUpi = (float) $dueOrders->sum($getSplitUpi);
+        $dueGrandTotal = (float) $dueOrders->sum('total_amount');
+
+        // Pure Partial Summary
+        $partialGrandTotal = (float) $partialOrders->sum('total_amount');
+        $partialCount = $partialOrders->count();
+        $partialCash = (float) $partialOrders->sum($getSplitCash);
+        $partialUpi = (float) $partialOrders->sum($getSplitUpi);
+
         // Other methods (if any)
         $otherOrders = $orders->reject(function ($order) {
-            return in_array($order->payment_method, ['cash', 'upi', 'card', 'partial', 'split']);
+            return in_array($order->payment_method, ['cash', 'upi', 'card', 'partial', 'split', 'due']);
         });
         $otherTotal = (float) $otherOrders->sum('total_amount');
         $otherCount = $otherOrders->count();
@@ -530,15 +569,13 @@ class SoundboxController extends Controller
                 return $order->soundbox_device_id == $device->id || $order->soundbox_account_name == $device->name;
             });
 
-            $devicePartialOrders = $partialOrders->filter(function ($order) use ($device) {
+            $deviceSplitOrDueOrders = $splitAndDueOrders->filter(function ($order) use ($device, $getSplitUpi) {
                 return ($order->soundbox_device_id == $device->id || $order->soundbox_account_name == $device->name)
-                    && (float) ($order->split_upi_amount ?: 0) > 0;
+                    && $getSplitUpi($order) > 0;
             });
 
             $pureDeviceAmount = (float) $devicePureOrders->sum('total_amount');
-            $splitDeviceAmount = (float) $devicePartialOrders->sum(function ($order) {
-                return (float) ($order->split_upi_amount ?: 0);
-            });
+            $splitDeviceAmount = (float) $deviceSplitOrDueOrders->sum($getSplitUpi);
             $totalDeviceAmount = $pureDeviceAmount + $splitDeviceAmount;
 
             // Also check transactions logged by this soundbox in period
@@ -555,9 +592,9 @@ class SoundboxController extends Controller
                 'total_amount' => $totalDeviceAmount,
                 'pure_amount' => $pureDeviceAmount,
                 'split_amount' => $splitDeviceAmount,
-                'bills_count' => $devicePureOrders->count() + $devicePartialOrders->count(),
+                'bills_count' => $devicePureOrders->count() + $deviceSplitOrDueOrders->count(),
                 'pure_bills_count' => $devicePureOrders->count(),
-                'split_bills_count' => $devicePartialOrders->count(),
+                'split_bills_count' => $deviceSplitOrDueOrders->count(),
                 'total_transactions_count' => $deviceTxns->count(),
                 'total_transactions_amount' => (float) $deviceTxns->sum('amount'),
             ];
@@ -567,15 +604,13 @@ class SoundboxController extends Controller
         $unassignedPureUpi = $pureUpiOrders->filter(function ($order) use ($devices) {
             return empty($order->soundbox_device_id) && !$devices->pluck('name')->contains($order->soundbox_account_name);
         });
-        $unassignedPartialUpi = $partialOrders->filter(function ($order) use ($devices) {
+        $unassignedSplitOrDueUpi = $splitAndDueOrders->filter(function ($order) use ($devices, $getSplitUpi) {
             return (empty($order->soundbox_device_id) && !$devices->pluck('name')->contains($order->soundbox_account_name))
-                && (float) ($order->split_upi_amount ?: 0) > 0;
+                && $getSplitUpi($order) > 0;
         });
 
-        $unassignedTotal = (float) $unassignedPureUpi->sum('total_amount') + (float) $unassignedPartialUpi->sum(function ($order) {
-            return (float) ($order->split_upi_amount ?: 0);
-        });
-        $unassignedCount = $unassignedPureUpi->count() + $unassignedPartialUpi->count();
+        $unassignedTotal = (float) $unassignedPureUpi->sum('total_amount') + (float) $unassignedSplitOrDueUpi->sum($getSplitUpi);
+        $unassignedCount = $unassignedPureUpi->count() + $unassignedSplitOrDueUpi->count();
 
         if ($unassignedTotal > 0 || empty($accountBreakdown)) {
             $accountBreakdown[] = [
@@ -586,10 +621,10 @@ class SoundboxController extends Controller
                 'is_default' => false,
                 'total_amount' => $unassignedTotal,
                 'pure_amount' => (float) $unassignedPureUpi->sum('total_amount'),
-                'split_amount' => (float) $unassignedPartialUpi->sum(function ($order) { return (float) ($order->split_upi_amount ?: 0); }),
+                'split_amount' => (float) $unassignedSplitOrDueUpi->sum($getSplitUpi),
                 'bills_count' => $unassignedCount,
                 'pure_bills_count' => $unassignedPureUpi->count(),
-                'split_bills_count' => $unassignedPartialUpi->count(),
+                'split_bills_count' => $unassignedSplitOrDueUpi->count(),
                 'total_transactions_count' => $unassignedCount,
                 'total_transactions_amount' => $unassignedTotal,
             ];
@@ -609,17 +644,27 @@ class SoundboxController extends Controller
                     'cash_total' => $cashTotal,
                     'pure_cash_total' => $pureCashTotal,
                     'split_cash_total' => $splitCashTotal,
-                    'cash_bills_count' => $pureCashCount,
+                    'cash_bills_count' => $cashBillsCount,
+                    'pure_cash_bills_count' => $pureCashCount,
                     'cash_with_split_count' => $cashBillsCount,
+                    'split_cash_bills_count' => $splitCashBillsCount,
                     'upi_total' => $upiTotal,
                     'pure_upi_total' => $pureUpiTotal,
                     'split_upi_total' => $splitUpiTotal,
-                    'upi_bills_count' => $pureUpiCount,
+                    'upi_bills_count' => $upiBillsCount,
+                    'pure_upi_bills_count' => $pureUpiCount,
                     'upi_with_split_count' => $upiBillsCount,
+                    'split_upi_bills_count' => $splitUpiBillsCount,
                     'partial_total' => $partialGrandTotal,
-                    'partial_cash' => $splitCashTotal,
-                    'partial_upi' => $splitUpiTotal,
+                    'partial_cash' => $partialCash,
+                    'partial_upi' => $partialUpi,
                     'partial_bills_count' => $partialCount,
+                    'due_total' => $dueTotal,
+                    'due_bills_count' => $dueBillsCount,
+                    'due_advance_total' => $dueAdvanceTotal,
+                    'due_advance_cash' => $dueAdvanceCash,
+                    'due_advance_upi' => $dueAdvanceUpi,
+                    'due_grand_total' => $dueGrandTotal,
                     'card_total' => $cardTotal,
                     'card_bills_count' => $cardCount,
                     'other_total' => $otherTotal,

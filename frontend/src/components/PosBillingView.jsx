@@ -3229,11 +3229,9 @@ export default function PosBillingView({
                   </div>
                   <div>
                     <h3 className="text-xs font-black uppercase tracking-wider text-yellow-300">
-                      Multi-Account UPI & Soundbox Reconciliation ({activePeriodMetrics.periodName})
+                      Account UPI Reconciliation.
                     </h3>
-                    <p className="text-[11px] text-slate-300">
-                      Clear account-wise breakdown so you know exactly which bank account received what amount ({activePeriodMetrics.periodName})
-                    </p>
+                     
                   </div>
                 </div>
 
@@ -3257,7 +3255,8 @@ export default function PosBillingView({
               </div>
 
               {/* Account Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {/* Account Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
                 {/* Cash Counter Card */}
                 <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 flex flex-col justify-between">
                   <div className="text-[10px] uppercase font-bold text-emerald-300 flex items-center justify-between">
@@ -3267,7 +3266,7 @@ export default function PosBillingView({
                     </span>
                     {parseFloat(reconciliationData.summary?.split_cash_total || 0) > 0 && (
                       <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
-                        +₹{parseFloat(reconciliationData.summary?.split_cash_total || 0).toFixed(0)} split
+                        +₹{parseFloat(reconciliationData.summary?.split_cash_total || 0).toFixed(0)} split/adv
                       </span>
                     )}
                   </div>
@@ -3279,7 +3278,7 @@ export default function PosBillingView({
                   <div className="text-[10px] text-white/60">
                     {parseFloat(reconciliationData.summary?.split_cash_total || 0) > 0 ? (
                       <span>
-                        {reconciliationData.summary?.cash_bills_count || 0} cash + {reconciliationData.summary?.partial_bills_count || 0} split • Physical
+                        {reconciliationData.summary?.cash_bills_count || 0} cash + {reconciliationData.summary?.split_cash_bills_count || reconciliationData.summary?.partial_bills_count || 0} split/adv • Physical
                       </span>
                     ) : (
                       <span>{reconciliationData.summary?.cash_bills_count || 0} bills • Physical Cash</span>
@@ -3297,7 +3296,7 @@ export default function PosBillingView({
                       </span>
                       {acc.split_amount > 0 && (
                         <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-200 border border-yellow-400/30 shrink-0">
-                          +₹{parseFloat(acc.split_amount || 0).toFixed(0)} split
+                          +₹{parseFloat(acc.split_amount || 0).toFixed(0)} split/adv
                         </span>
                       )}
                     </div>
@@ -3308,13 +3307,40 @@ export default function PosBillingView({
                     </div>
                     <div className="text-[10px] text-white/60 truncate">
                       {acc.split_amount > 0 ? (
-                        <span>{acc.pure_bills_count || 0} upi + {acc.split_bills_count || 0} split • {acc.provider?.toUpperCase()}</span>
+                        <span>{acc.pure_bills_count || 0} upi + {acc.split_bills_count || 0} split/adv • {acc.provider?.toUpperCase()}</span>
                       ) : (
                         <span>{acc.bills_count || 0} bills • {acc.provider?.toUpperCase()}</span>
                       )}
                     </div>
                   </div>
                 ))}
+
+                {/* Customer Due (Udhaar) Card (Shown whenever due bills or pending udhaar exist in the active period) */}
+                {(parseFloat(reconciliationData.summary?.due_total || 0) > 0 || parseInt(reconciliationData.summary?.due_bills_count || 0) > 0) && (
+                  <div className="p-3 rounded-2xl bg-amber-500/15 backdrop-blur-md border border-amber-400/30 flex flex-col justify-between">
+                    <div className="text-[10px] uppercase font-bold text-amber-300 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 shrink-0 text-amber-300" />
+                        <span>Customer Due (Udhaar)</span>
+                      </span>
+                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-500/30 text-amber-200 border border-amber-400/40">
+                        {reconciliationData.summary?.due_bills_count || 0} {reconciliationData.summary?.due_bills_count === 1 ? 'bill' : 'bills'}
+                      </span>
+                    </div>
+                    <div className="my-1.5">
+                      <div className="text-lg font-black text-amber-100">
+                        ₹{parseFloat(reconciliationData.summary?.due_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-amber-200/90 font-medium truncate">
+                      {parseFloat(reconciliationData.summary?.due_advance_total || 0) > 0 ? (
+                        <span>₹{parseFloat(reconciliationData.summary?.due_advance_total || 0).toFixed(0)} adv paid • ₹{parseFloat(reconciliationData.summary?.due_total || 0).toFixed(0)} pending</span>
+                      ) : (
+                        <span>Pending Udhaar Collection</span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Partial / Split Payments Card (Always visible if any partial payments exist in the active period) */}
                 {parseFloat(reconciliationData.summary?.partial_total || 0) > 0 && (
