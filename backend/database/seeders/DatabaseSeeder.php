@@ -1300,5 +1300,8 @@ class DatabaseSeeder extends Seeder
             'message' => 'Apple MacBook Air M4 (Starlight) has only 2 units remaining.',
             'data' => ['product_id' => $pMacBook->id],
         ]);
+
+        // 13. Seed Harun Ansari Steel Furniture
+        $this->call(HarunAnsariFurnitureSeeder::class);
     }
 }
