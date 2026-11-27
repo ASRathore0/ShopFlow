@@ -10,6 +10,8 @@ on:
         options:
           - 'optimize:clear'
           - 'migrate --force'
+          - 'db:seed --class=DemoClothingShopSeeder --force'
+          - 'db:seed --class=HarunAnsariFurnitureSeeder --force'
           - 'config:cache'
           - 'route:cache'
           - 'view:cache'

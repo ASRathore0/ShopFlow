@@ -1303,5 +1303,8 @@ class DatabaseSeeder extends Seeder
 
         // 13. Seed Harun Ansari Steel Furniture
         $this->call(HarunAnsariFurnitureSeeder::class);
+
+        // 14. Seed Demo Clothing Shop (Luxe Threads Fashion & Clothier)
+        $this->call(DemoClothingShopSeeder::class);
     }
 }

@@ -28,7 +28,7 @@ class DemoClothingShopSeeder extends Seeder
 {
     public function run(): void
     {
-        $this->command->info("Seeding Demo Clothing Shop with 50 apparel items...");
+        $this->command?->info("Seeding Demo Clothing Shop with 50 apparel items...");
 
         // 1. Subscription & Plan
         $plan = Plan::where('slug', 'growth')->first() ?? Plan::first();
@@ -52,8 +52,12 @@ class DemoClothingShopSeeder extends Seeder
         ]);
 
         // 2. Demo Clothing Shop: "Luxe Threads Fashion & Clothier"
-        // If it already exists, delete or re-create
+        // If it already exists with products, skip re-seeding to preserve existing orders & bills
         $existing = Shop::where('slug', 'luxe-threads')->first();
+        if ($existing && $existing->products()->count() >= 50) {
+            $this->command?->info("Luxe Threads Fashion already seeded with products. Skipping re-seed.");
+            return;
+        }
         if ($existing) {
             $existing->delete();
         }
@@ -72,6 +76,11 @@ class DemoClothingShopSeeder extends Seeder
             'is_open' => true,
             'subscription_id' => $sub->id,
             'is_active' => true,
+            'billing_enabled' => true,
+            'soundbox_enabled' => true,
+            'bill_tagline' => 'Curated Contemporary Fashion & In-Store Concierge',
+            'bill_terms' => "1. Exchange within 7 days with original receipt.\n2. Tags must remain attached.\n3. Altered or damaged items cannot be exchanged.",
+            'auto_send_whatsapp_bill' => 1,
             'customer_portal_settings' => [
                 'tagline' => 'Curated Contemporary Fashion & In-Store Concierge',
                 'theme_preset' => 'obsidian_gold',
@@ -827,6 +836,6 @@ class DemoClothingShopSeeder extends Seeder
             }
         }
 
-        $this->command->info("Successfully seeded 'Luxe Threads Fashion & Clothier' (slug: luxe-threads) with 50 products, categories, locations, staff & inventory!");
+        $this->command?->info("Successfully seeded 'Luxe Threads Fashion & Clothier' (slug: luxe-threads) with 50 products, categories, locations, staff & inventory!");
     }
 }
