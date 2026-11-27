@@ -4,7 +4,7 @@ import {
   Image as ImageIcon, Sliders, CheckCircle2, Zap, ArrowRight,
   ShieldCheck, Search, Tag, HandHeart, UploadCloud, RefreshCw,
   Smartphone, Monitor, Wifi, BatteryMedium, Crown, Loader2,
-  Upload, X, ImagePlus
+  Upload, X, ImagePlus, Video
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import {
@@ -12,7 +12,8 @@ import {
   HEADER_STYLES,
   CARD_STYLES,
   getThemeConfig,
-  hexToRgba
+  hexToRgba,
+  isVideoUrl
 } from '../utils/storefrontThemes';
 
 export default function StorefrontThemeCustomizer({
@@ -37,12 +38,15 @@ export default function StorefrontThemeCustomizer({
     if (!file) return;
 
     setBannerUploadError('');
-    if (!file.type.startsWith('image/')) {
-      setBannerUploadError('Please choose a valid image file (PNG, JPG, WebP).');
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|ogg|mov|m4v|qt)$/i.test(file.name);
+
+    if (!isImage && !isVideo) {
+      setBannerUploadError('Please choose a valid image (PNG, JPG, WebP) or video file (MP4, WebM, MOV).');
       return;
     }
-    if (file.size > 15 * 1024 * 1024) {
-      setBannerUploadError('Image size must be less than 15MB.');
+    if (file.size > 50 * 1024 * 1024) {
+      setBannerUploadError('File size must be less than 50MB.');
       return;
     }
 
@@ -50,17 +54,19 @@ export default function StorefrontThemeCustomizer({
     try {
       const res = await adminService.uploadHeroBanner(file);
       const url = res.data?.url || res.url;
+      const mediaType = res.data?.media_type || (isVideo ? 'video' : 'image');
       if (url) {
         setSettingsForm((prev) => ({
           ...prev,
           hero_banner_image: url,
+          hero_banner_type: mediaType,
           banner_mode: 'clean_image',
           hide_banner_text: true,
         }));
       }
     } catch (err) {
       console.error('Failed to upload hero banner:', err);
-      setBannerUploadError(err.response?.data?.message || 'Failed to upload banner image.');
+      setBannerUploadError(err.response?.data?.message || 'Failed to upload banner media.');
     } finally {
       setIsUploadingBanner(false);
       if (e.target) e.target.value = '';
@@ -337,16 +343,16 @@ export default function StorefrontThemeCustomizer({
 
             {/* Custom Hero Presentation & Device Image Upload */}
             <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4">
-              {/* Banner Picture Source Selector */}
+              {/* Banner Picture or Hero Video Source Selector */}
               <div className="space-y-3 p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <label className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 flex items-center gap-2">
                       <ImagePlus className="w-4 h-4 text-blue-500" />
-                      <span>Custom Showroom Hero Banner Picture</span>
+                      <span>Custom Showroom Hero Banner (Photo or Video)</span>
                     </label>
                     <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      Upload a clean photograph or promo banner from your device or paste an image URL.
+                      Upload a clean photograph, promo banner or hero video from your device, or paste a media URL.
                     </p>
                   </div>
 
@@ -372,12 +378,12 @@ export default function StorefrontThemeCustomizer({
                           : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900'
                       }`}
                     >
-                      🔗 Image URL
+                      🔗 Media URL
                     </button>
                   </div>
                 </div>
 
-                {/* Prominently Display Recommended Banner Size */}
+                {/* Prominently Display Recommended Banner & Video Size */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 text-slate-800 dark:text-zinc-200">
                   <div className="flex items-center gap-2">
                     <span className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm shadow-blue-500/20">
@@ -385,19 +391,19 @@ export default function StorefrontThemeCustomizer({
                     </span>
                     <div>
                       <span className="text-xs font-black block text-slate-900 dark:text-white">
-                        Recommended Banner Dimensions
+                        Recommended Dimensions & Ratio
                       </span>
                       <span className="text-[10px] text-slate-500 dark:text-zinc-400">
-                        Exact aspect ratio for crystal-clear mobile & desktop fit
+                        Fits seamlessly on mobile & desktop with zero control buttons (autoplay muted loop)
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
                     <span className="px-2.5 py-1 rounded-xl bg-blue-600 text-white text-[11px] font-mono font-black shadow-sm">
                       1200 × 450 px
                     </span>
                     <span className="px-2 py-1 rounded-xl bg-slate-200 dark:bg-zinc-800 text-[10px] font-bold text-slate-700 dark:text-zinc-300 border border-slate-300/60 dark:border-zinc-700">
-                      8:3 Ratio
+                      8:3 or 16:9 Video
                     </span>
                   </div>
                 </div>
@@ -408,7 +414,7 @@ export default function StorefrontThemeCustomizer({
                     <label className="w-full">
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime,video/*"
                         onChange={handleBannerUpload}
                         className="hidden"
                         disabled={isUploadingBanner}
@@ -417,18 +423,18 @@ export default function StorefrontThemeCustomizer({
                         {isUploadingBanner ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Uploading Clean Picture...</span>
+                            <span>Uploading Banner / Video...</span>
                           </>
                         ) : (
                           <>
                             <UploadCloud className="w-4 h-4" />
-                            <span>{settingsForm.hero_banner_image ? 'Upload New Clean Picture from Device' : 'Select & Upload Picture from Device'}</span>
+                            <span>{settingsForm.hero_banner_image ? 'Upload New Photo / Video from Device' : 'Select & Upload Photo or Video from Device'}</span>
                           </>
                         )}
                       </span>
                     </label>
                     <p className="text-[10px] text-slate-400 text-center">
-                      Supports JPG, PNG, WebP up to 15MB. Best results with 1200×450px banner.
+                      Supports JPG, PNG, WebP, MP4, WebM, MOV up to 50MB. Hero video plays in a smooth loop without controls.
                     </p>
                     {bannerUploadError && (
                       <p className="text-xs font-bold text-rose-500 text-center">
@@ -440,96 +446,132 @@ export default function StorefrontThemeCustomizer({
                   <div className="flex gap-2">
                     <input
                       type="url"
-                      placeholder="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80"
+                      placeholder="https://example.com/showroom-tour.mp4 or image URL..."
                       value={settingsForm.hero_banner_image || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, hero_banner_image: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const isVid = isVideoUrl(val);
+                        setSettingsForm({
+                          ...settingsForm,
+                          hero_banner_image: val,
+                          hero_banner_type: isVid ? 'video' : 'image',
+                        });
+                      }}
                       className="w-full bg-white dark:bg-zinc-900 text-slate-900 dark:text-white p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
                 )}
 
-                {/* Active Image Preview & Clarity Control */}
-                {settingsForm.hero_banner_image && (
-                  <div className="pt-3 border-t border-slate-200/60 dark:border-zinc-800 space-y-3">
-                    <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-16 h-10 rounded-lg bg-cover bg-center border border-slate-200 dark:border-zinc-600 shrink-0" style={{ backgroundImage: `url(${settingsForm.hero_banner_image})` }} />
-                        <div className="min-w-0">
-                          <span className="text-xs font-extrabold text-slate-900 dark:text-white block truncate">
-                            Active Banner Picture
-                          </span>
-                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                            ✓ Ready to display
-                          </span>
+                {/* Active Media Preview & Clarity Control */}
+                {settingsForm.hero_banner_image && (() => {
+                  const isCurrentVideo = settingsForm.hero_banner_type === 'video' || isVideoUrl(settingsForm.hero_banner_image);
+
+                  return (
+                    <div className="pt-3 border-t border-slate-200/60 dark:border-zinc-800 space-y-3">
+                      <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {isCurrentVideo ? (
+                            <div className="relative w-20 h-12 rounded-lg bg-black overflow-hidden border border-slate-200 dark:border-zinc-600 shrink-0 pointer-events-none select-none">
+                              <video
+                                src={settingsForm.hero_banner_image}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                disablePictureInPicture
+                                disableRemotePlayback
+                                controls={false}
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute bottom-1 right-1 px-1 py-0.5 rounded text-[8px] font-black bg-black/75 text-amber-300">
+                                VIDEO
+                              </span>
+                            </div>
+                          ) : (
+                            <div
+                              className="w-16 h-10 rounded-lg bg-cover bg-center border border-slate-200 dark:border-zinc-600 shrink-0"
+                              style={{ backgroundImage: `url(${settingsForm.hero_banner_image})` }}
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-xs font-extrabold text-slate-900 dark:text-white block truncate">
+                              {isCurrentVideo ? 'Active Hero Video' : 'Active Banner Picture'}
+                            </span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                              ✓ Ready to display {isCurrentVideo ? '(Muted loop, no controls)' : ''}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSettingsForm({ ...settingsForm, hero_banner_image: '', hero_banner_type: 'image' })}
+                          className="px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900 transition-colors shrink-0 cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      {/* Clean Media vs Text Overlay Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-extrabold text-slate-700 dark:text-zinc-300">
+                          Banner Media Appearance Mode
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setSettingsForm({
+                              ...settingsForm,
+                              banner_mode: 'clean_image',
+                              hide_banner_text: true,
+                            })}
+                            className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                              settingsForm.banner_mode === 'clean_image' || settingsForm.hide_banner_text
+                                ? 'border-emerald-600 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100 shadow-sm'
+                                : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-black">
+                                {isCurrentVideo ? '🎥 Clean Video Only' : '📸 Clean Picture Only'}
+                              </span>
+                              {(settingsForm.banner_mode === 'clean_image' || settingsForm.hide_banner_text) && (
+                                <span className="text-[10px] font-extrabold text-emerald-600">Active</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">
+                              Shows your {isCurrentVideo ? 'hero video' : 'picture'} full-bleed without dark wash or text overlay.
+                            </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setSettingsForm({
+                              ...settingsForm,
+                              banner_mode: 'overlay',
+                              hide_banner_text: false,
+                            })}
+                            className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                              settingsForm.banner_mode === 'overlay' && !settingsForm.hide_banner_text
+                                ? 'border-blue-600 bg-blue-50/60 dark:bg-blue-950/20 text-blue-950 dark:text-blue-100 shadow-sm'
+                                : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-black">🎬 With Headline Overlay</span>
+                              {settingsForm.banner_mode === 'overlay' && !settingsForm.hide_banner_text && (
+                                <span className="text-[10px] font-extrabold text-blue-600">Active</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">
+                              Plays {isCurrentVideo ? 'video' : 'picture'} in background and overlays your custom title and subtitle.
+                            </p>
+                          </button>
                         </div>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setSettingsForm({ ...settingsForm, hero_banner_image: '' })}
-                        className="px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900 transition-colors shrink-0 cursor-pointer"
-                      >
-                        Remove
-                      </button>
                     </div>
-
-                    {/* Clean Picture vs Text Overlay Selector */}
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-extrabold text-slate-700 dark:text-zinc-300">
-                        Banner Picture Appearance Mode
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <button
-                          type="button"
-                          onClick={() => setSettingsForm({
-                            ...settingsForm,
-                            banner_mode: 'clean_image',
-                            hide_banner_text: true,
-                          })}
-                          className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
-                            settingsForm.banner_mode === 'clean_image' || settingsForm.hide_banner_text
-                              ? 'border-emerald-600 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100 shadow-sm'
-                              : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-black">📸 Clean Picture Only</span>
-                            {(settingsForm.banner_mode === 'clean_image' || settingsForm.hide_banner_text) && (
-                              <span className="text-[10px] font-extrabold text-emerald-600">Active</span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">
-                            Shows your picture crystal clear without blur or dark wash. Text overlay is hidden.
-                          </p>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setSettingsForm({
-                            ...settingsForm,
-                            banner_mode: 'overlay',
-                            hide_banner_text: false,
-                          })}
-                          className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
-                            settingsForm.banner_mode === 'overlay' && !settingsForm.hide_banner_text
-                              ? 'border-blue-600 bg-blue-50/60 dark:bg-blue-950/20 text-blue-950 dark:text-blue-100 shadow-sm'
-                              : 'border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-black">🎬 With Headline Overlay</span>
-                            {settingsForm.banner_mode === 'overlay' && !settingsForm.hide_banner_text && (
-                              <span className="text-[10px] font-extrabold text-blue-600">Active</span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight">
-                            Keeps picture clear (no blur) and overlays your custom title and subtitle.
-                          </p>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Headline & Subtitle Inputs (Active when not in Clean Picture Only mode) */}
@@ -734,6 +776,7 @@ export default function StorefrontThemeCustomizer({
               {/* 3. SIMULATED HERO BANNER */}
               {selectedHeaderStyle === 'hero_banner' && (() => {
                 const hasImg = Boolean(settingsForm.hero_banner_image);
+                const isVideo = hasImg && (settingsForm.hero_banner_type === 'video' || isVideoUrl(settingsForm.hero_banner_image));
                 const isOnlyImg = hasImg && (
                   settingsForm.hide_banner_text ||
                   settingsForm.banner_mode === 'clean_image' ||
@@ -744,17 +787,36 @@ export default function StorefrontThemeCustomizer({
                 const customSubtitle = (settingsForm.hero_subtitle && settingsForm.hero_subtitle !== '.') ? settingsForm.hero_subtitle : '';
 
                 return (
-                  <div className={`relative ${isOnlyImg ? 'h-36 sm:h-40' : 'p-3.5'} overflow-hidden text-white flex flex-col justify-between`}>
+                  <div className={`relative ${isOnlyImg ? 'h-36 sm:h-44' : 'p-3.5 min-h-[140px]'} overflow-hidden text-white flex flex-col justify-between`}>
                     {hasImg ? (
-                      <div
-                        className="absolute inset-0 bg-cover bg-center"
-                        style={{ backgroundImage: `url(${settingsForm.hero_banner_image})` }}
-                      >
-                        {/* ZERO BLUR. Only light scrim if text is present */}
-                        {!isOnlyImg && (
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/35 to-transparent" />
-                        )}
-                      </div>
+                      isVideo ? (
+                        <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
+                          <video
+                            src={settingsForm.hero_banner_image}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            disablePictureInPicture
+                            disableRemotePlayback
+                            controls={false}
+                            className="w-full h-full object-cover object-center pointer-events-none"
+                          />
+                          {!isOnlyImg && (
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/35 to-transparent pointer-events-none" />
+                          )}
+                        </div>
+                      ) : (
+                        <div
+                          className="absolute inset-0 bg-cover bg-center"
+                          style={{ backgroundImage: `url(${settingsForm.hero_banner_image})` }}
+                        >
+                          {/* ZERO BLUR. Only light scrim if text is present */}
+                          {!isOnlyImg && (
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/35 to-transparent" />
+                          )}
+                        </div>
+                      )
                     ) : (
                       <div className={`absolute inset-0 bg-gradient-to-r ${currentTheme.headerGradient}`} />
                     )}

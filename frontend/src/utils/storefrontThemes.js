@@ -168,12 +168,30 @@ export const hexToRgba = (hex, alpha = 1) => {
 };
 
 /**
+ * Checks if a given media URL is a video file or stream
+ */
+export const isVideoUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  const clean = url.split('?')[0].toLowerCase();
+  return (
+    /\.(mp4|webm|ogg|mov|m4v|qt)(\/|$|\?)/i.test(url) ||
+    clean.endsWith('.mp4') ||
+    clean.endsWith('.webm') ||
+    clean.endsWith('.mov') ||
+    clean.endsWith('.ogg') ||
+    clean.endsWith('.m4v')
+  );
+};
+
+/**
  * Resolves the complete theme configuration for a given shop object
  */
 export const getThemeConfig = (shop) => {
   const portalSettings = shop?.customer_portal_settings || {};
   const themePresetId = portalSettings.theme_preset || 'midnight_blue';
   const customBrandColor = portalSettings.brand_color || shop?.brand_color || '#2563EB';
+  const heroBannerUrl = portalSettings.hero_banner_image || '';
+  const isVideo = portalSettings.hero_banner_type === 'video' || isVideoUrl(heroBannerUrl);
 
   const matchedPreset = STOREFRONT_THEMES.find((t) => t.id === themePresetId);
 
@@ -184,8 +202,10 @@ export const getThemeConfig = (shop) => {
       isCustom: false,
       headerStyle: portalSettings.header_style || 'hero_banner',
       cardStyle: portalSettings.card_style || 'modern',
-      heroBannerImage: portalSettings.hero_banner_image || '',
-      bannerMode: portalSettings.banner_mode || (portalSettings.hero_banner_image ? 'clean_image' : 'overlay'),
+      heroBannerImage: heroBannerUrl,
+      heroBannerType: isVideo ? 'video' : 'image',
+      heroBannerIsVideo: isVideo,
+      bannerMode: portalSettings.banner_mode || (heroBannerUrl ? 'clean_image' : 'overlay'),
       hideBannerText: Boolean(portalSettings.hide_banner_text),
       heroTitle: portalSettings.hero_title || '',
       heroSubtitle: portalSettings.hero_subtitle || '',
@@ -213,8 +233,10 @@ export const getThemeConfig = (shop) => {
     isCustom: true,
     headerStyle: portalSettings.header_style || 'hero_banner',
     cardStyle: portalSettings.card_style || 'modern',
-    heroBannerImage: portalSettings.hero_banner_image || '',
-    bannerMode: portalSettings.banner_mode || (portalSettings.hero_banner_image ? 'clean_image' : 'overlay'),
+    heroBannerImage: heroBannerUrl,
+    heroBannerType: isVideo ? 'video' : 'image',
+    heroBannerIsVideo: isVideo,
+    bannerMode: portalSettings.banner_mode || (heroBannerUrl ? 'clean_image' : 'overlay'),
     hideBannerText: Boolean(portalSettings.hide_banner_text),
     heroTitle: portalSettings.hero_title || '',
     heroSubtitle: portalSettings.hero_subtitle || '',

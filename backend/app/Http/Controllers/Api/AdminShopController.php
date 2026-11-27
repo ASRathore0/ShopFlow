@@ -137,11 +137,14 @@ class AdminShopController extends Controller
         $shop = Shop::findOrFail($shopId);
 
         $request->validate([
-            'banner' => 'required|image|mimes:jpeg,png,jpg,webp,gif,svg|max:15360',
+            'banner' => 'required|file|mimes:jpeg,png,jpg,webp,gif,svg,mp4,webm,ogg,mov,m4v,qt|max:61440',
         ]);
 
         $file = $request->file('banner');
-        $filename = 'banner_' . $shop->id . '_' . time() . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension();
+        $ext = strtolower($file->getClientOriginalExtension());
+        $isVideo = in_array($ext, ['mp4', 'webm', 'ogg', 'mov', 'm4v', 'qt']);
+        $prefix = $isVideo ? 'banner_video_' : 'banner_';
+        $filename = $prefix . $shop->id . '_' . time() . '_' . Str::random(6) . '.' . $ext;
 
         $destinationPath = public_path('uploads/banners');
         if (!file_exists($destinationPath)) {
@@ -153,13 +156,15 @@ class AdminShopController extends Controller
 
         $settings = $shop->customer_portal_settings ?: [];
         $settings['hero_banner_image'] = $url;
+        $settings['hero_banner_type'] = $isVideo ? 'video' : 'image';
         $shop->update(['customer_portal_settings' => $settings]);
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Hero banner uploaded successfully',
+            'message' => 'Hero banner ' . ($isVideo ? 'video' : 'image') . ' uploaded successfully',
             'data' => [
                 'url' => $url,
+                'media_type' => $isVideo ? 'video' : 'image',
                 'filename' => $filename,
                 'shop' => $shop,
             ],

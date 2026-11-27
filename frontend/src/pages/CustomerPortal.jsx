@@ -17,7 +17,7 @@ import RequestModal from '../components/RequestModal';
 import ReservationModal from '../components/ReservationModal';
 import RequestStatusBadge from '../components/RequestStatusBadge';
 import CustomerFooter from '../components/CustomerFooter';
-import { getThemeConfig, hexToRgba } from '../utils/storefrontThemes';
+import { getThemeConfig, hexToRgba, isVideoUrl } from '../utils/storefrontThemes';
 
 export default function CustomerPortal({ defaultShopSlug }) {
   const { shopSlug: paramShopSlug } = useParams();
@@ -364,8 +364,9 @@ export default function CustomerPortal({ defaultShopSlug }) {
           <>
             {/* DYNAMIC SHOWROOM ENTRANCE (CINEMATIC HERO, GLASS, OR BOUTIQUE) */}
             {themeConfig.headerStyle === 'hero_banner' ? (() => {
-              const hasHeroImage = Boolean(themeConfig.heroBannerImage);
-              const isOnlyImage = hasHeroImage && (
+              const hasHeroMedia = Boolean(themeConfig.heroBannerImage);
+              const isVideo = Boolean(themeConfig.heroBannerIsVideo || isVideoUrl(themeConfig.heroBannerImage));
+              const isOnlyImage = hasHeroMedia && (
                 themeConfig.hideBannerText ||
                 themeConfig.bannerMode === 'clean_image' ||
                 (themeConfig.heroTitle === '.' && (themeConfig.heroSubtitle === '.' || !themeConfig.heroSubtitle)) ||
@@ -375,17 +376,37 @@ export default function CustomerPortal({ defaultShopSlug }) {
               const customSubtitle = (themeConfig.heroSubtitle && themeConfig.heroSubtitle !== '.') ? themeConfig.heroSubtitle : '';
 
               return (
-                <div className={`relative ${isOnlyImage ? 'min-h-[170px] sm:min-h-[220px] md:min-h-[260px]' : 'p-5 sm:p-7'} rounded-3xl overflow-hidden text-white shadow-xl ${themeConfig.glowClass} border border-white/10 transition-all flex flex-col justify-between`}>
-                  {hasHeroImage ? (
-                    <div
-                      className="absolute inset-0 bg-cover bg-center transition-transform duration-700"
-                      style={{ backgroundImage: `url(${themeConfig.heroBannerImage})` }}
-                    >
-                      {/* Only apply a subtle gradient scrim if there is text to read, otherwise keep 100% crystal-clear photo without blur */}
-                      {!isOnlyImage && (
-                        <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-slate-950/85 via-slate-950/40 to-transparent" />
-                      )}
-                    </div>
+                <div className={`relative ${isOnlyImage ? 'min-h-[190px] sm:min-h-[250px] md:min-h-[300px]' : 'p-5 sm:p-7 min-h-[160px] sm:min-h-[190px]'} rounded-3xl overflow-hidden text-white shadow-xl ${themeConfig.glowClass} border border-white/10 transition-all flex flex-col justify-between`}>
+                  {hasHeroMedia ? (
+                    isVideo ? (
+                      <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
+                        <video
+                          src={themeConfig.heroBannerImage}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          disablePictureInPicture
+                          disableRemotePlayback
+                          controls={false}
+                          className="w-full h-full object-cover object-center pointer-events-none"
+                        />
+                        {/* Only apply a subtle gradient scrim if there is text to read, otherwise keep 100% crystal-clear video */}
+                        {!isOnlyImage && (
+                          <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-slate-950/85 via-slate-950/45 to-transparent pointer-events-none" />
+                        )}
+                      </div>
+                    ) : (
+                      <div
+                        className="absolute inset-0 bg-cover bg-center transition-transform duration-700"
+                        style={{ backgroundImage: `url(${themeConfig.heroBannerImage})` }}
+                      >
+                        {/* Only apply a subtle gradient scrim if there is text to read, otherwise keep 100% crystal-clear photo without blur */}
+                        {!isOnlyImage && (
+                          <div className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-slate-950/85 via-slate-950/40 to-transparent" />
+                        )}
+                      </div>
+                    )
                   ) : (
                     <div className={`absolute inset-0 bg-gradient-to-r ${themeConfig.headerGradient}`} />
                   )}
