@@ -364,7 +364,8 @@ export default function CustomerPortal({ defaultShopSlug }) {
           <>
             {/* DYNAMIC SHOWROOM ENTRANCE (CINEMATIC HERO, GLASS, OR BOUTIQUE) */}
             {themeConfig.headerStyle === 'hero_banner' ? (() => {
-              const hasHeroMedia = Boolean(themeConfig.heroBannerImage);
+              const hasHeroImage = Boolean(themeConfig.heroBannerImage);
+              const hasHeroMedia = hasHeroImage;
               const isVideo = Boolean(themeConfig.heroBannerIsVideo || isVideoUrl(themeConfig.heroBannerImage));
               const isOnlyImage = hasHeroMedia && (
                 themeConfig.hideBannerText ||
