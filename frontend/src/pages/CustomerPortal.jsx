@@ -378,10 +378,10 @@ export default function CustomerPortal({ defaultShopSlug }) {
             </button>
 
             {/* Customer anonymous token badge */}
-            <div className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700/80 text-[11px] font-mono font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1 shadow-inner">
+            {/* <div className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700/80 text-[11px] font-mono font-bold text-slate-700 dark:text-zinc-300 flex items-center gap-1 shadow-inner">
               <ShieldCheck className="w-3.5 h-3.5" style={{ color: themeConfig.primaryColor }} />
               <span className="tracking-tight">{customerCode}</span>
-            </div>
+            </div> */}
           </div>
         </div>
       </header>

@@ -1306,5 +1306,8 @@ class DatabaseSeeder extends Seeder
 
         // 14. Seed Demo Clothing Shop (Luxe Threads Fashion & Clothier)
         $this->call(DemoClothingShopSeeder::class);
+
+        // 15. Seed Taufik Men's Wear (तौफिक मेन्स वियर)
+        $this->call(TaufikMensWearSeeder::class);
     }
 }
