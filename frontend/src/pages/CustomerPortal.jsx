@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Store, Smartphone, Laptop, Headphones, Tv, Watch, Tag,
   Clock, CheckCircle2, Bookmark, HandHeart, ShieldCheck, ChevronRight,
   Filter, X, Layers, AlertCircle, ShoppingBag, ArrowLeft, RefreshCw,
-  Sun, Moon, MapPin, Phone, Mail, Sparkles, HelpCircle, MessageCircle, Wifi
+  Sun, Moon, MapPin, Phone, Mail, Sparkles, HelpCircle, MessageCircle, Wifi,
+  Play, Pause
 } from 'lucide-react';
 import { shopService } from '../services/shopService';
 import { useCustomer } from '../context/CustomerContext';
@@ -45,6 +46,34 @@ export default function CustomerPortal({ defaultShopSlug }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('home'); // home, requests, info
+  const heroVideoRef = useRef(null);
+  const [isHeroVideoPlaying, setIsHeroVideoPlaying] = useState(true);
+  const [showVideoControl, setShowVideoControl] = useState(false);
+  const videoControlTimeoutRef = useRef(null);
+
+  const toggleHeroVideo = (e) => {
+    if (e?.target?.closest('a, button:not([data-hero-video-toggle])')) {
+      return;
+    }
+    const video = heroVideoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      video.play().catch(() => {});
+      setIsHeroVideoPlaying(true);
+    } else {
+      video.pause();
+      setIsHeroVideoPlaying(false);
+    }
+
+    setShowVideoControl(true);
+    if (videoControlTimeoutRef.current) {
+      clearTimeout(videoControlTimeoutRef.current);
+    }
+    videoControlTimeoutRef.current = setTimeout(() => {
+      setShowVideoControl(false);
+    }, 1500);
+  };
 
   // Modals state
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -377,11 +406,15 @@ export default function CustomerPortal({ defaultShopSlug }) {
               const customSubtitle = (themeConfig.heroSubtitle && themeConfig.heroSubtitle !== '.') ? themeConfig.heroSubtitle : '';
 
               return (
-                <div className={`relative ${isOnlyImage ? 'min-h-[190px] sm:min-h-[250px] md:min-h-[300px]' : 'p-5 sm:p-7 min-h-[160px] sm:min-h-[190px]'} rounded-3xl overflow-hidden text-white shadow-xl ${themeConfig.glowClass} border border-white/10 transition-all flex flex-col justify-between`}>
+                <div
+                  onClick={isVideo ? toggleHeroVideo : undefined}
+                  className={`relative ${isOnlyImage ? 'min-h-[190px] sm:min-h-[250px] md:min-h-[300px]' : 'p-5 sm:p-7 min-h-[160px] sm:min-h-[190px]'} rounded-3xl overflow-hidden text-white shadow-xl ${themeConfig.glowClass} border border-white/10 transition-all flex flex-col justify-between ${isVideo ? 'cursor-pointer select-none' : ''}`}
+                >
                   {hasHeroMedia ? (
                     isVideo ? (
                       <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
                         <video
+                          ref={heroVideoRef}
                           src={themeConfig.heroBannerImage}
                           autoPlay
                           loop
@@ -390,6 +423,8 @@ export default function CustomerPortal({ defaultShopSlug }) {
                           disablePictureInPicture
                           disableRemotePlayback
                           controls={false}
+                          onPlay={() => setIsHeroVideoPlaying(true)}
+                          onPause={() => setIsHeroVideoPlaying(false)}
                           className="w-full h-full object-cover object-center pointer-events-none"
                         />
                         {/* Only apply a subtle gradient scrim if there is text to read, otherwise keep 100% crystal-clear video */}
@@ -410,6 +445,35 @@ export default function CustomerPortal({ defaultShopSlug }) {
                     )
                   ) : (
                     <div className={`absolute inset-0 bg-gradient-to-r ${themeConfig.headerGradient}`} />
+                  )}
+
+                  {/* Faded Pause/Play button positioned right over the bottom-right corner (Gemini logo spot) */}
+                  {isVideo && (
+                    <>
+                      <button
+                        type="button"
+                        data-hero-video-toggle="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleHeroVideo(e);
+                        }}
+                        title={isHeroVideoPlaying ? 'Pause hero video' : 'Play hero video'}
+                        aria-label={isHeroVideoPlaying ? 'Pause video' : 'Play video'}
+                        className={`absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/50 hover:bg-black/75 backdrop-blur-md border border-white/20 text-white shadow-lg transition-all cursor-pointer ${
+                          !isHeroVideoPlaying
+                            ? 'opacity-100 ring-2 ring-white/50 scale-105'
+                            : showVideoControl
+                            ? 'opacity-95 scale-100'
+                            : 'opacity-55 hover:opacity-100 scale-95 hover:scale-100'
+                        }`}
+                      >
+                        {isHeroVideoPlaying ? (
+                          <Pause className="w-3.5 h-3.5 fill-white/99" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
+                        )}
+                      </button>
+                    </>
                   )}
 
                   {isOnlyImage ? null : (
@@ -514,7 +578,7 @@ export default function CustomerPortal({ defaultShopSlug }) {
               shop={shop}
               shopLogo={logoSrc}
               onSelectProduct={(p) => handleOpenProduct(p)}
-              placeholder="Search in-store items, SKU, color..."
+              placeholder="Search in-store items, color..."
             />
 
             {/* Category Filter Pills (Horizontal Touch Slider) */}

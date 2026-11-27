@@ -4,7 +4,7 @@ import {
   Image as ImageIcon, Sliders, CheckCircle2, Zap, ArrowRight,
   ShieldCheck, Search, Tag, HandHeart, UploadCloud, RefreshCw,
   Smartphone, Monitor, Wifi, BatteryMedium, Crown, Loader2,
-  Upload, X, ImagePlus, Video
+  Upload, X, ImagePlus, Video, Play, Pause
 } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import {
@@ -819,6 +819,13 @@ export default function StorefrontThemeCustomizer({
                       )
                     ) : (
                       <div className={`absolute inset-0 bg-gradient-to-r ${currentTheme.headerGradient}`} />
+                    )}
+
+                    {/* Faded Pause badge positioned over the bottom-right watermark corner in simulator */}
+                    {isVideo && (
+                      <div className="absolute bottom-2.5 right-2.5 z-20 flex items-center justify-center w-6 h-6 rounded-full bg-black/50 backdrop-blur-md border border-white/20 text-white opacity-70 pointer-events-none">
+                        <Pause className="w-2.5 h-2.5 fill-white/90" />
+                      </div>
                     )}
 
                     {isOnlyImg ? null : (
